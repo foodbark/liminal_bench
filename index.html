@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>liminal space</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="scene" width="960" height="540"></canvas>
+  <div id="ui">
+    <div id="caption"><span id="caption-text"></span><span id="status"></span></div>
+    <div id="panel" hidden>
+      <div id="panel-title"></div>
+      <div id="panel-body"></div>
+      <div id="panel-actions"></div>
+    </div>
+  </div>
+</div>
+<div id="debug" hidden>
+  <div class="row"><b>debug</b> <span class="hint">(press D to hide)</span></div>
+  <div class="row"><label><input type="checkbox" id="dbg-enabled"> override time / weather</label></div>
+  <div class="row"><label>hour <span id="dbg-hour-val">12:00</span></label><input type="range" id="dbg-hour" min="0" max="24" step="0.1" value="12"></div>
+  <div class="row"><label>month</label>
+    <select id="dbg-month">
+      <option value="0">Jan</option><option value="1">Feb</option><option value="2">Mar</option><option value="3">Apr</option>
+      <option value="4">May</option><option value="5">Jun</option><option value="6">Jul</option><option value="7">Aug</option>
+      <option value="8">Sep</option><option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option>
+    </select></div>
+  <div class="row"><label>weather</label>
+    <select id="dbg-weather">
+      <option value="live">live</option><option value="clear">clear</option><option value="partly">partly cloudy</option>
+      <option value="overcast">overcast</option><option value="rain">rain</option><option value="snow">snow</option>
+      <option value="fog">fog</option><option value="storm">thunderstorm</option>
+    </select></div>
+  <div class="row"><label>cloud cover <span id="dbg-cover-val">auto</span></label><input type="range" id="dbg-cover" min="-1" max="100" step="1" value="-1"></div>
+  <div class="row" id="dbg-info"></div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

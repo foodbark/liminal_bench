@@ -1,0 +1,35 @@
+export const W = 960, H = 540, HORIZON = 360;
+export const LAT = 46.872, LON = -113.994, TZ = 'America/Denver';
+
+// Typical snow coverage on the surrounding peaks by month (0 = none, 1 = down to the valley).
+export const SEASON_SNOW = [1, 0.95, 0.8, 0.55, 0.3, 0.12, 0.03, 0.02, 0.08, 0.35, 0.7, 0.95];
+
+export function createState() {
+  return {
+    now: new Date(),
+    override: { enabled: false, hour: 12, month: 6, weather: 'live', cover: -1 },
+    weather: { ok: false, fetchedAt: 0, temp: null, code: 0, cover: 0.1, wind: 3, windDir: 270, precip: 0, snowfall: 0, snowDepth: 0 },
+    env: null,        // derived per-frame environment (sun, palette, conditions)
+    view: 'scene',    // scene | phone | board | bench
+    camera: { cx: W / 2, cy: H / 2, s: 1 },
+    hover: null,
+    notes: [],
+    benchOccupant: null,
+  };
+}
+
+const partsFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'numeric', hour: 'numeric', minute: 'numeric', hour12: false });
+export function localParts(date) {
+  const p = {};
+  for (const { type, value } of partsFmt.formatToParts(date)) p[type] = value;
+  return { month: (+p.month) - 1, hour: (+p.hour) % 24, minute: +p.minute };
+}
+const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+export const formatTime = (date) => timeFmt.format(date);
+
+// Build a Date for an overridden Missoula month/hour (approximate DST rule is fine for previewing).
+export function overrideDate(month, hour) {
+  const year = new Date().getFullYear();
+  const utcOffset = (month >= 2 && month <= 9) ? 6 : 7;
+  return new Date(Date.UTC(year, month, 15, 0, 0, 0) + (hour + utcOffset) * 3600e3);
+}
