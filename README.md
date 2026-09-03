@@ -25,6 +25,21 @@ Then open http://127.0.0.1:5173. Any static file server works; there is no build
 - Bulletin board: post notes that weather over time and eventually fall off.
 - Someone on the bench, rarely.
 
+### Weather ideas (procedural only, agreed 2026-09-03)
+
+- Valley inversion fog that pools at the mountain bases and burns off top-down as the sun climbs, inferred from temperature, dew point, and wind even without a fog report.
+- A daily snowline: fresh overnight snow on the low slopes that melts by afternoon while the peaks keep it.
+- Smoke season: August wildfire haze from Open-Meteo's air quality PM2.5, orange sun, ridges fading out.
+- Low cloud ceilings that cut off the peaks on overcast days.
+- Wind on the ground: grass, wires, drifting snow.
+
+### Art direction (thinking out loud, 2026-09-03)
+
+- Keep the pixel-by-pixel procedural core. Hone it toward more detail and a more recognizably Missoula look.
+- Grass, bushes, and trees that sway a little with the wind so the scene feels alive.
+- Concept art comes first as a guide; the procedural scene gets retuned to match it.
+- Possibly hand-drawn props (bench, board, pay phone) as PNG sprites, and possibly painted backgrounds in places with procedural overlays (snow, fog, light) on top.
+
 ## Layout
 
 ```
