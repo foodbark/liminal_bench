@@ -21,6 +21,8 @@ Then open http://127.0.0.1:5173. Any static file server works; there is no build
 
 ## Coming
 
+Goal: have this up and running somewhere public, even barebones, by mid September 2026.
+
 - Pay phone: phone book with numbers, leaving and hearing voicemails.
 - Bulletin board: post notes that weather over time and eventually fall off.
 - Someone on the bench, rarely.
@@ -32,6 +34,16 @@ Then open http://127.0.0.1:5173. Any static file server works; there is no build
 - Smoke season: August wildfire haze from Open-Meteo's air quality PM2.5, orange sun, ridges fading out.
 - Low cloud ceilings that cut off the peaks on overcast days.
 - Wind on the ground: grass, wires, drifting snow.
+
+### Webcam observation feed (idea, 2026-09-03)
+
+Forecast data says how cloudy it is; a camera says where the clouds are. Seeing real clouds halfway up Mount Sentinel while the scene showed them at the top of the sky prompted this. The public Missoula webcams we looked at were not satisfying, so the plan is our own camera.
+
+- A camera pointed at Sentinel and the sky above it, uploading a still every 5 to 15 minutes. Stable mount matters: the analysis assumes fixed framing.
+- A small service that grabs the latest frame and publishes one tiny JSON document: cloud ceiling as a fraction of the mountain, snowline fraction, visibility/smoke score, horizon sky color, timestamp.
+- The site fetches that JSON the same way it fetches Open-Meteo. The renderer does not need to know a camera exists.
+- Analysis: classic image processing against a hand-traced ridge silhouette for ceiling and snowline; optionally a vision model asked a fixed question every 15 minutes for smoke and sky mood.
+- This is the intended data source for the low-ceiling and daily-snowline items above.
 
 ### Art direction (thinking out loud, 2026-09-03)
 
