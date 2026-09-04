@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An interactive website styled like a Sierra point-and-click scene: a park bench, bulletin board, and pay phone on a pole, with mountains behind. The sky, light, shadows, and weather mirror the real time and weather in Missoula, Montana. The vibe (quiet, liminal, slightly nostalgic) matters more than features. Art direction is hi-res *shaded* pixel art with visible pixels and dithering, not chunky low-res and not painterly smooth gradients.
 
+**Beauty over realism.** Everything should pop: blue sky through gaps in the clouds, sparkle on wet grass and dew, bright stars, bold sunset color. Live data (Open-Meteo now, webcams later) tells the scene *what is happening* (ceiling, snowline, fog, rain) and never what color things are. Do not sample palettes from camera frames, and do not let overcast or rain flatten the image into webcam gray. When adding an effect, "is it more beautiful?" comes before "is it accurate?".
+
 ## Commands
 
 - `npm run dev` — serves the site at http://127.0.0.1:5173 (plain `python3 -m http.server`). No build step, no bundler, no framework; everything is native ES modules loaded by `index.html`.

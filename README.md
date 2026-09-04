@@ -27,6 +27,10 @@ Goal: have this up and running somewhere public, even barebones, by mid Septembe
 - Bulletin board: post notes that weather over time and eventually fall off.
 - Someone on the bench, rarely.
 
+### Guiding rule: beauty over realism
+
+Everything here should pop: blue sky through the clouds, sparkle on wet grass and dew, bright stars, brilliant sunsets. Weather data and webcams tell the scene what is happening, never what color it is. A webcam frame is gray and flat; this world is not. Smoke season is allowed to be hazy, but it stays full of color: an orange sun, an amber sky, ridges fading to pink and rust rather than gray.
+
 ### Weather ideas (procedural only, agreed 2026-09-03)
 
 - Valley inversion fog that pools at the mountain bases and burns off top-down as the sun climbs, inferred from temperature, dew point, and wind even without a fog report.

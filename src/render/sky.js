@@ -69,7 +69,8 @@ function moonSprite(phase) {
       const tx = f * w;
       const lit = phase < 0.5 ? dx > tx : dx < -tx;
       const crater = ((dx * 7 + dy * 13) % 5 === 0 && (dx + dy) % 3 === 0);
-      g.fillStyle = lit ? (crater ? '#c9cbc0' : '#f1f0e4') : '#1a1e30';
+      if (!lit) continue; // the dark side stays transparent so it never shows as a gray disc by day
+      g.fillStyle = crater ? '#c9cbc0' : '#f1f0e4';
       g.fillRect(dx + r + 1, dy + r + 1, 1, 1);
     }
   }
