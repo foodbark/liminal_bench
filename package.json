@@ -5,7 +5,8 @@
   "type": "module",
   "description": "A quiet park scene tied to the real sky over Missoula, Montana.",
   "scripts": {
-    "dev": "python3 -m http.server 5173 --bind 127.0.0.1",
+    "dev": "python3 tools/serve.py 5173 127.0.0.1",
+    "lan": "python3 tools/serve.py 5174 0.0.0.0",
     "shot": "node tools/screenshot.mjs"
   },
   "devDependencies": {

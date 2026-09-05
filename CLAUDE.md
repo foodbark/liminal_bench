@@ -10,7 +10,7 @@ An interactive website styled like a Sierra point-and-click scene: a park bench,
 
 ## Commands
 
-- `npm run dev` — serves the site at http://127.0.0.1:5173 (plain `python3 -m http.server`). No build step, no bundler, no framework; everything is native ES modules loaded by `index.html`.
+- `npm run dev` — serves the site at http://127.0.0.1:5173 via `tools/serve.py` (static, with no-cache headers so a plain reload picks up edits). `npm run lan` serves the same on 0.0.0.0:5174 for other devices (reached as http://liminal.bench on the home network via a router DNS entry and a Windows port forward). No build step, no bundler, no framework; everything is native ES modules loaded by `index.html`.
 - `for f in $(find src -name '*.js'); do node --check "$f"; done` — the only automated check. There are no tests or linters.
 - `python3 tools/build_backdrop.py [--debug DIR]` — regenerates `assets/backdrop.png` and `assets/backdrop_mask.png` from `art/concept_art_01.jpg` (needs Pillow + numpy). Run it after changing the crop, the silhouette keypoints, or the material rules; `--debug` writes mask overlays to look at.
 - Visual verification: with the dev server running, `node tools/screenshot.mjs out.png "<js to run on the page first>"` renders a 960x540 PNG in headless Chromium (needs `npm install` and `npx playwright install chromium` once). Use the debug panel's inputs from the JS argument to preview conditions, e.g. set `#dbg-enabled` checked, `#dbg-hour`, `#dbg-month`, `#dbg-weather`, then dispatch an `input` event on each. Then look at the PNG. This is how rendering changes get checked.
