@@ -1,5 +1,5 @@
 import { W, H, HORIZON, SCALE, META } from '../state.js';
-import { ditherPattern, fillCircle, clamp, rgb, lerpRGB, hex } from '../util/pixel.js';
+import { ditherPattern, fillCircle, clamp, rgb, lerpRGB, hex, makeCanvas } from '../util/pixel.js';
 import { hash2 } from '../util/noise.js';
 
 // The bench, bulletin board, pay phone and pole are part of the painting (art/concept_art_03.png,
@@ -77,18 +77,29 @@ function fillEllipse(ctx, cx, cy, rx, ry) {
   }
 }
 // After dark the lantern lights up: a halo around the glass and a warm pool on the ground below.
+// Both are dithered additive sprites, rebuilt only when the night factor changes.
+let glowKey = '', halo = null, pool = null;
 export function drawLampGlow(ctx, env) {
-  const nf = clamp((-env.sun.altitude + 1) / 8, 0, 1) * (env.cond.fog ? 1.4 : 1);
+  const nf = Math.round(clamp((-env.sun.altitude + 1) / 8, 0, 1) * (env.cond.fog ? 1.4 : 1) * 50) / 50;
   if (nf < 0.05) return;
-  ctx.globalCompositeOperation = 'lighter';
-  const c = (a) => `rgb(${(56 * a) | 0},${(42 * a) | 0},${(18 * a) | 0})`;
   const r = (v) => Math.round(v * SCALE), gy = META.lampPoolY;
-  ctx.fillStyle = ditherPattern(ctx, c(nf), 3); fillCircle(ctx, LAMP.x, LAMP.y, r(34));
-  ctx.fillStyle = ditherPattern(ctx, c(nf), 6); fillCircle(ctx, LAMP.x, LAMP.y, r(22));
-  ctx.fillStyle = ditherPattern(ctx, c(nf), 10); fillCircle(ctx, LAMP.x, LAMP.y, r(12));
-  ctx.fillStyle = ditherPattern(ctx, c(nf * 0.8), 3); fillEllipse(ctx, LAMP.x, gy, r(130), r(28));
-  ctx.fillStyle = ditherPattern(ctx, c(nf * 0.8), 6); fillEllipse(ctx, LAMP.x, gy, r(84), r(18));
-  ctx.fillStyle = ditherPattern(ctx, c(nf * 0.8), 9); fillEllipse(ctx, LAMP.x, gy, r(42), r(10));
-  ctx.fillStyle = `rgb(${(150 * nf) | 0},${(120 * nf) | 0},${(60 * nf) | 0})`; fillCircle(ctx, LAMP.x, LAMP.y, r(6));
+  if (glowKey !== String(nf)) {
+    glowKey = String(nf);
+    const c = (a) => `rgb(${(56 * a) | 0},${(42 * a) | 0},${(18 * a) | 0})`;
+    const hr = r(34) + 2, pw = r(130) + 2, ph = r(28) + 2;
+    let g;
+    [halo, g] = makeCanvas(hr * 2 + 1, hr * 2 + 1);
+    g.fillStyle = ditherPattern(g, c(nf), 3); fillCircle(g, hr, hr, r(34));
+    g.fillStyle = ditherPattern(g, c(nf), 6); fillCircle(g, hr, hr, r(22));
+    g.fillStyle = ditherPattern(g, c(nf), 10); fillCircle(g, hr, hr, r(12));
+    g.fillStyle = `rgb(${(150 * nf) | 0},${(120 * nf) | 0},${(60 * nf) | 0})`; fillCircle(g, hr, hr, r(6));
+    [pool, g] = makeCanvas(pw * 2 + 1, ph * 2 + 1);
+    g.fillStyle = ditherPattern(g, c(nf * 0.8), 3); fillEllipse(g, pw, ph, r(130), r(28));
+    g.fillStyle = ditherPattern(g, c(nf * 0.8), 6); fillEllipse(g, pw, ph, r(84), r(18));
+    g.fillStyle = ditherPattern(g, c(nf * 0.8), 9); fillEllipse(g, pw, ph, r(42), r(10));
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(halo, LAMP.x - (halo.width >> 1), LAMP.y - (halo.height >> 1));
+  ctx.drawImage(pool, LAMP.x - (pool.width >> 1), gy - (pool.height >> 1));
   ctx.globalCompositeOperation = 'source-over';
 }

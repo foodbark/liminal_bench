@@ -1,14 +1,16 @@
 import { W, H, HORIZON, SCALE } from '../state.js';
-import { fillCircle, ditherPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine } from '../util/pixel.js';
+import { fillCircle, ditherPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine, makeCanvas } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
 
 const RAD = Math.PI / 180;
+const patCtx = makeCanvas(1, 1)[1];
+const ctx_pattern = (cv) => ({ cv });
 
 export class WeatherFX {
   constructor() {
     this.clouds = []; this.rnd = mulberry32(99);
-    this.drops = []; this.flakes = [];
+    this.rain = { t: 0, tiles: null, key: '' }; this.snow = { t: 0, tiles: null, key: '' };
     this.flash = 0; this.nextFlash = 4;
     this.t = 0;
   }
@@ -25,25 +27,10 @@ export class WeatherFX {
       c.x += speed * c.depth * dt;
       if (c.x > W + 40) c.x = -c.w - 40; else if (c.x < -c.w - 40) c.x = W + 40;
     }
-    // precipitation
+    // precipitation scrolls as tiled layers; only the phase advances here
     const p = env.cond.precip;
-    const windX = env.wind.speed * 3.5 * sign;
-    if (p.type === 'rain') {
-      const n = Math.floor(p.intensity * 420 * SCALE * SCALE);
-      while (this.drops.length < n) this.drops.push({ x: Math.random() * W, y: Math.random() * H, v: (380 + Math.random() * 260) * SCALE, len: (5 + Math.random() * 5) * SCALE });
-      this.drops.length = Math.min(this.drops.length, n);
-      for (const d of this.drops) { d.y += d.v * dt; d.x += windX * dt; if (d.y > H) { d.y = -10; d.x = Math.random() * (W + 200) - 100; } }
-    } else this.drops.length = 0;
-    if (p.type === 'snow') {
-      const n = Math.floor(p.intensity * 380 * SCALE * SCALE);
-      while (this.flakes.length < n) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: (22 + Math.random() * 40) * SCALE, ph: Math.random() * 6.28, s: Math.round((Math.random() > 0.7 ? 2 : 1) * SCALE) });
-      this.flakes.length = Math.min(this.flakes.length, n);
-      for (const f of this.flakes) {
-        f.y += f.v * dt; f.x += (Math.sin(this.t * 1.3 + f.ph) * 14 * SCALE + windX * 0.35) * dt;
-        if (f.y > H) { f.y = -4; f.x = Math.random() * (W + 200) - 100; }
-        if (f.x < -10) f.x += W + 20; else if (f.x > W + 10) f.x -= W + 20;
-      }
-    } else this.flakes.length = 0;
+    if (p.type === 'rain') this.rain.t += dt; else this.rain.t = 0;
+    if (p.type === 'snow') this.snow.t += dt; else this.snow.t = 0;
     // lightning
     if (env.cond.storm) {
       this.nextFlash -= dt;
@@ -70,14 +57,16 @@ export class WeatherFX {
     const altK = clamp(env.sun.altitude / 60, 0, 1);
     const lightX = (sunOnLeft ? -1 : 1) * (1.0 - 0.5 * altK), lightY = -(0.35 + 0.65 * altK);
     if (cover > 0.85) {
+      // a low ceiling: flat gray-blue deck with a scalloped, dithered underside
       const { tones } = cloudTones(env, 1);
       const deckH = Math.floor((40 + (cover - 0.85) * 500) * SCALE);
-      const st = Math.round(34 * SCALE), rr = Math.round(24 * SCALE);
-      ctx.fillStyle = rgb(tones[3]); ctx.fillRect(0, 0, W, deckH);
-      ctx.fillStyle = rgb(tones[4]);
-      for (let x = -20; x < W + 20; x += st) fillCircle(ctx, x, deckH - 4 + ((x / st) % 3 | 0) * 4, rr);
-      ctx.fillStyle = ditherPattern(ctx, rgb(tones[3]), 6);
-      for (let x = -20; x < W + 20; x += st) fillCircle(ctx, x + (st >> 1) - 7, deckH - 10, rr - 2);
+      const st = Math.round(22 * SCALE), rr = Math.round(14 * SCALE);
+      ctx.fillStyle = rgb(tones[2]); ctx.fillRect(0, 0, W, deckH);
+      ctx.fillStyle = ditherPattern(ctx, rgb(tones[3]), 8); ctx.fillRect(0, Math.floor(deckH * 0.55), W, deckH - Math.floor(deckH * 0.55));
+      ctx.fillStyle = rgb(tones[3]);
+      for (let x = -st; x < W + st; x += st) fillCircle(ctx, x, deckH - 3 + ((x / st) % 3 | 0) * 3 * SCALE, rr);
+      ctx.fillStyle = ditherPattern(ctx, rgb(tones[3]), 5);
+      for (let x = -st; x < W + st; x += st) fillCircle(ctx, x + (st >> 1), deckH + Math.round(4 * SCALE), rr - 2);
     }
     const sorted = [...this.clouds].sort((a, b) => a.depth - b.depth);
     for (const c of sorted) {
@@ -94,19 +83,67 @@ export class WeatherFX {
     for (const [a, b, lv] of bands) { ctx.fillStyle = ditherPattern(ctx, col, lv); ctx.fillRect(0, Math.round(HORIZON + a * SCALE), W, Math.round((b - a) * SCALE)); }
   }
 
-  drawPrecip(ctx, env) {
-    const amb = env.pal.ambient;
-    if (this.drops.length) {
-      ctx.fillStyle = rgb(lerpRGB(mulRGB([188, 198, 222], amb), [160, 170, 195], 0.3));
-      const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
-      const slant = env.wind.speed * 0.012 * sign;
-      // drops are drawn as short streaks scaled with the scene
-      for (const d of this.drops) plotLine(ctx, d.x, d.y, d.x + slant * d.len, d.y + d.len);
+  // A repeating tile of streaks or flakes; two layers scroll at different speeds for depth.
+  precipTiles(kind, color, slant, intensity) {
+    const T = Math.round(384 * SCALE);
+    const tiles = [];
+    const rnd = mulberry32(kind === 'rain' ? 7 : 8);
+    for (let layer = 0; layer < 2; layer++) {
+      const [cv, g] = makeCanvas(T, T);
+      g.fillStyle = color;
+      const perTile = (kind === 'rain' ? 420 : 380) / (1024 * 572) * T * T;   // the old particle density per area
+      const n = Math.round(perTile * intensity * (layer ? 0.5 : 0.65));
+      for (let i = 0; i < n; i++) {
+        const x = Math.floor(rnd() * T), y = Math.floor(rnd() * T);
+        if (kind === 'rain') {
+          const len = Math.round((5 + Math.floor(rnd() * 3) * 2.5) * SCALE * (layer ? 0.7 : 1));
+          const dx = Math.round(slant * len);
+          // draw the streak twice (wrapped) so it tiles seamlessly at the edges
+          for (const [ox, oy] of [[0, 0], [-T, 0], [T, 0], [0, -T], [0, T]]) plotLine(g, x + ox, y + oy, x + ox + dx, y + oy + len);
+        } else {
+          const sz = Math.max(1, Math.round((rnd() > 0.7 ? 2 : 1) * SCALE * (layer ? 0.7 : 1)));
+          for (const [ox, oy] of [[0, 0], [-T, 0], [0, -T]]) g.fillRect(x + ox, y + oy, sz, sz);
+        }
+      }
+      tiles.push(ctx_pattern(cv));
     }
-    if (this.flakes.length) {
+    return { T, tiles };
+  }
+
+  drawPrecip(ctx, env) {
+    // stamp a tile across the frame at the scroll offset
+    const tileOver = (c, cv, T, ox, oy) => {
+      for (let ty = oy - T; ty < H; ty += T) for (let tx = ox - T; tx < W; tx += T) c.drawImage(cv, tx, ty);
+    };
+    const amb = env.pal.ambient;
+    const p = env.cond.precip;
+    const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
+    if (p.type === 'rain' && p.intensity > 0) {
+      const color = rgb(lerpRGB(mulRGB([188, 198, 222], amb), [160, 170, 195], 0.3));
+      const slant = env.wind.speed * 0.012 * sign;
+      const key = `${color}|${slant.toFixed(2)}|${p.intensity.toFixed(1)}`;
+      if (this.rain.key !== key) { this.rain.tiles = this.precipTiles('rain', color, slant, p.intensity); this.rain.key = key; }
+      const { T, tiles } = this.rain.tiles;
+      const vy = 520 * SCALE, vx = env.wind.speed * 3.5 * sign * SCALE;
+      for (let layer = 0; layer < 2; layer++) {
+        const k = layer ? 0.55 : 1;
+        const oy = ((this.rain.t * vy * k) % T + T) % T, ox = ((this.rain.t * vx * k) % T + T) % T;
+        tileOver(ctx, tiles[layer].cv, T, ox, oy);
+      }
+    }
+    if (p.type === 'snow' && p.intensity > 0) {
       const k = Math.max(amb[0], 0.55);
-      ctx.fillStyle = `rgb(${(238 * k) | 0},${(241 * k) | 0},${(252 * k) | 0})`;
-      for (const f of this.flakes) ctx.fillRect(f.x | 0, f.y | 0, f.s, f.s);
+      const color = `rgb(${(238 * k) | 0},${(241 * k) | 0},${(252 * k) | 0})`;
+      const key = `${color}|${p.intensity.toFixed(1)}`;
+      if (this.snow.key !== key) { this.snow.tiles = this.precipTiles('snow', color, 0, p.intensity); this.snow.key = key; }
+      const { T, tiles } = this.snow.tiles;
+      const vy = 42 * SCALE, drift = env.wind.speed * 1.2 * sign * SCALE;
+      for (let layer = 0; layer < 2; layer++) {
+        const kk = layer ? 0.6 : 1;
+        const oy = ((this.snow.t * vy * kk) % T + T) % T;
+        const ox = ((this.snow.t * drift * kk + Math.sin(this.snow.t * (layer ? 0.9 : 1.3)) * 14 * SCALE) % T + T) % T;
+        tileOver(ctx, tiles[layer].cv, T, ox, oy);
+      }
     }
     if (this.flash > 0) {
       ctx.fillStyle = ditherPattern(ctx, '#e8ecff', this.flash > 0.1 ? 9 : 4); ctx.fillRect(0, 0, W, H);

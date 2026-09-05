@@ -19,6 +19,7 @@ catch (err) { console.warn('backdrop failed to load', err); }
 const canvas = document.getElementById('scene');
 canvas.width = W; canvas.height = H;
 const renderer = new Renderer(canvas, assets);
+window.__liminal = { state, renderer };   // for the screenshot/profiling tools
 const ui = setupUI(state, canvas);
 
 function computeEnv() {

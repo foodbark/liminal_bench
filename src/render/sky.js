@@ -41,19 +41,46 @@ const STARS = (() => {
   for (let i = 0; i < Math.round(420 * SCALE * SCALE); i++) s.push({ x: Math.floor(rnd() * W), y: Math.floor(rnd() * (HORIZON - 10)), b: rnd(), tw: rnd() * 6.28, big: rnd() > 0.93 });
   return s;
 })();
+let skyStars = null;
+// Only stars over open sky: filtered once against the terrain mask when it is known.
+export function setStarMask(mask) {
+  skyStars = STARS.filter((s) => mask[(s.y * W + s.x) * 4] === 0);
+}
 
+// Stars twinkle slowly, so they are drawn into their own layer about ten times a second and
+// that layer is stamped each frame (thousands of 1px rects per frame add up on a big canvas).
+let starLayer = null, starCtx = null, starStamp = -1, starKey = '';
 export function drawStars(ctx, env, t) {
   const nf = clamp((-env.sun.altitude - 3) / 9, 0, 1) * (1 - env.cond.cover) * (env.cond.fog ? 0.4 : 1);
   if (nf <= 0.02) return;
-  for (const s of STARS) {
-    const tw = 0.7 + 0.3 * Math.sin(t * 1.7 + s.tw);
-    const b = s.b * nf * tw;
-    if (b < 0.15) continue;
-    const v = Math.round(120 + 135 * b);
-    ctx.fillStyle = `rgb(${v},${v},${Math.min(255, v + 15)})`;
-    if (s.big && b > 0.6) { ctx.fillRect(s.x - 1, s.y, 3, 1); ctx.fillRect(s.x, s.y - 1, 1, 3); }
-    else ctx.fillRect(s.x, s.y, 1, 1);
+  if (!starLayer) { [starLayer, starCtx] = makeCanvas(W, HORIZON); }
+  const stamp = Math.floor(t * 10);
+  const key = nf.toFixed(2);
+  if (stamp !== starStamp || key !== starKey) {
+    starStamp = stamp; starKey = key;
+    const g = starCtx;
+    g.clearRect(0, 0, W, HORIZON);
+    // group by brightness so the fill color changes a few times, not once per star
+    const buckets = new Array(8).fill(null).map(() => []);
+    for (const s of (skyStars || STARS)) {
+      const tw = 0.7 + 0.3 * Math.sin(t * 1.7 + s.tw);
+      const b = s.b * nf * tw;
+      if (b < 0.15) continue;
+      buckets[Math.min(7, (b * 8) | 0)].push(s, b);
+    }
+    for (let k = 0; k < 8; k++) {
+      const list = buckets[k];
+      if (!list.length) continue;
+      const v = Math.round(120 + 135 * ((k + 0.5) / 8));
+      g.fillStyle = `rgb(${v},${v},${Math.min(255, v + 15)})`;
+      for (let i = 0; i < list.length; i += 2) {
+        const s = list[i], b = list[i + 1];
+        if (s.big && b > 0.6) { g.fillRect(s.x - 1, s.y, 3, 1); g.fillRect(s.x, s.y - 1, 1, 3); }
+        else g.fillRect(s.x, s.y, 1, 1);
+      }
+    }
   }
+  ctx.drawImage(starLayer, 0, 0);
 }
 
 let moonCanvas = null, moonKey = '';
