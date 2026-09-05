@@ -6,8 +6,9 @@ import { drawProps, drawShadows, drawLampGlow } from './props.js';
 import { WeatherFX } from './weatherfx.js';
 
 export class Renderer {
-  constructor(canvas) {
+  constructor(canvas, assets) {
     this.canvas = canvas;
+    this.assets = assets;
     this.ctx = canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
     [this.frame, this.frameCtx] = makeCanvas(W, H);
@@ -29,7 +30,7 @@ export class Renderer {
       this.skyKey = env.skyKey;
     }
     if (env.terrainKey !== this.terrainKey) {
-      renderTerrain(this.terrainImg, env);
+      renderTerrain(this.terrainImg, env, this.assets);
       this.terrainCtx.putImageData(this.terrainImg, 0, 0);
       this.terrainKey = env.terrainKey;
     }

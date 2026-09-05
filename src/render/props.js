@@ -1,157 +1,176 @@
 import { W, H, HORIZON } from '../state.js';
 import { plotLine, plotWire, ditherPattern, fillCircle, clamp, rgb, lerpRGB, hex } from '../util/pixel.js';
-import { hash2, mulberry32 } from '../util/noise.js';
+import { hash2 } from '../util/noise.js';
 
-// Screen-space rectangles for the things you can look at, plus what casts shadows.
+// Screen-space rectangles for the things you can look at, plus what casts shadows. Positions follow
+// art/ref_props_960.png (the concept art at scene scale): sign, bench and board on the left, the
+// path through the middle, the pay phone booth under the pole on the right.
 export const PROPS = {
-  board: { x: 122, y: 290, w: 166, h: 182, label: 'bulletin board', baseY: 470, footprint: [136, 274], height: 170, hot: true },
-  bench: { x: 418, y: 414, w: 188, h: 66, label: 'park bench', baseY: 478, footprint: [426, 598], height: 34, hot: true },
-  phone: { x: 720, y: 286, w: 50, h: 90, label: 'pay phone', baseY: 475, footprint: [754, 766], height: 0, hot: true },
-  pole:  { x: 752, y: 66, w: 16, h: 410, baseY: 475, footprint: [754, 766], height: 400, hot: false },
+  sign:  { x: 60, y: 364, w: 92, h: 90, label: 'trailhead sign', baseY: 452, footprint: [98, 110], height: 60, hot: true },
+  bench: { x: 172, y: 358, w: 168, h: 104, label: 'park bench', baseY: 452, footprint: [178, 336], height: 60, hot: true },
+  board: { x: 322, y: 228, w: 134, h: 222, label: 'bulletin board', baseY: 448, footprint: [326, 452], height: 200, hot: true },
+  phone: { x: 694, y: 222, w: 98, h: 240, label: 'pay phone', baseY: 462, footprint: [700, 770], height: 150, hot: true },
+  pole:  { x: 782, y: 0, w: 34, h: 468, baseY: 468, footprint: [784, 816], height: 250, hot: false },
 };
 export const HOTSPOTS = Object.entries(PROPS).filter(([, p]) => p.hot).map(([id, p]) => ({ id, ...p }));
-export const LAMP = { x: 745, y: 297 };
+export const LAMP = { x: 730, y: 143 };
 
 function px(ctx, c, x, y, w = 1, h = 1) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+// A board seen in slight perspective: a rectangle whose rows step down by `slope` px per px of x.
+function slab(ctx, c, x, y, w, h, slope) {
+  ctx.fillStyle = c;
+  for (let i = 0; i < w; i++) ctx.fillRect(x + i, Math.round(y + slope * i), 1, h);
+}
 
 export function drawProps(ctx, state, sunSide, snow) {
   ctx.clearRect(0, 0, W, H);
-  drawMidPines(ctx, sunSide, snow);
   drawPole(ctx, snow);
-  drawPayphone(ctx, snow);
+  drawLamp(ctx, snow);
+  drawBooth(ctx, snow);
   drawBoard(ctx, state.notes, snow);
+  drawSign(ctx, snow);
   drawBench(ctx, snow);
+  drawSquirrel(ctx);
 }
 const SNOW = '#eef2fb', SNOW_SHADE = '#c4cfe6';
 function snowCap(ctx, x, y, w, h = 2) { px(ctx, SNOW, x, y - h, w, h); px(ctx, SNOW_SHADE, x, y - 1, w, 1); }
 
-function drawPine(ctx, x, baseY, th, sunSide, seed, snow) {
-  const rnd = mulberry32(seed);
-  const wob = 0.85 + rnd() * 0.4;
-  for (let i = 0; i < th; i++) {
-    const y = baseY - th + i;
-    const tier = i % 5;
-    const hw = Math.max(0, Math.floor(i * 0.42 * wob) - (tier === 0 ? 2 : tier === 1 ? 1 : 0));
-    for (let dx = -hw; dx <= hw; dx++) {
-      const side = dx * sunSide;
-      const edge = Math.abs(dx) > hw - 2;
-      const c = side < -hw * 0.3 ? '#1b3b2b' : side > hw * 0.35 && edge ? '#4f8a4a' : (hash2(x + dx, y, 8) > 0.82 ? '#2c5a3a' : '#25503a');
-      px(ctx, c, x + dx, y);
-      if (snow && (tier === 0 || (tier === 1 && Math.abs(dx) > hw - 2)) && hash2(x + dx, y, 9) > 0.25) px(ctx, Math.abs(dx) > hw - 1 ? SNOW_SHADE : SNOW, x + dx, y);
+// 3x5 pixel font for the painted signs.
+const FONT = {
+  A: ['010', '101', '111', '101', '101'], D: ['110', '101', '101', '101', '110'], E: ['111', '100', '110', '100', '111'],
+  H: ['101', '101', '111', '101', '101'], I: ['111', '010', '010', '010', '111'], K: ['101', '101', '110', '101', '101'],
+  L: ['100', '100', '100', '100', '111'], N: ['101', '111', '101', '101', '101'], O: ['111', '101', '101', '101', '111'],
+  P: ['111', '101', '111', '100', '100'], R: ['111', '101', '111', '110', '101'], T: ['111', '010', '010', '010', '010'],
+  Y: ['101', '101', '010', '010', '010'], ' ': ['000', '000', '000', '000', '000'],
+};
+function drawText(ctx, text, x, y, scale, color, slope = 0) {
+  ctx.fillStyle = color;
+  let cx = x;
+  for (const ch of text) {
+    const g = FONT[ch] || FONT[' '];
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) {
+      if (g[r][c] === '1') ctx.fillRect(cx + c * scale, Math.round(y + slope * (cx - x)) + r * scale, scale, scale);
     }
+    cx += 4 * scale;
   }
-  px(ctx, '#3a2a1e', x - 1, baseY, 3, 4);
-  px(ctx, '#2a1e14', x + 1, baseY, 1, 4);
-}
-function drawMidPines(ctx, sunSide, snow) {
-  drawPine(ctx, 42, 392, 66, sunSide, 1, snow);
-  drawPine(ctx, 78, 386, 48, sunSide, 2, snow);
-  drawPine(ctx, 18, 384, 44, sunSide, 5, snow);
-  drawPine(ctx, 902, 390, 74, sunSide, 3, snow);
-  drawPine(ctx, 936, 396, 56, sunSide, 4, snow);
-  drawPine(ctx, 866, 382, 40, sunSide, 6, snow);
 }
 
+// --- pole and lamp -------------------------------------------------------------------------
 function drawPole(ctx, snow) {
-  const x = 754, top = 70, bottom = 475;
-  px(ctx, '#7a5a3a', x, top, 12, bottom - top);
-  px(ctx, '#9a7650', x, top, 2, bottom - top);
-  px(ctx, '#553b24', x + 9, top, 3, bottom - top);
-  for (let y = top; y < bottom; y++) if (hash2(0, y, 12) > 0.8) px(ctx, '#5e4228', x + 2 + Math.floor(hash2(1, y, 13) * 7), y, 2, 1);
-  px(ctx, '#4a3320', x - 2, top - 4, 16, 4); px(ctx, '#6b4a2c', x - 2, top - 4, 16, 1);
-  // crossarm
-  px(ctx, '#6e4f33', 712, 96, 96, 7); px(ctx, '#8c6a45', 712, 96, 96, 1); px(ctx, '#4a3320', 712, 102, 96, 1);
-  ctx.fillStyle = '#4a3320';
-  plotLine(ctx, 753, 122, 726, 103); plotLine(ctx, 753, 123, 726, 104);
-  plotLine(ctx, 766, 122, 793, 103); plotLine(ctx, 766, 123, 793, 104);
-  // insulators + wires
-  for (const ix of [718, 742, 778, 802]) {
-    px(ctx, '#8fa9be', ix, 88, 5, 8); px(ctx, '#d7e3ea', ix + 1, 87, 3, 1); px(ctx, '#5f7386', ix, 94, 5, 2); px(ctx, '#b7c9d6', ix + 1, 89, 1, 4);
+  const x = 782, w = 34, top = 0, bottom = 468;
+  px(ctx, '#5a4a3e', x, top, w, bottom - top);
+  px(ctx, '#7a6a5c', x, top, 6, bottom - top);
+  px(ctx, '#6a5a4c', x + 6, top, 4, bottom - top);
+  px(ctx, '#4a3a30', x + 22, top, 4, bottom - top);
+  px(ctx, '#3e3028', x + 26, top, 8, bottom - top);
+  for (let y = top; y < bottom; y++) {
+    if (hash2(0, y, 12) > 0.75) px(ctx, '#4e3e32', x + 8 + Math.floor(hash2(1, y, 13) * 14), y, 2 + Math.floor(hash2(2, y, 14) * 3), 1);
+    if (hash2(3, y, 15) > 0.9) px(ctx, '#6e5e50', x + 10 + Math.floor(hash2(4, y, 16) * 10), y, 1, 1);
   }
-  ctx.fillStyle = '#15131a';
-  plotWire(ctx, 718, 88, -1, 42, 26); plotWire(ctx, 742, 88, -1, 56, 30);
-  plotWire(ctx, 782, 88, W, 46, 24); plotWire(ctx, 806, 88, W, 60, 28);
-  if (snow) { snowCap(ctx, 712, 96, 96, 3); snowCap(ctx, 752, 66, 16, 3); }
+  px(ctx, '#3a2c22', x, bottom - 6, w, 6); // weathered foot
+  if (snow) px(ctx, SNOW_SHADE, x, bottom - 8, 6, 2);
+}
+function drawLamp(ctx, snow) {
+  // bracket from the pole, diagonal strut above it
+  px(ctx, '#686058', 722, 88, 60, 8); px(ctx, '#8a8078', 722, 88, 60, 1); px(ctx, '#4a443e', 722, 95, 60, 1);
+  ctx.fillStyle = '#686058';
+  for (let t = 0; t < 3; t++) plotLine(ctx, 782, 40 + t, 726, 88 + t);
+  px(ctx, '#8a8078', 780, 38, 4, 3);
+  // cap and neck
+  px(ctx, '#6a6058', 724, 96, 12, 18); px(ctx, '#8a8078', 724, 96, 3, 18); px(ctx, '#4a443e', 733, 96, 3, 18);
+  px(ctx, '#7a7068', 720, 108, 20, 3);
+  // hood: a shallow cone, dark on top, warm underneath
+  for (let y = 114; y <= 130; y++) {
+    const hw = Math.round(7 + (y - 114) * (23 / 16));
+    px(ctx, y < 126 ? '#7a5a3a' : '#c99a5a', 730 - hw, y, hw * 2 + 1, 1);
+    px(ctx, '#9d7145', 730 - hw, y, 2, 1); px(ctx, '#4e3820', 730 + hw - 1, y, 2, 1);
+  }
+  px(ctx, '#f1bd75', 700, 131, 61, 2); px(ctx, '#9d7145', 700, 133, 61, 1);
+  // bulb
+  ctx.fillStyle = '#f5d8a4'; fillCircle(ctx, 730, 142, 7);
+  ctx.fillStyle = '#fff4d8'; fillCircle(ctx, 730, 141, 4);
+  px(ctx, '#e0b878', 727, 134, 7, 2);
+  if (snow) { snowCap(ctx, 704, 118, 52, 3); snowCap(ctx, 722, 88, 60, 3); }
 }
 
-function drawPayphone(ctx, snow) {
-  // hood and lamp
-  px(ctx, '#3a3f46', 722, 288, 46, 8); px(ctx, '#5a606a', 722, 288, 46, 1); px(ctx, '#23272c', 722, 295, 46, 1);
-  px(ctx, '#f5e6b0', 739, 296, 12, 2); px(ctx, '#d9c48a', 739, 298, 12, 1);
-  // box
-  px(ctx, '#3e4a55', 724, 300, 40, 64);
-  px(ctx, '#6d7d8c', 726, 302, 36, 60);
-  px(ctx, '#8b9aa8', 726, 302, 2, 60); px(ctx, '#2f3840', 726, 360, 36, 2); px(ctx, '#556470', 760, 302, 2, 60);
+// --- pay phone booth ------------------------------------------------------------------------
+function drawBooth(ctx, snow) {
+  const L = 695, R = 772, T = 223, B = 378;
+  const FRAME = '#85868c', FRAME_D = '#3d3f42', FRAME_L = '#b4b6bc';
+  // side panel (in front of the pole) first
+  px(ctx, '#6b6d72', 772, T, 19, B - T); px(ctx, FRAME_D, 788, T, 3, B - T);
+  ctx.clearRect(776, 246, 10, 125);
+  ctx.fillStyle = ditherPattern(ctx, '#9db6d0', 3); ctx.fillRect(776, 246, 10, 125);
+  px(ctx, '#557aa9', 775, 227, 12, 16); px(ctx, FRAME_D, 772, 243, 19, 3); px(ctx, FRAME_D, 772, 371, 19, 7);
+  handsetIcon(ctx, 778, 288, 5, 30);
+  // front frame
+  px(ctx, FRAME, L, T, R - L, B - T);
+  px(ctx, FRAME_L, L, T, R - L, 2); px(ctx, FRAME_L, L, T, 2, B - T); px(ctx, FRAME_D, R - 3, T, 3, B - T);
+  px(ctx, FRAME_D, L, B - 7, R - L, 7); px(ctx, FRAME_L, L, B - 7, R - L, 1);
   // sign band
-  px(ctx, '#1f4fa0', 728, 304, 32, 10); px(ctx, '#3c6fd0', 728, 304, 32, 1);
-  for (const [sx, sw] of [[731, 3], [736, 2], [740, 4], [746, 3], [751, 4]]) px(ctx, '#e9eef5', sx, 307, sw, 3);
-  px(ctx, '#e9eef5', 731, 310, 1, 1); px(ctx, '#e9eef5', 741, 310, 1, 1);
-  // face panel
-  px(ctx, '#3e4a55', 736, 317, 24, 41); px(ctx, '#5a6a78', 737, 318, 22, 39);
-  px(ctx, '#2d353d', 739, 321, 18, 21);
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) {
-    px(ctx, '#dfe6ec', 741 + c * 6, 323 + r * 5, 3, 3); px(ctx, '#9aa5ad', 741 + c * 6, 325 + r * 5, 3, 1);
-  }
-  px(ctx, '#1c2024', 740, 345, 6, 2); px(ctx, '#8b9aa8', 740, 347, 6, 1);
-  px(ctx, '#1c2024', 748, 350, 9, 5); px(ctx, '#8b9aa8', 749, 351, 7, 1);
-  // handset on the left
-  px(ctx, '#3e4a55', 724, 318, 10, 4); px(ctx, '#3e4a55', 724, 342, 10, 4);
-  px(ctx, '#1d2024', 726, 314, 7, 36); px(ctx, '#3a3f46', 726, 314, 1, 36);
-  px(ctx, '#1d2024', 724, 311, 11, 6); px(ctx, '#3a3f46', 724, 311, 11, 1);
-  px(ctx, '#1d2024', 724, 346, 11, 6); px(ctx, '#3a3f46', 724, 346, 1, 6);
-  ctx.fillStyle = '#1d2024';
-  plotWire(ctx, 729, 352, 750, 364, 20);
-  if (snow) snowCap(ctx, 722, 288, 46, 3);
+  px(ctx, FRAME_D, 697, 225, 72, 21);
+  px(ctx, '#557aa9', 698, 227, 70, 17); px(ctx, '#7a9ccb', 698, 227, 70, 1); px(ctx, '#3f5f8c', 698, 243, 70, 1);
+  drawText(ctx, 'PAY PHONE', 704, 231, 2, '#e8eef5');
+  // glass: transparent so the painting shows through, with a faint dithered tint and glare
+  ctx.clearRect(699, 248, 69, 121);
+  ctx.fillStyle = ditherPattern(ctx, '#c4d6ea', 2); ctx.fillRect(699, 248, 69, 121);
+  px(ctx, FRAME_D, 729, 248, 4, 121); px(ctx, FRAME, 730, 248, 1, 121); // mullion
+  px(ctx, FRAME_D, 699, 248, 69, 1); px(ctx, FRAME_D, 699, 368, 69, 1);
+  ctx.fillStyle = '#dfe9f5';
+  plotLine(ctx, 701, 268, 713, 252); plotLine(ctx, 703, 276, 717, 258);
+  plotLine(ctx, 736, 262, 748, 250); plotLine(ctx, 738, 272, 752, 256);
+  handsetIcon(ctx, 706, 284, 8, 42);
+  // the phone on the back wall, seen through the right pane
+  px(ctx, '#2e343c', 735, 277, 29, 67); px(ctx, '#4a515d', 736, 278, 27, 65); px(ctx, '#6a7380', 737, 279, 25, 2);
+  px(ctx, '#2f6fbf', 738, 283, 23, 7); px(ctx, '#d05a30', 738, 283, 4, 4); px(ctx, '#dfe6ec', 748, 284, 10, 2);
+  px(ctx, '#7d8794', 738, 292, 23, 48);
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { px(ctx, '#dfe6ec', 748 + c * 4, 296 + r * 4, 3, 3); px(ctx, '#9aa5ad', 748 + c * 4, 298 + r * 4, 3, 1); }
+  px(ctx, '#1c1e22', 739, 292, 7, 32); px(ctx, '#3a3f46', 739, 292, 1, 32);
+  px(ctx, '#1c1e22', 737, 289, 10, 5); px(ctx, '#1c1e22', 737, 322, 10, 5);
+  px(ctx, '#1c1e22', 749, 318, 11, 5); px(ctx, '#8b9aa8', 750, 319, 9, 1);
+  px(ctx, '#1c2024', 750, 330, 10, 8); px(ctx, '#8b9aa8', 752, 332, 6, 2);
+  ctx.fillStyle = '#c8ccd2'; plotWire(ctx, 742, 326, 752, 340, 14);
+  // pedestal and base
+  px(ctx, '#58503d', 745, B, 26, 82); px(ctx, '#7a7050', 745, B, 4, 82); px(ctx, '#3a3428', 763, B, 8, 82);
+  px(ctx, '#645636', 741, 456, 34, 6); px(ctx, '#3a3428', 741, 461, 34, 1);
+  if (snow) { snowCap(ctx, L, T, R - L + 19, 3); }
+}
+function handsetIcon(ctx, x, y, w, h) {
+  const b = '#3f7fd0', o = '#9ec3ea';
+  px(ctx, o, x - 1, y - 1, w + 2, h + 2); px(ctx, b, x, y, w, h);
+  px(ctx, o, x - 3, y - 3, w + 4, 6); px(ctx, b, x - 2, y - 2, w + 2, 4);
+  px(ctx, o, x - 3, y + h - 3, w + 4, 6); px(ctx, b, x - 2, y + h - 2, w + 2, 4);
 }
 
-function drawBench(ctx, snow) {
-  const wood = (x, y, w, h) => { px(ctx, '#a06a33', x, y, w, h); px(ctx, '#c58a4a', x, y, w, 1); px(ctx, '#6a4220', x, y + h - 1, w, 1); px(ctx, '#7f5228', x + w - 1, y, 1, h); };
-  const iron = (x, y, w, h) => { px(ctx, '#2b2b30', x, y, w, h); px(ctx, '#4a4b55', x, y, 1, h); };
-  // back posts + arm rests
-  iron(428, 414, 4, 36); iron(592, 414, 4, 36);
-  iron(422, 434, 12, 3); iron(590, 434, 12, 3);
-  iron(422, 437, 2, 12); iron(600, 437, 2, 12);
-  // back slats
-  wood(426, 418, 172, 5); wood(426, 425, 172, 5); wood(426, 432, 172, 5);
-  px(ctx, '#3a2414', 426, 423, 172, 2); px(ctx, '#3a2414', 426, 430, 172, 2);
-  // seat slats
-  wood(420, 448, 184, 3); wood(420, 452, 184, 3); wood(420, 456, 184, 3);
-  px(ctx, '#3a2414', 420, 451, 184, 1); px(ctx, '#3a2414', 420, 455, 184, 1);
-  px(ctx, '#5a381a', 420, 459, 184, 2);
-  // legs, stretcher, feet
-  iron(430, 461, 4, 17); iron(590, 461, 4, 17); iron(509, 461, 4, 17);
-  iron(434, 468, 156, 2);
-  iron(427, 476, 10, 2); iron(587, 476, 10, 2); iron(506, 476, 10, 2);
-  if (snow) { snowCap(ctx, 420, 448, 184, 3); snowCap(ctx, 426, 418, 172, 2); snowCap(ctx, 422, 434, 12, 2); snowCap(ctx, 590, 434, 12, 2); }
-}
-
-const PAPER = ['#efe6c8', '#f2d27a', '#cfe2f0', '#f0c9c9', '#e6f0d0', '#f7f2e8'];
-export function makeNote(text, opts = {}) {
-  return { text, x: opts.x ?? 140, y: opts.y ?? 320, w: opts.w ?? 30, h: opts.h ?? 22, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b' };
-}
+// --- bulletin board ------------------------------------------------------------------------
 function drawBoard(ctx, notes, snow) {
-  // posts
-  for (const x of [136, 266]) { px(ctx, '#6b4a2c', x, 306, 8, 164); px(ctx, '#8a6540', x, 306, 2, 164); px(ctx, '#4a3320', x + 6, 306, 2, 164); }
+  // posts (frame sides run to the ground)
+  for (const x of [325, 438]) { px(ctx, '#6e5236', x, 244, 15, 204); px(ctx, '#886741', x, 244, 3, 204); px(ctx, '#4a3320', x + 11, 244, 4, 204); }
   // roof
-  px(ctx, '#5a4028', 122, 292, 166, 8); px(ctx, '#8c6a45', 122, 292, 166, 1); px(ctx, '#3a2818', 122, 299, 166, 1);
-  for (let x = 124; x < 288; x += 6) px(ctx, '#4a3320', x, 295, 1, 4);
-  // frame + cork
-  px(ctx, '#5a3d22', 128, 300, 154, 112); px(ctx, '#7a5a3a', 128, 300, 154, 1);
-  px(ctx, '#b48a5e', 132, 304, 146, 104);
-  ctx.fillStyle = ditherPattern(ctx, '#9c7448', 5); ctx.fillRect(132, 304, 146, 104);
-  ctx.fillStyle = ditherPattern(ctx, '#c9a070', 2); ctx.fillRect(133, 305, 144, 102);
-  px(ctx, '#7a5a3a', 132, 304, 146, 1); px(ctx, '#7a5a3a', 132, 304, 1, 104);
-  // shelf rail
-  px(ctx, '#4a3320', 126, 412, 158, 4); px(ctx, '#6b4a2c', 126, 412, 158, 1);
+  px(ctx, '#452e26', 322, 230, 132, 14); px(ctx, '#675441', 322, 230, 132, 2); px(ctx, '#2e1e18', 322, 242, 132, 2);
+  for (let x = 324; x < 454; x += 5) px(ctx, '#3a2620', x, 233, 1, 8);
+  px(ctx, '#2e1e18', 322, 244, 132, 3); // eave shadow
+  // top rail, cork, bottom rail
+  px(ctx, '#5a3d22', 325, 247, 128, 5); px(ctx, '#7a5a3a', 325, 247, 128, 1);
+  px(ctx, '#806048', 340, 252, 98, 92);
+  ctx.fillStyle = ditherPattern(ctx, '#6e5040', 5); ctx.fillRect(340, 252, 98, 92);
+  ctx.fillStyle = ditherPattern(ctx, '#927058', 3); ctx.fillRect(341, 253, 96, 90);
+  px(ctx, '#4a3320', 340, 252, 98, 1); px(ctx, '#4a3320', 340, 252, 1, 92);
+  px(ctx, '#5a3d22', 325, 344, 128, 10); px(ctx, '#7a5a3a', 325, 344, 128, 1); px(ctx, '#3a2818', 325, 353, 128, 1);
   for (const n of notes) drawNote(ctx, n);
-  if (snow) { snowCap(ctx, 122, 292, 166, 4); snowCap(ctx, 126, 412, 158, 2); }
+  if (snow) { snowCap(ctx, 322, 230, 132, 4); snowCap(ctx, 340, 344, 98, 2); }
+}
+
+const PAPER = ['#efe6c8', '#f2d27a', '#cfe2f0', '#f0c9c9', '#c8d8b0', '#f7f2e8'];
+export function makeNote(text, opts = {}) {
+  return { text, x: opts.x ?? 352, y: opts.y ?? 258, w: opts.w ?? 24, h: opts.h ?? 30, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b' };
 }
 function drawNote(ctx, n) {
   const fade = clamp(n.age, 0, 1);
   const paper = lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], fade * 0.75);
   const ink = lerpRGB([80, 82, 96], [150, 130, 105], fade);
   const x = n.x, y = n.y, w = n.w, h = n.h;
-  px(ctx, '#7a5636', x + 1, y + 1, w, h);            // shadow on the cork
+  px(ctx, '#5a4030', x + 1, y + 1, w, h);            // shadow on the cork
   px(ctx, rgb(paper), x, y, w, h);
   px(ctx, rgb(lerpRGB(paper, [0, 0, 0], 0.18)), x + w - 1, y, 1, h);
   px(ctx, rgb(lerpRGB(paper, [0, 0, 0], 0.18)), x, y + h - 1, w, 1);
@@ -159,10 +178,63 @@ function drawNote(ctx, n) {
   ctx.fillStyle = ditherPattern(ctx, rgb(ink), fade > 0.6 ? 6 : 12);
   for (let ly = y + 5; ly < y + h - 3; ly += 3) ctx.fillRect(x + 3, ly, w - 6 - (hash2(ly, x, 5) * 8 | 0), 1);
   // weathering: curled and torn corners
-  if (fade > 0.35) { px(ctx, '#b48a5e', x, y + h - 1, 3, 1); px(ctx, '#b48a5e', x, y + h - 2, 2, 1); px(ctx, '#b48a5e', x, y + h - 3, 1, 1); px(ctx, rgb(lerpRGB(paper, [0, 0, 0], 0.3)), x + 1, y + h - 3, 2, 1); }
-  if (fade > 0.7) { px(ctx, '#b48a5e', x + w - 3, y, 3, 1); px(ctx, '#b48a5e', x + w - 2, y + 1, 2, 1); px(ctx, '#b48a5e', x + w - 1, y + 2, 1, 1); }
+  if (fade > 0.35) { px(ctx, '#806048', x, y + h - 1, 3, 1); px(ctx, '#806048', x, y + h - 2, 2, 1); px(ctx, '#806048', x, y + h - 3, 1, 1); px(ctx, rgb(lerpRGB(paper, [0, 0, 0], 0.3)), x + 1, y + h - 3, 2, 1); }
+  if (fade > 0.7) { px(ctx, '#806048', x + w - 3, y, 3, 1); px(ctx, '#806048', x + w - 2, y + 1, 2, 1); px(ctx, '#806048', x + w - 1, y + 2, 1, 1); }
   // pin
   px(ctx, n.pin, x + (w >> 1) - 1, y + 1, 3, 3); px(ctx, '#ffd0c0', x + (w >> 1) - 1, y + 1, 1, 1);
+}
+
+// --- trailhead sign ------------------------------------------------------------------------
+function drawSign(ctx, snow) {
+  const x = 62, w = 86, slope = -10 / 86, top = 378, h = 46;
+  slab(ctx, '#8a7860', x + 1, top + 2, w, h, slope);       // shadowed edge
+  slab(ctx, '#d8c9a8', x, top, w, h, slope);
+  slab(ctx, '#ece0c4', x, top, w, 2, slope);
+  slab(ctx, '#b8a888', x, top + h - 3, w, 3, slope);
+  px(ctx, '#b8a888', x + w - 1, top - 10, 1, h);
+  drawText(ctx, 'TRAILHEAD', 70, 386, 2, '#4a3222', slope);
+  drawText(ctx, 'PARK', 90, 402, 2, '#4a3222', slope);
+  // post
+  px(ctx, '#514535', 98, 418, 12, 34); px(ctx, '#6b5c48', 98, 418, 3, 34); px(ctx, '#3a3024', 107, 418, 3, 34);
+  if (snow) { for (let i = 0; i < w; i += 2) px(ctx, SNOW, x + i, Math.round(top + slope * i) - 3, 2, 3); }
+}
+
+// --- bench ---------------------------------------------------------------------------------
+function drawBench(ctx, snow) {
+  const x = 178, w = 158, s = 0.08;
+  const slat = (y, h) => {
+    slab(ctx, '#7c5f47', x, y, w, h, s);
+    slab(ctx, '#a08060', x, y, w, 2, s);
+    slab(ctx, '#5a4433', x, y + h - 1, w, 1, s);
+    for (const sx of [6, w - 8]) px(ctx, '#8fb4c8', x + sx, Math.round(y + s * sx) + 3, 2, 1);
+  };
+  // uprights behind the slats
+  px(ctx, '#5a4a30', 180, 360, 7, 88); px(ctx, '#3e3222', 185, 360, 2, 88);
+  px(ctx, '#5a4a30', 328, 372, 7, 88); px(ctx, '#3e3222', 333, 372, 2, 88);
+  // back slats
+  slat(362, 8); slat(373, 8); slat(384, 8);
+  // seat: two boards
+  slab(ctx, '#4a3828', x - 2, 408, w + 4, 16, s);
+  slat(409, 6); slat(416, 6);
+  slab(ctx, '#5a4433', x - 2, 422, w + 4, 3, s);
+  // front legs and stretcher
+  px(ctx, '#5a4a30', 186, 424, 6, 24); px(ctx, '#3e3222', 190, 424, 2, 24);
+  px(ctx, '#5a4a30', 322, 436, 6, 24); px(ctx, '#3e3222', 326, 436, 2, 24);
+  slab(ctx, '#4a3c28', 190, 440, 134, 3, s);
+  if (snow) { for (let i = 0; i < w; i += 2) { px(ctx, SNOW, x + i, Math.round(362 + s * i) - 3, 2, 3); px(ctx, SNOW, x + i, Math.round(409 + s * i) - 3, 2, 3); } }
+}
+
+// --- a squirrel on the boulder at the right --------------------------------------------------
+function drawSquirrel(ctx) {
+  const B = '#704020', D = '#4e2c14', L = '#a08060';
+  ctx.fillStyle = B; fillCircle(ctx, 846, 442, 9);          // body
+  px(ctx, L, 842, 440, 6, 8);                                 // belly
+  ctx.fillStyle = B; fillCircle(ctx, 838, 431, 5);            // head
+  px(ctx, B, 834, 425, 2, 3); px(ctx, B, 840, 425, 2, 3);     // ears
+  px(ctx, '#1a0c04', 836, 430, 1, 1);                         // eye
+  ctx.fillStyle = D; fillCircle(ctx, 858, 432, 6); fillCircle(ctx, 860, 424, 5); fillCircle(ctx, 857, 440, 5); // tail
+  ctx.fillStyle = B; fillCircle(ctx, 859, 431, 4); fillCircle(ctx, 861, 424, 3);
+  px(ctx, D, 840, 449, 4, 2); px(ctx, D, 850, 450, 4, 2);     // feet
 }
 
 // Sun shadows on the ground, drawn as crisp dithered scanlines.
@@ -190,15 +262,24 @@ export function drawShadows(ctx, env) {
   }
 }
 
-// Warm pool of light under the pay phone hood after dark.
+function fillEllipse(ctx, cx, cy, rx, ry) {
+  for (let dy = -ry; dy <= ry; dy++) {
+    const w = Math.floor(rx * Math.sqrt(1 - (dy * dy) / (ry * ry)));
+    ctx.fillRect(cx - w, cy + dy, 2 * w + 1, 1);
+  }
+}
+// After dark the lamp lights up: a halo around the bulb and a warm pool on the ground below.
 export function drawLampGlow(ctx, env) {
   const nf = clamp((-env.sun.altitude + 1) / 8, 0, 1) * (env.cond.fog ? 1.4 : 1);
   if (nf < 0.05) return;
   ctx.globalCompositeOperation = 'lighter';
   const c = (a) => `rgb(${(56 * a) | 0},${(42 * a) | 0},${(18 * a) | 0})`;
-  ctx.fillStyle = ditherPattern(ctx, c(nf), 4); fillCircle(ctx, LAMP.x, LAMP.y + 8, 46);
-  ctx.fillStyle = ditherPattern(ctx, c(nf), 8); fillCircle(ctx, LAMP.x, LAMP.y + 6, 30);
-  ctx.fillStyle = ditherPattern(ctx, c(nf), 12); fillCircle(ctx, LAMP.x, LAMP.y + 3, 16);
-  ctx.fillStyle = `rgb(${(120 * nf) | 0},${(100 * nf) | 0},${(50 * nf) | 0})`; ctx.fillRect(739, 296, 12, 2);
+  ctx.fillStyle = ditherPattern(ctx, c(nf), 3); fillCircle(ctx, LAMP.x, LAMP.y, 26);
+  ctx.fillStyle = ditherPattern(ctx, c(nf), 6); fillCircle(ctx, LAMP.x, LAMP.y, 16);
+  ctx.fillStyle = ditherPattern(ctx, c(nf), 10); fillCircle(ctx, LAMP.x, LAMP.y, 9);
+  ctx.fillStyle = ditherPattern(ctx, c(nf * 0.8), 3); fillEllipse(ctx, LAMP.x + 8, 458, 96, 24);
+  ctx.fillStyle = ditherPattern(ctx, c(nf * 0.8), 6); fillEllipse(ctx, LAMP.x + 8, 458, 62, 15);
+  ctx.fillStyle = ditherPattern(ctx, c(nf * 0.8), 9); fillEllipse(ctx, LAMP.x + 8, 458, 32, 8);
+  ctx.fillStyle = `rgb(${(150 * nf) | 0},${(120 * nf) | 0},${(60 * nf) | 0})`; fillCircle(ctx, LAMP.x, LAMP.y - 1, 5);
   ctx.globalCompositeOperation = 'source-over';
 }

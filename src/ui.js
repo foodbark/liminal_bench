@@ -4,9 +4,10 @@ import { lerp, clamp } from './util/pixel.js';
 
 const VIEWS = {
   scene: { cx: W / 2, cy: H / 2, s: 1 },
-  phone: { cx: 745, cy: 334, s: 3.4, dock: 'left' },
-  board: { cx: 205, cy: 356, s: 2.3, dock: 'right' },
-  bench: { cx: 512, cy: 447, s: 2.1, dock: 'top' },
+  phone: { cx: 734, cy: 320, s: 2.2, dock: 'left' },
+  board: { cx: 388, cy: 335, s: 2.4, dock: 'right' },
+  bench: { cx: 256, cy: 408, s: 2.6, dock: 'right' },
+  sign: { cx: 105, cy: 405, s: 3, dock: 'right' },
 };
 
 export function setupUI(state, canvas) {
@@ -89,7 +90,7 @@ export function setupUI(state, canvas) {
       if (state.view === 'scene' && cam.s < 1.02) { cam.s = 1; cam.cx = W / 2; cam.cy = H / 2; }
 
       const hot = HOTSPOTS.find((h) => h.id === state.hover);
-      caption.textContent = state.view === 'scene' ? (hot ? hot.label : '') : (state.view === 'phone' ? 'pay phone' : state.view === 'board' ? 'bulletin board' : 'park bench');
+      caption.textContent = state.view === 'scene' ? (hot ? hot.label : '') : (HOTSPOTS.find((h) => h.id === state.view)?.label ?? '');
 
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;
@@ -123,6 +124,11 @@ const PANELS = {
       ['pin a note', () => { document.getElementById('panel-body').innerHTML = 'You pat your pockets. No pen. (posting is coming)'; }],
       ['step back', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))],
     ],
+  }),
+  sign: (state, api) => ({
+    title: 'trailhead park',
+    body: 'Hand-lettered, sun-faded, straight enough. Someone cared about this once and probably still does.\nThe path behind it goes up the hill and does not come back for a while.',
+    actions: [['walk on', api.leave]],
   }),
   bench: (state, api) => {
     const t = state.weatherShown.temp;
