@@ -1,6 +1,8 @@
 # liminal space
 
-A quiet park scene that lives on the real clock and sky over Missoula, Montana. A bench, a bulletin board, a wooden pole with a pay phone, mountains behind. Nothing to win.
+A quiet park scene that lives on the real clock and sky over Missoula, Montana. A bench, a bulletin board, a pay phone, a pole with a lantern, mountains behind. Nothing to win.
+
+![The scene on a mostly clear September afternoon](docs/screenshot.png)
 
 ## Run it
 
