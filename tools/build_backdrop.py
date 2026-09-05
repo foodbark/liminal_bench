@@ -161,7 +161,7 @@ def main():
         # the traced line, raised wherever a scan finds hillside or trees above it
         top = polyline_y(pts(cfg['skyline']), W)
         tan, green, dark, navy = classify(bare_np)
-        near_line = yy > (top[None, :] - 16 * k)          # crest pines are dark; the upper sky is too, so only near the trace
+        near_line = yy > (top[None, :] - 24 * k)          # crest pines are dark; the upper sky is too, so only near the trace
         solid = majority(tan | green | (dark & near_line))
         run = np.zeros(W, int); scan = np.full(W, H, int)
         for y in range(H):
@@ -170,7 +170,7 @@ def main():
             scan[hit] = y - (6 * k - 1)
         # on the grass-and-trees side the scan is the truth; the trace only covers the ranges and peak
         scan = scan.astype(float)
-        use_scan = (np.arange(W) < far_x) & (scan < H) & (np.abs(scan - top) < 40 * k)
+        use_scan = (np.arange(W) < far_x) & (scan < H) & (np.abs(scan - top) < 60 * k)
         top = np.where(use_scan, scan, top)
     else:
         tan, green, dark, navy = classify(bare_np)
@@ -183,6 +183,11 @@ def main():
             top[hit] = y - (6 * k - 1)
         top = top.astype(float)
     sky = skyish & (yy < top[None, :] + 8 * k) & (~peak)
+    if cfg.get('skyline'):
+        # left of the ranges, everything above the first real hillside row that is not hillside is
+        # sky: painted cloud tufts sitting on Sentinel's crest go with the sky
+        hill = majority(tan | green | (dark & (yy > top[None, :] - 24 * k)), 4)
+        sky |= (~hill) & (yy < scan[None, :]) & (xx < far_x) & (~peak)
     sky |= (yy < top[None, :] - 1) & (~peak)
     sky = majority(sky)
     sky &= ~prop
