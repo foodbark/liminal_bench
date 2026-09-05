@@ -210,7 +210,7 @@ def main():
             hit = np.nonzero(tanfrac[lo:hi, x] >= 0.6)[0]
             crest[x] = lo + hit[0] if len(hit) else int(scan[x])
         leftside = (np.arange(W) < far_x)[None, :]
-        sky |= (yy < crest[None, :]) & leftside & (~peak)
+        sky |= (yy < crest[None, :]) & leftside & (~peak) & ~(dark | green)   # crest pines may stand above the crest
         cloudy = skyish | ((bb > br + 30) & (blum > 120) & ~tan)
         strip = leftside & (yy >= crest[None, :]) & (yy < crest[None, :] + 40 * k) & cloudy & ~tan
         # repaint each strip pixel from the nearest clean tan pixel below it in the same column
