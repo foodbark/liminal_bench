@@ -21,8 +21,10 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-W, H = 1024, 768
+REF_W, REF_H = 1024, 768   # the painting the coordinates below were measured on
+W, H = REF_W, REF_H
 HORIZON = 550   # where the ground meets the trees, for the site's fog bands and shadows
+SCALE = 1
 OX, OY = 32, 190   # the silhouettes below were traced on an earlier 960x540 crop at this offset
 
 # Hand-traced silhouettes in scene coordinates.
@@ -48,7 +50,8 @@ CORK = (462, 490, 640, 600)   # the board's cork; painted notes here are replace
 PATCHES = []
 
 
-def polyline_y(points, w=W):
+def polyline_y(points, w=None):
+    if w is None: w = W
     """Interpolate a polyline into a per-column y (float)."""
     xs = np.array([p[0] for p in points], float)
     ys = np.array([p[1] for p in points], float)
@@ -148,15 +151,36 @@ def classify(rgb):
     return tan, green, dark, navy
 
 
+def setscale(k):
+    """Scale the scene and every measured coordinate by an integer factor."""
+    global W, H, HORIZON, SCALE, PEAK, FAR_MID, MEADOW, PROP_RECTS, PROP_RECTS_DARK, PROP_RECTS_WOOD, CORK
+    SCALE = k; W, H, HORIZON = REF_W * k, REF_H * k, 550 * k
+    sc = lambda pts: [tuple(v * k for v in p) for p in pts]
+    PEAK, FAR_MID, MEADOW = sc(PEAK), sc(FAR_MID), sc(MEADOW)
+    PROP_RECTS, PROP_RECTS_DARK, PROP_RECTS_WOOD = sc(PROP_RECTS), sc(PROP_RECTS_DARK), sc(PROP_RECTS_WOOD)
+    CORK = tuple(v * k for v in CORK)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--debug', metavar='DIR')
+    ap.add_argument('--scale', type=int, default=1, help='upsample the art N times (nearest) to test a bigger scene')
     args = ap.parse_args()
+    if args.scale != 1: setscale(args.scale)
 
     art1 = Image.open(os.path.join(ROOT, 'art/concept_art_01.jpg')).convert('RGB')
     art3 = Image.open(os.path.join(ROOT, 'art/concept_art_03.png')).convert('RGB')
-    assert art1.size == (1024, 767) and art3.size == (1024, 767), (art1.size, art3.size)
-    pad = lambda im: np.concatenate([np.array(im), np.array(im)[-1:]], 0)   # 767 -> 768 rows
+    # The art may be an exact multiple of the 1024x767 original (a repaint at higher
+    # resolution): then the scale comes from its size. --scale upsamples the original instead.
+    assert art1.size == art3.size, (art1.size, art3.size)
+    if SCALE == 1 and art3.size != (1024, 767):
+        k = art3.size[0] // 1024
+        assert art3.size == (1024 * k, 767 * k), 'art must be 1024x767 or an exact multiple of it'
+        setscale(k)
+    elif SCALE != 1:
+        art1 = art1.resize((1024 * SCALE, 767 * SCALE), Image.NEAREST)
+        art3 = art3.resize((1024 * SCALE, 767 * SCALE), Image.NEAREST)
+    pad = lambda im: np.concatenate([np.array(im), np.array(im)[-SCALE:]], 0)   # 767 -> 768 rows
     bare = pad(art1)
     rgb = pad(art3)
     prop = prop_mask(rgb, bare)
@@ -166,19 +190,19 @@ def main():
     br, bg, bb = [bare[..., i].astype(int) for i in range(3)]
     blum = 0.299 * br + 0.587 * bg + 0.114 * bb
     yy0 = np.mgrid[0:H, 0:W][0]
-    hazy = (bb < 176) & (bb > br + 8) & (blum < 150) & (yy0 >= 380)   # distant ridges fading into the sky (never the dark upper sky)
+    hazy = (bb < 176) & (bb > br + 8) & (blum < 150) & (yy0 >= 380 * SCALE)   # distant ridges fading into the sky (never the dark upper sky)
     skyish = (bb > 176) | (blum > 170)                        # sky blue and cloud white
     terrain = majority(tan | green | dark | navy | hazy)
 
-    # First row in each column where 6 consecutive rows are terrain.
+    # First row in each column where 6 (scaled) consecutive rows are terrain.
     run = np.zeros(W, int); top = np.full(W, H, int)
     for y in range(H):
         run = np.where(terrain[y], run + 1, 0)
-        hit = (run >= 6) & (top == H)
-        top[hit] = y - 5
+        hit = (run >= 6 * SCALE) & (top == H)
+        top[hit] = y - (6 * SCALE - 1)
     yy, xx = np.mgrid[0:H, 0:W]
     peak = poly_mask(PEAK)
-    sky = skyish & (yy < top[None, :] + 8) & (~peak)
+    sky = skyish & (yy < top[None, :] + 8 * SCALE) & (~peak)
     sky |= (yy < top[None, :] - 1) & (~peak)   # nothing above the crest is terrain
     sky = majority(sky)
     sky &= ~prop
@@ -190,14 +214,14 @@ def main():
     foliage = majority(green | dark)
     sr, sg, sb = [rgb[..., i].astype(int) for i in range(3)]
     slum = 0.299 * sr + 0.587 * sg + 0.114 * sb
-    navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= 380)), 5)
+    navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= 380 * SCALE)), 5)
     above_meadow = yy < meadow[None, :]
-    farzone = (xx >= 503 + OX) & (yy < far_mid[None, :]) & (~foliage)
+    farzone = (xx >= (503 + OX) * SCALE) & (yy < far_mid[None, :]) & (~foliage)
     L_PEAK, L_RANGE, L_FARHILL, L_FLANK, L_TREES, L_NEAR = 1, 2, 3, 4, 5, 6
     layer = np.zeros((H, W), np.uint8)
     mid = above_meadow & ~farzone & ~peak
-    layer[mid & ~foliage & (xx < 600)] = L_FLANK
-    layer[mid & ~foliage & (xx >= 600)] = L_FARHILL
+    layer[mid & ~foliage & (xx < 600 * SCALE)] = L_FLANK
+    layer[mid & ~foliage & (xx >= 600 * SCALE)] = L_FARHILL
     layer[mid & foliage] = L_TREES
     layer[farzone & ~navyish] = L_FARHILL
     layer[(farzone | mid | peak) & navyish & ~foliage] = L_RANGE
@@ -207,8 +231,8 @@ def main():
     left = (layer == 0) & above_meadow
     layer[left & peak] = L_RANGE
     layer[left & ~peak & foliage] = L_TREES
-    layer[left & ~peak & ~foliage & (xx < 600)] = L_FLANK
-    layer[left & ~peak & ~foliage & (xx >= 600)] = L_FARHILL
+    layer[left & ~peak & ~foliage & (xx < 600 * SCALE)] = L_FLANK
+    layer[left & ~peak & ~foliage & (xx >= 600 * SCALE)] = L_FARHILL
     layer[sky] = 0
     layer[prop] = L_NEAR
     # Keep the painting's true colors: a 256-color quantize flattens the distant ranges' pale haze.
@@ -226,7 +250,7 @@ def main():
     dirt = majority((np.abs(r - g) < 30) & (r - b > 10) & (r - b < 60) & (r > 100) & (r < 200))
     mat = np.zeros((H, W), np.uint8)
     mat[layer == L_PEAK] = 3
-    mat[(layer == L_PEAK) & (lum > 182) & (sat < 0.3) & (yy < 445)] = 4   # summit snow (the pale haze at the foot is rock)
+    mat[(layer == L_PEAK) & (lum > 182) & (sat < 0.3) & (yy < 445 * SCALE)] = 4   # summit snow (the pale haze at the foot is rock)
     mat[layer == L_RANGE] = 3
     mat[(layer == L_FARHILL) | (layer == L_FLANK)] = 1
     mat[layer == L_TREES] = 2

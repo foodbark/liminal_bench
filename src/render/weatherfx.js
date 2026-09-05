@@ -1,4 +1,4 @@
-import { W, H, HORIZON } from '../state.js';
+import { W, H, HORIZON, SCALE } from '../state.js';
 import { fillCircle, ditherPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
@@ -20,7 +20,7 @@ export class WeatherFX {
     while (this.clouds.length < target) this.clouds.push(this.makeCloud(true));
     while (this.clouds.length > target) this.clouds.pop();
     const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
-    const speed = (1.5 + env.wind.speed * 0.4) * sign;
+    const speed = (1.5 + env.wind.speed * 0.4) * sign * SCALE;
     for (const c of this.clouds) {
       c.x += speed * c.depth * dt;
       if (c.x > W + 40) c.x = -c.w - 40; else if (c.x < -c.w - 40) c.x = W + 40;
@@ -29,17 +29,17 @@ export class WeatherFX {
     const p = env.cond.precip;
     const windX = env.wind.speed * 3.5 * sign;
     if (p.type === 'rain') {
-      const n = Math.floor(p.intensity * 420);
-      while (this.drops.length < n) this.drops.push({ x: Math.random() * W, y: Math.random() * H, v: 380 + Math.random() * 260, len: 5 + Math.random() * 5 });
+      const n = Math.floor(p.intensity * 420 * SCALE * SCALE);
+      while (this.drops.length < n) this.drops.push({ x: Math.random() * W, y: Math.random() * H, v: (380 + Math.random() * 260) * SCALE, len: (5 + Math.random() * 5) * SCALE });
       this.drops.length = Math.min(this.drops.length, n);
       for (const d of this.drops) { d.y += d.v * dt; d.x += windX * dt; if (d.y > H) { d.y = -10; d.x = Math.random() * (W + 200) - 100; } }
     } else this.drops.length = 0;
     if (p.type === 'snow') {
-      const n = Math.floor(p.intensity * 380);
-      while (this.flakes.length < n) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: 22 + Math.random() * 40, ph: Math.random() * 6.28, s: Math.random() > 0.7 ? 2 : 1 });
+      const n = Math.floor(p.intensity * 380 * SCALE * SCALE);
+      while (this.flakes.length < n) this.flakes.push({ x: Math.random() * W, y: Math.random() * H, v: (22 + Math.random() * 40) * SCALE, ph: Math.random() * 6.28, s: Math.round((Math.random() > 0.7 ? 2 : 1) * SCALE) });
       this.flakes.length = Math.min(this.flakes.length, n);
       for (const f of this.flakes) {
-        f.y += f.v * dt; f.x += (Math.sin(this.t * 1.3 + f.ph) * 14 + windX * 0.35) * dt;
+        f.y += f.v * dt; f.x += (Math.sin(this.t * 1.3 + f.ph) * 14 * SCALE + windX * 0.35) * dt;
         if (f.y > H) { f.y = -4; f.x = Math.random() * (W + 200) - 100; }
         if (f.x < -10) f.x += W + 20; else if (f.x > W + 10) f.x -= W + 20;
       }
@@ -57,7 +57,7 @@ export class WeatherFX {
     const depth = 0.4 + r() * 1.0;
     const c = layoutCloud(r, depth);
     // near clouds ride high and large, far ones sit small toward the horizon
-    c.y = Math.floor(40 + (1.4 - depth) * 220 + r() * 90);
+    c.y = Math.floor((40 + (1.4 - depth) * 220 + r() * 90) * SCALE);
     c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;
     c.depth = depth;
     return c;
@@ -71,12 +71,13 @@ export class WeatherFX {
     const lightX = (sunOnLeft ? -1 : 1) * (1.0 - 0.5 * altK), lightY = -(0.35 + 0.65 * altK);
     if (cover > 0.85) {
       const { tones } = cloudTones(env, 1);
-      const deckH = Math.floor(40 + (cover - 0.85) * 500);
+      const deckH = Math.floor((40 + (cover - 0.85) * 500) * SCALE);
+      const st = Math.round(34 * SCALE), rr = Math.round(24 * SCALE);
       ctx.fillStyle = rgb(tones[3]); ctx.fillRect(0, 0, W, deckH);
       ctx.fillStyle = rgb(tones[4]);
-      for (let x = -20; x < W + 20; x += 34) fillCircle(ctx, x, deckH - 4 + ((x / 34) % 3 | 0) * 4, 24);
+      for (let x = -20; x < W + 20; x += st) fillCircle(ctx, x, deckH - 4 + ((x / st) % 3 | 0) * 4, rr);
       ctx.fillStyle = ditherPattern(ctx, rgb(tones[3]), 6);
-      for (let x = -20; x < W + 20; x += 34) fillCircle(ctx, x + 10, deckH - 10, 22);
+      for (let x = -20; x < W + 20; x += st) fillCircle(ctx, x + (st >> 1) - 7, deckH - 10, rr - 2);
     }
     const sorted = [...this.clouds].sort((a, b) => a.depth - b.depth);
     for (const c of sorted) {
@@ -90,7 +91,7 @@ export class WeatherFX {
     if (!env.cond.fog) return;
     const col = rgb(mulRGB([214, 219, 230], env.pal.ambient));
     const bands = [[-110, -70, 2], [-70, -40, 5], [-40, -10, 8], [-10, 30, 10], [30, 80, 7], [80, 140, 4], [140, 200, 2]];
-    for (const [a, b, lv] of bands) { ctx.fillStyle = ditherPattern(ctx, col, lv); ctx.fillRect(0, HORIZON + a, W, b - a); }
+    for (const [a, b, lv] of bands) { ctx.fillStyle = ditherPattern(ctx, col, lv); ctx.fillRect(0, Math.round(HORIZON + a * SCALE), W, Math.round((b - a) * SCALE)); }
   }
 
   drawPrecip(ctx, env) {
@@ -99,6 +100,7 @@ export class WeatherFX {
       ctx.fillStyle = rgb(lerpRGB(mulRGB([188, 198, 222], amb), [160, 170, 195], 0.3));
       const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
       const slant = env.wind.speed * 0.012 * sign;
+      // drops are drawn as short streaks scaled with the scene
       for (const d of this.drops) plotLine(ctx, d.x, d.y, d.x + slant * d.len, d.y + d.len);
     }
     if (this.flakes.length) {

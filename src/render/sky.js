@@ -1,4 +1,4 @@
-import { W, H, HORIZON } from '../state.js';
+import { W, H, HORIZON, SCALE } from '../state.js';
 import { bayer, lerpRGB, quant, clamp, rgb, fillCircle, ditherPattern, makeCanvas, lerp } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 
@@ -6,7 +6,7 @@ const SKY_BOTTOM = HORIZON + 24;
 
 // Where a sky object at (azimuth, altitude) lands on screen. The scene faces south.
 export function skyXY(az, alt) {
-  return { x: Math.round(W * ((az - 90) / 180)), y: Math.round(HORIZON - alt * 7) };
+  return { x: Math.round(W * ((az - 90) / 180)), y: Math.round(HORIZON - alt * 7 * SCALE) };
 }
 
 export function renderSkyGradient(img, env) {
@@ -38,7 +38,7 @@ export function renderSkyGradient(img, env) {
 // Fixed star field.
 const STARS = (() => {
   const rnd = mulberry32(4242); const s = [];
-  for (let i = 0; i < 420; i++) s.push({ x: Math.floor(rnd() * W), y: Math.floor(rnd() * (HORIZON - 10)), b: rnd(), tw: rnd() * 6.28, big: rnd() > 0.93 });
+  for (let i = 0; i < Math.round(420 * SCALE * SCALE); i++) s.push({ x: Math.floor(rnd() * W), y: Math.floor(rnd() * (HORIZON - 10)), b: rnd(), tw: rnd() * 6.28, big: rnd() > 0.93 });
   return s;
 })();
 
@@ -99,8 +99,8 @@ export function drawSun(ctx, env) {
   const bright = rgb(lerpRGB(env.pal.sunColor, [255, 255, 245], clamp(alt / 12, 0, 0.8)));
   const dim = clamp(1 - cover * 1.1, 0, 1);
   if (dim > 0.05) {
-    ctx.fillStyle = ditherPattern(ctx, col, Math.round(4 * dim)); fillCircle(ctx, p.x, p.y, 18);
-    ctx.fillStyle = ditherPattern(ctx, col, Math.round(8 * dim)); fillCircle(ctx, p.x, p.y, 13);
+    ctx.fillStyle = ditherPattern(ctx, col, Math.round(4 * dim)); fillCircle(ctx, p.x, p.y, Math.round(18 * SCALE));
+    ctx.fillStyle = ditherPattern(ctx, col, Math.round(8 * dim)); fillCircle(ctx, p.x, p.y, Math.round(13 * SCALE));
   }
-  ctx.fillStyle = ditherPattern(ctx, bright, Math.round(lerp(4, 16, dim))); fillCircle(ctx, p.x, p.y, 9);
+  ctx.fillStyle = ditherPattern(ctx, bright, Math.round(lerp(4, 16, dim))); fillCircle(ctx, p.x, p.y, Math.round(9 * SCALE));
 }

@@ -1,4 +1,5 @@
 import { makeCanvas, bayer, clamp, lerpRGB, mulRGB, scaleRGB } from '../util/pixel.js';
+import { SCALE } from '../state.js';
 
 // Cumulus built the way the concept art paints them: a cauliflower of overlapping rounded puffs
 // in a handful of flat tones, lit from the sun's side, bright on top, blue-gray underneath, with
@@ -6,12 +7,12 @@ import { makeCanvas, bayer, clamp, lerpRGB, mulRGB, scaleRGB } from '../util/pix
 // (seeded) as a list of puffs, turned into a height field, and rendered into a sprite that is
 // rebuilt only when the palette changes.
 
-const MAX_W = 420, MAX_H = 300;
+const MAX_W = Math.round(420 * SCALE), MAX_H = Math.round(300 * SCALE);
 
 // Lay out the puffs: base blobs along a flat bottom, a taller tower on one side, then smaller
 // puffs stacked on the upper arcs of their parents, twice.
 export function layoutCloud(rnd, depth) {
-  const span = Math.floor((100 + rnd() * 200) * depth);   // nominal width of the base
+  const span = Math.floor((100 + rnd() * 200) * depth * SCALE);   // nominal width of the base
   const puffs = [];
   const n0 = 3 + Math.floor(rnd() * 3);
   const towerAt = Math.floor(rnd() * n0);

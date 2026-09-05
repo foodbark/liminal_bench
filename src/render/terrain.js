@@ -1,4 +1,4 @@
-import { W, H, SEASON_SNOW } from '../state.js';
+import { W, H, SEASON_SNOW, SCALE, SY } from '../state.js';
 import { bayer, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum, smooth } from '../util/pixel.js';
 import { valueNoise1D, valueNoise2D, hash2 } from '../util/noise.js';
 import { LAYER, MAT } from '../assets.js';
@@ -54,7 +54,7 @@ const snowN = valueNoise1D(7);
 const invN = valueNoise1D(31);
 const fogN = valueNoise2D(43), fogN2 = valueNoise2D(47);
 // The inversion's flat top (screen y) and how far below it the fog is solid.
-const INVERSION_TOP = 452, INVERSION_BAND = 22;
+const INVERSION_TOP = Math.round(452 * SY), INVERSION_BAND = Math.round(22 * SCALE);
 
 function putPx(data, i, c) {
   data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
@@ -110,7 +110,7 @@ export function renderTerrain(img, env, assets) {
       sunK,
       faceK: backlit ? 0 : sunK,        // no glow on a face the sun is behind
       rimK: backlit ? 1.8 : 1,          // but its outline burns
-      rimReach: backlit ? 4 : 3,
+      rimReach: Math.round((backlit ? 4 : 3) * SCALE),
       persp: L.depth * 0.08,
       dustLine: dust.amount > 0 && meltLine < 1 ? meltLine : 2,
       dustK: dust.amount * (0.55 + 0.3 * (1 - meltLine)),   // thins as it melts
@@ -118,7 +118,7 @@ export function renderTerrain(img, env, assets) {
   }
 
   for (let y = 0; y < H; y++) {
-    const nearHaze = clamp(1 - (y - 526) / 50, 0, 1) * 0.2;
+    const nearHaze = clamp(1 - (y - 526 * SY) / (50 * SCALE), 0, 1) * 0.2;
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
       const layer = mask[i];
@@ -127,9 +127,9 @@ export function renderTerrain(img, env, assets) {
         // mountain fog spills over the crest: stippled cloud in the sky just above the ridge
         if (mountainFog > 0) {
           const above = ridge[x] - y;
-          if (above > 0 && above < 44) {
-            const w = smooth(clamp(1 - above / 44, 0, 1));
-            const n = fogN(x * 0.005, y * 0.06) * 0.75 + fogN2(x * 0.02, y * 0.12) * 0.25;
+          if (above > 0 && above < 44 * SCALE) {
+            const w = smooth(clamp(1 - above / (44 * SCALE), 0, 1));
+            const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
             const dens = clamp((n - (0.9 - mountainFog * 0.45)) / 0.32, 0, 1) * w;
             if (d < dens) putPx(data, i, quantRGB(bankCol, 9, d));
           }
@@ -158,12 +158,12 @@ export function renderTerrain(img, env, assets) {
           } else if (wet) c = scaleRGB(c, 0.82);
         } else {
           if (mat === MAT.SNOW && bare) c = lerpRGB(ROCK_MID, ROCK_LIT, 0.45 + hash2(x, y, 5) * 0.55);
-          const thresh = P.snowThresh + (snowN(x * 0.045) - 0.5) * 0.12 + (d - 0.5) * 0.06;
+          const thresh = P.snowThresh + (snowN(x * 0.045 / SCALE) - 0.5) * 0.12 + (d - 0.5) * 0.06;
           if (e > thresh) {
             if (mat === MAT.FOLIAGE) {
               if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.45) { c = lerpRGB(c, SNOW_LIT, 0.6); snowy = true; }
             } else { c = lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 200, 0, 1)); snowy = true; }
-          } else if (e > P.dustLine + (snowN(x * 0.07 + 9) - 0.5) * 0.14 + (d - 0.5) * 0.08) {
+          } else if (e > P.dustLine + (snowN(x * 0.07 / SCALE + 9) - 0.5) * 0.14 + (d - 0.5) * 0.08) {
             // last night's dusting: thin, grass and rock still showing through
             if (mat === MAT.FOLIAGE) {
               if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.5) { c = lerpRGB(c, SNOW_LIT, 0.45 * P.dustK); snowy = true; }
@@ -198,13 +198,13 @@ export function renderTerrain(img, env, assets) {
 
       // --- inversion: a sea of fog fills the far valley behind the trees, flat-topped, lit on top
       if (inversion > 0 && (layer === LAYER.PEAK || layer === LAYER.RANGE || layer === LAYER.FARHILL || layer === LAYER.FLANK)) {
-        const reach = layer === LAYER.FLANK ? clamp((x - 260) / 260, 0, 1) : 1;
-        const yTop = INVERSION_TOP + (invN(x * 0.02) - 0.5) * 8;
+        const reach = layer === LAYER.FLANK ? clamp((x / SCALE - 260) / 260, 0, 1) : 1;
+        const yTop = INVERSION_TOP + (invN(x * 0.02 / SCALE) - 0.5) * 8 * SCALE;
         const below = y - yTop;
         if (below > -1 && reach > 0) {
           const dens = clamp(below / INVERSION_BAND, 0, 1) * 0.95 * inversion * reach;
           c = lerpRGB(c, fogCol, dens);
-          if (below < 6 && d < 1.1 - below / 5) c = lerpRGB(c, fogLit, 0.8 * inversion * reach);
+          if (below < 6 * SCALE && d < 1.1 - below / (5 * SCALE)) c = lerpRGB(c, fogLit, 0.8 * inversion * reach);
           c = quantRGB(c, 9, d);
         }
       }
@@ -213,9 +213,9 @@ export function renderTerrain(img, env, assets) {
         // banks hang from the crest down to mid-slope, stretched along the slope, stippled
         const lo = layer === LAYER.PEAK ? 0.2 : layer === LAYER.RANGE ? 0.3 : 0.35;
         let w = smooth(clamp((e - lo) / 0.2, 0, 1));
-        if (layer === LAYER.FLANK) w *= 0.6 * clamp((x - 200) / 300, 0, 1);   // Sentinel's near end is too close for banks
+        if (layer === LAYER.FLANK) w *= 0.6 * clamp((x / SCALE - 200) / 300, 0, 1);   // Sentinel's near end is too close for banks
         if (w > 0) {
-          const n = fogN(x * 0.005, y * 0.06) * 0.75 + fogN2(x * 0.02, y * 0.12) * 0.25;
+          const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
           const dens = clamp((n - (0.9 - mountainFog * 0.45)) / 0.32, 0, 1) * w;
           if (d < dens) c = lerpRGB(c, bankCol, 0.9);
         }
@@ -229,8 +229,8 @@ export function renderTerrain(img, env, assets) {
         const side = sunLeft ? (x >= k && mask[i - 4 * k] === LAYER.SKY) : (x < W - k && mask[i + 4 * k] === LAYER.SKY);
         if (up || side) dist = k;
       }
-      if (dist && d < 1.15 - dist * (P.rimReach > 3 ? 0.25 : 0.33)) {
-        const fall = 1 - (dist - 1) * (P.rimReach > 3 ? 0.22 : 0.3);
+      if (dist && d < 1.15 - (dist / SCALE) * (P.rimReach > 3 * SCALE ? 0.25 : 0.33)) {
+        const fall = 1 - ((dist - 1) / SCALE) * (P.rimReach > 3 * SCALE ? 0.22 : 0.3);
         if (glow > 0 && P.sunK > 0.2) c = lerpRGB(c, rimColor, clamp(glow * P.sunK * 0.7 * fall * P.rimK, 0, 1));
         else if (moonK > 0.05) c = lerpRGB(c, [200, 215, 245], moonK * 0.5 * fall);
       }
