@@ -1,4 +1,4 @@
-import { createState, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
+import { createState, W, H, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
 import { sunPosition, moonPhase } from './util/solar.js';
 import { skyPalette } from './palette.js';
@@ -9,14 +9,12 @@ import { loadBackdrop } from './assets.js';
 
 const state = createState();
 state.notes = [
-  makeNote('lost: orange cat, answers to "biscuit"', { x: 177, y: 258, w: 24, h: 38, paper: 0, age: 0.55 }),
-  makeNote('free piano. you haul.', { x: 207, y: 256, w: 18, h: 26, paper: 2, age: 0.2 }),
-  makeNote('trail map', { x: 229, y: 254, w: 30, h: 44, paper: 4, age: 0.3 }),
-  makeNote('open mic thursdays', { x: 207, y: 290, w: 12, h: 18, paper: 1, age: 0.85 }),
-  makeNote('room for rent, quiet house', { x: 175, y: 302, w: 26, h: 34, paper: 5, age: 0.05 }),
-  makeNote('the river is low this year', { x: 225, y: 304, w: 20, h: 30, paper: 0, age: 0.4 }),
-  makeNote('call me', { x: 207, y: 314, w: 14, h: 16, paper: 1, age: 0.7 }),
-  makeNote('lost: blue mitten', { x: 247, y: 302, w: 14, h: 26, paper: 2, age: 0.6 }),
+  makeNote('lost: orange cat, answers to "biscuit"', { x: 470, y: 498, w: 40, h: 52, paper: 5, age: 0.55 }),
+  makeNote('free piano. you haul.', { x: 516, y: 514, w: 24, h: 30, paper: 1, age: 0.2 }),
+  makeNote('open mic thursdays', { x: 548, y: 510, w: 42, h: 52, paper: 0, age: 0.85 }),
+  makeNote('room for rent, quiet house', { x: 594, y: 496, w: 36, h: 48, paper: 2, age: 0.05 }),
+  makeNote('the river is low this year', { x: 476, y: 556, w: 30, h: 38, paper: 3, age: 0.4 }),
+  makeNote('call me', { x: 600, y: 552, w: 26, h: 36, paper: 4, age: 0.7 }),
 ];
 state.notesVersion = 1;
 
@@ -25,6 +23,7 @@ try { assets = await loadBackdrop(); }
 catch (err) { console.warn('backdrop failed to load', err); }
 
 const canvas = document.getElementById('scene');
+canvas.width = W; canvas.height = H;
 const renderer = new Renderer(canvas, assets);
 const ui = setupUI(state, canvas);
 

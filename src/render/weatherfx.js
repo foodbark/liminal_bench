@@ -57,7 +57,7 @@ export class WeatherFX {
     const depth = 0.4 + r() * 1.0;
     const c = layoutCloud(r, depth);
     // near clouds ride high and large, far ones sit small toward the horizon
-    c.y = Math.floor(20 + (1.4 - depth) * 120 + r() * 50);
+    c.y = Math.floor(40 + (1.4 - depth) * 220 + r() * 90);
     c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;
     c.depth = depth;
     return c;

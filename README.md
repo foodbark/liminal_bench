@@ -65,13 +65,13 @@ src/state.js              constants, time zone helpers
 src/weather.js            Open-Meteo fetch, WMO code -> conditions, debug presets
 src/palette.js            sky and light keyframes by sun altitude
 src/render/sky.js         dithered sky gradient, stars, moon, sun
-src/assets.js             loads the painted backdrop and its layer/material mask
-src/render/terrain.js     re-lights the painted backdrop: seasonal grass, snowline, fog, ambient
-src/render/props.js       bench, board and notes, pole and lamp, pay phone booth, shadows, glow
+src/assets.js             loads the painted scene and its layer/material mask
+src/render/terrain.js     re-lights the painting: seasonal grass, snowline, fog, ambient
+src/render/props.js       where the painted props are; notes on the cork, snow caps, shadows, lantern glow
 src/render/clouds.js      cumulus sprites: seeded puff layout, height-field shading, five tones
 src/render/weatherfx.js   cloud field, rain, snow, fog, lightning
 src/render/renderer.js    layer compositor and caches
 src/ui.js                 hotspots, camera zoom, panels, debug controls
-art/                      concept art (source of the backdrop) and a props reference at scene scale
-assets/                   generated backdrop.png + backdrop_mask.png (tools/build_backdrop.py)
+art/                      concept art: concept_art_03.png is the scene, concept_art_01.jpg the same without props
+assets/                   generated backdrop.png, backdrop_mask.png, backdrop.json (tools/build_backdrop.py)
 ```

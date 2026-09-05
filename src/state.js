@@ -1,4 +1,6 @@
-export const W = 960, H = 540, HORIZON = 360;
+// The scene is the size of the painted backdrop; tools/build_backdrop.py writes these.
+const meta = await (await fetch('assets/backdrop.json')).json();
+export const W = meta.w, H = meta.h, HORIZON = meta.horizon;
 export const LAT = 46.872, LON = -113.994, TZ = 'America/Denver';
 
 // Typical snow coverage on the surrounding peaks by month (0 = none, 1 = down to the valley).

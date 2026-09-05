@@ -4,9 +4,9 @@ import { lerp, clamp } from './util/pixel.js';
 
 const VIEWS = {
   scene: { cx: W / 2, cy: H / 2, s: 1 },
-  phone: { cx: 734, cy: 320, s: 2.2, dock: 'left' },
-  board: { cx: 213, cy: 335, s: 2.4, dock: 'right' },
-  bench: { cx: 478, cy: 372, s: 2.6, dock: 'top' },
+  phone: { cx: 640, cy: 554, s: 1.8, dock: 'left' },
+  board: { cx: 640, cy: 540, s: 1.7, dock: 'right' },
+  bench: { cx: 390, cy: 554, s: 1.8, dock: 'right' },
 };
 
 export function setupUI(state, canvas) {
@@ -18,6 +18,8 @@ export function setupUI(state, canvas) {
   function fitStage() {
     const s = Math.min(window.innerWidth / W, window.innerHeight / H);
     document.documentElement.style.setProperty('--s', s);
+    document.documentElement.style.setProperty('--w', W + 'px');
+    document.documentElement.style.setProperty('--h', H + 'px');
   }
   fitStage(); window.addEventListener('resize', fitStage);
 
