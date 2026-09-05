@@ -1,9 +1,10 @@
 // The scene is the size of the painted backdrop; tools/build_backdrop.py writes these.
-const meta = await (await fetch('assets/backdrop.json')).json();
-export const W = meta.w, H = meta.h, HORIZON = meta.horizon;
-// Pixel sizes below were tuned on a 1024x768 painting; SCALE keeps procedural things (clouds,
-// rain, glow) the same relative size on bigger art, SX/SY map coordinates measured on that art.
-export const SCALE = W / 1024, SX = W / 1024, SY = H / 768;
+// tools/build_backdrop.py writes it from the painting's config: size, horizon, hotspots, cork,
+// lantern, camera targets, fog lines, snow caps, default notes (all already in scene pixels).
+export const META = await (await fetch('assets/backdrop.json')).json();
+export const W = META.w, H = META.h, HORIZON = META.horizon;
+// Procedural pixel sizes (clouds, rain, glow, rim widths) were tuned on a 1024-wide painting.
+export const SCALE = W / 1024;
 export const LAT = 46.872, LON = -113.994, TZ = 'America/Denver';
 
 // Typical snow coverage on the surrounding peaks by month (0 = none, 1 = down to the valley).

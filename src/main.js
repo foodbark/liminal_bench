@@ -1,4 +1,4 @@
-import { createState, W, H, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
+import { createState, W, H, META, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
 import { sunPosition, moonPhase } from './util/solar.js';
 import { skyPalette } from './palette.js';
@@ -8,14 +8,8 @@ import { setupUI } from './ui.js';
 import { loadBackdrop } from './assets.js';
 
 const state = createState();
-state.notes = [
-  makeNote('lost: orange cat, answers to "biscuit"', { x: 470, y: 498, w: 40, h: 52, paper: 5, age: 0.55 }),
-  makeNote('free piano. you haul.', { x: 516, y: 514, w: 24, h: 30, paper: 1, age: 0.2 }),
-  makeNote('open mic thursdays', { x: 548, y: 510, w: 42, h: 52, paper: 0, age: 0.85 }),
-  makeNote('room for rent, quiet house', { x: 594, y: 496, w: 36, h: 48, paper: 2, age: 0.05 }),
-  makeNote('the river is low this year', { x: 476, y: 556, w: 30, h: 38, paper: 3, age: 0.4 }),
-  makeNote('call me', { x: 600, y: 552, w: 26, h: 36, paper: 4, age: 0.7 }),
-];
+const NOTE_TEXTS = ['lost: orange cat, answers to "biscuit"', 'free piano. you haul.', 'open mic thursdays', 'room for rent, quiet house', 'the river is low this year', 'call me'];
+state.notes = META.notes.map(([x, y, w, h, paper, age], i) => makeNote(NOTE_TEXTS[i % NOTE_TEXTS.length], { x, y, w, h, paper, age }));
 state.notesVersion = 1;
 
 let assets = null;

@@ -74,6 +74,6 @@ src/render/clouds.js      cumulus sprites: seeded puff layout, height-field shad
 src/render/weatherfx.js   cloud field, rain, snow, fog, lightning
 src/render/renderer.js    layer compositor and caches
 src/ui.js                 hotspots, camera zoom, panels, debug controls
-art/                      concept art: concept_art_03.png is the scene, concept_art_01.jpg the same without props
+art/                      paintings + a JSON config each (silhouettes, prop boxes, hotspots); art/current picks one
 assets/                   generated backdrop.png, backdrop_mask.png, backdrop.json (tools/build_backdrop.py)
 ```

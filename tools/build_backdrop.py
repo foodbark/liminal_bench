@@ -1,60 +1,32 @@
 #!/usr/bin/env python3
-"""Build the painted backdrop assets from the concept art.
+"""Build the scene assets from a painting and its per-painting config.
 
-  python3 tools/build_backdrop.py [--debug DIR]
+  python3 tools/build_backdrop.py [--art NAME] [--debug DIR] [--scale N]
 
-The scene is art/concept_art_03.png at its native 1024x767 (padded to 768): the painted bench,
-board, pay phone and pole are part of the backdrop. art/concept_art_01.jpg is the same painting
-without the props; the difference between the two, inside known prop rectangles, marks the prop
-pixels. The sky is separated from the terrain and the painted notes are cleared off the cork so
-the site can pin its own. Writes:
+art/NAME.json describes the painting: which files (the scene with props, the same scene without
+them, and optionally the props alone on black), the silhouettes traced on it, where the props and the cork are, hotspots, camera
+targets and the numbers the renderer needs. Coordinates are in the config's "ref" size; a
+painting that is an exact multiple of that size scales them automatically. Writes:
 
-  assets/backdrop.png       1024x768 painted scene, full color; sky pixels are black
-  assets/backdrop_mask.png  1024x768 RGB: R = layer (0 sky, 1 peak, 2 range, 3 far hill, 4 flank, 5 trees, 6 near)
-                                           G = material (0 none, 1 grass, 2 foliage, 3 rock, 4 snow, 5 dirt, 6 shrub, 7 prop)
-                                           B = height within the layer's column (0 bottom .. 255 top)
+  assets/backdrop.png       the painting at native pixels, sky masked out (black), notes cleared off the cork
+  assets/backdrop_mask.png  RGB: R = layer (0 sky, 1 peak, 2 range, 3 far hill, 4 flank, 5 trees, 6 near)
+                                 G = material (0 none, 1 grass, 2 foliage, 3 rock, 4 snow, 5 dirt, 6 shrub, 7 prop)
+                                 B = height within the layer's column (0 bottom .. 255 top)
+  assets/backdrop.json      size, horizon and all scene geometry for the site (scaled)
 
 --debug writes overlay PNGs (sky magenta, layers tinted, props cyan, polylines) into DIR.
+--scale N upsamples the painting N times (nearest) to test a bigger scene.
 """
-import argparse, os, sys
+import argparse, json, os, sys
 import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REF_W, REF_H = 1024, 768   # the painting the coordinates below were measured on
-W, H = REF_W, REF_H
-HORIZON = 550   # where the ground meets the trees, for the site's fog bands and shadows
-SCALE = 1
-OX, OY = 32, 190   # the silhouettes below were traced on an earlier 960x540 crop at this offset
-
-# Hand-traced silhouettes in scene coordinates.
-PEAK = [(735, 418), (760, 410), (778, 404), (787, 399), (795, 394), (805, 388), (815, 380), (824, 377), (834, 378),
-        (846, 383), (860, 381), (872, 373), (880, 367), (886, 367), (895, 372), (905, 378), (915, 375), (925, 371),
-        (935, 375), (946, 385), (960, 392), (978, 396), (992, 401), (1008, 404), (1024, 408), (1024, 490), (735, 490)]
-FAR_MID = [(535, 430), (576, 440), (608, 452), (672, 470), (704, 477), (736, 466), (1024, 466)]
-MEADOW = [(32, 536), (128, 548), (192, 540), (320, 543), (448, 537), (512, 530), (608, 526), (704, 526), (736, 549),
-          (800, 564), (896, 561), (1024, 560)]
-# Where the painted props are (art coordinates); the diff against the prop-less painting decides
-# the exact pixels inside these boxes.
-PROP_RECTS = [
-    (145, 598, 432, 706), (448, 475, 652, 612), (703, 483, 810, 652),        # bench body, board frame, phone cabinet
-    (825, 12, 1020, 72), (790, 80, 915, 182), (900, 115, 925, 178),      # crossarm, lantern, junction box
-    (540, 0, 845, 72), (935, 20, 1024, 165),                                 # wires
-]
-# Legs, posts and the pedestal stand where the two paintings also differ in the grass, so there
-# only dark pixels count.
-PROP_RECTS_DARK = [(145, 706, 182, 768), (393, 706, 432, 768), (466, 612, 490, 768), (610, 612, 634, 768), (735, 652, 775, 768)]
-# The pole runs through sky and clouds that differ a little between the paintings: only wood or dark pixels count.
-PROP_RECTS_WOOD = [(890, 0, 965, 768)]
-CORK = (462, 490, 640, 600)   # the board's cork; painted notes here are replaced by cork texture
-PATCHES = []
+DEFAULT_ART = 'concept_art_03'
 
 
-def polyline_y(points, w=None):
-    if w is None: w = W
-    """Interpolate a polyline into a per-column y (float)."""
-    xs = np.array([p[0] for p in points], float)
-    ys = np.array([p[1] for p in points], float)
+def polyline_y(points, w):
+    xs = np.array([p[0] for p in points], float); ys = np.array([p[1] for p in points], float)
     return np.interp(np.arange(w), xs, ys)
 
 
@@ -65,81 +37,10 @@ def majority(mask, k=5):
     return s >= k
 
 
-def poly_mask(points):
-    im = Image.new('L', (W, H), 0)
-    ImageDraw.Draw(im).polygon(points, fill=1)
+def poly_mask(points, w, h):
+    im = Image.new('L', (w, h), 0)
+    ImageDraw.Draw(im).polygon([tuple(p) for p in points], fill=1)
     return np.array(im, bool)
-
-
-def patch_meadow(rgb, edges, rs):
-    """Replace the rows between the given edges by mirroring the meadow just outside each side,
-    so the texture stays coherent with its surroundings."""
-    out = rgb.copy()
-    ys = np.array([t[0] for t in edges], float)
-    x0s = np.array([t[1] for t in edges], float) - 5; x1s = np.array([t[2] for t in edges], float) + 5
-    top, bot = int(ys.min()), min(H, int(ys.max()) + 1)
-    for y in range(top, bot):
-        a = int(round(np.interp(y, ys, x0s))); b = int(round(np.interp(y, ys, x1s)))
-        mid = (a + b) // 2
-        jl, jr = int(rs.rand() * 10), int(rs.rand() * 10)
-        if edges is TRAIL and y > 478: jl += 72   # skip the boulders left of the trail's foot
-        for px in range(a, b + 1):
-            sx = (a - 1 - (px - a) - jl) if px <= mid else (b + 1 + (b - px) + jr)
-            sy = y + int(rs.rand() * 3) - 1
-            sx = min(max(sx, 0), W - 1); sy = min(max(sy, top), H - 1)
-            out[y, px] = rgb[sy, sx]
-    return out
-
-
-def remove_trail(rgb):
-    rs = np.random.RandomState(5)
-    for edges in PATCHES: rgb = patch_meadow(rgb, edges, rs)
-    return rgb
-
-
-def clear_cork(rgb):
-    """Replace the painted notes on the cork with cork texture sampled from the rest of the cork."""
-    out = rgb.copy(); rs = np.random.RandomState(9)
-    x0, y0, x1, y1 = CORK
-    sub = rgb[y0:y1, x0:x1].astype(int)
-    lum = 0.299 * sub[..., 0] + 0.587 * sub[..., 1] + 0.114 * sub[..., 2]
-    red = sub[..., 0] > sub[..., 1] + 50
-    paper = majority((lum > 138) | red, 2)
-    pool = sub[~paper & (lum > 55) & (lum < 130)]
-    ys, xs = np.nonzero(paper)
-    out[y0 + ys, x0 + xs] = pool[rs.randint(0, len(pool), len(xs))]
-    return out
-
-
-def fill_holes(mask, box):
-    """Inside one box, mark as prop any non-prop pixel not connected to the box's border."""
-    x0, y0, x1, y1 = box
-    sub = mask[y0:y1, x0:x1]
-    free = ~sub
-    reach = np.zeros_like(free)
-    reach[0, :] = free[0, :]; reach[-1, :] = free[-1, :]; reach[:, 0] = free[:, 0]; reach[:, -1] = free[:, -1]
-    while True:
-        p = np.pad(reach, 1)
-        grown = (p[:-2, 1:-1] | p[2:, 1:-1] | p[1:-1, :-2] | p[1:-1, 2:] | reach) & free
-        if np.array_equal(grown, reach): break
-        reach = grown
-    mask[y0:y1, x0:x1] = sub | (free & ~reach)
-
-
-def prop_mask(with_props, without):
-    d = np.abs(with_props.astype(int) - without.astype(int)).max(2) > 40
-    lum = 0.299 * with_props[..., 0] + 0.587 * with_props[..., 1] + 0.114 * with_props[..., 2]
-    boxes = np.zeros((H, W), bool)
-    for x0, y0, x1, y1 in PROP_RECTS: boxes[y0:y1, x0:x1] = True
-    dark = np.zeros((H, W), bool)
-    for x0, y0, x1, y1 in PROP_RECTS_DARK: dark[y0:y1, x0:x1] = True
-    wood = np.zeros((H, W), bool)
-    for x0, y0, x1, y1 in PROP_RECTS_WOOD: wood[y0:y1, x0:x1] = True
-    woody = (with_props[..., 0].astype(int) > with_props[..., 2].astype(int) + 20) | (lum < 100)
-    m = majority(d & (boxes | (dark & (lum < 140)) | (wood & woody)), 3)
-    m = majority(m, 1) & (boxes | dark | wood)   # dilate a pixel for the soft edges
-    for box in PROP_RECTS + PROP_RECTS_DARK + PROP_RECTS_WOOD: fill_holes(m, box)
-    return m
 
 
 def classify(rgb):
@@ -151,96 +52,170 @@ def classify(rgb):
     return tan, green, dark, navy
 
 
-def setscale(k):
-    """Scale the scene and every measured coordinate by an integer factor."""
-    global W, H, HORIZON, SCALE, PEAK, FAR_MID, MEADOW, PROP_RECTS, PROP_RECTS_DARK, PROP_RECTS_WOOD, CORK
-    SCALE = k; W, H, HORIZON = REF_W * k, REF_H * k, 550 * k
-    sc = lambda pts: [tuple(v * k for v in p) for p in pts]
-    PEAK, FAR_MID, MEADOW = sc(PEAK), sc(FAR_MID), sc(MEADOW)
-    PROP_RECTS, PROP_RECTS_DARK, PROP_RECTS_WOOD = sc(PROP_RECTS), sc(PROP_RECTS_DARK), sc(PROP_RECTS_WOOD)
-    CORK = tuple(v * k for v in CORK)
+def clear_cork(rgb, cork):
+    """Replace the painted notes on the cork with cork texture sampled from the rest of the cork."""
+    out = rgb.copy(); rs = np.random.RandomState(9)
+    x0, y0, x1, y1 = cork
+    sub = rgb[y0:y1, x0:x1].astype(int)
+    lum = 0.299 * sub[..., 0] + 0.587 * sub[..., 1] + 0.114 * sub[..., 2]
+    red = sub[..., 0] > sub[..., 1] + 50
+    paper = majority((lum > 138) | red, 2)
+    pool = sub[~paper & (lum > 55) & (lum < 130)]
+    if len(pool):
+        ys, xs = np.nonzero(paper)
+        out[y0 + ys, x0 + xs] = pool[rs.randint(0, len(pool), len(xs))]
+    return out
+
+
+def fill_holes(mask, box):
+    """Inside one box, mark as prop any non-prop pixel not connected to the box's border."""
+    x0, y0, x1, y1 = box
+    sub = mask[y0:y1, x0:x1]
+    if sub.size == 0: return
+    free = ~sub
+    reach = np.zeros_like(free)
+    reach[0, :] = free[0, :]; reach[-1, :] = free[-1, :]; reach[:, 0] = free[:, 0]; reach[:, -1] = free[:, -1]
+    while True:
+        p = np.pad(reach, 1)
+        grown = (p[:-2, 1:-1] | p[2:, 1:-1] | p[1:-1, :-2] | p[1:-1, 2:] | reach) & free
+        if np.array_equal(grown, reach): break
+        reach = grown
+    mask[y0:y1, x0:x1] = sub | (free & ~reach)
+
+
+def prop_mask(with_props, without, rects, rects_dark, rects_wood, H, W):
+    """Prop pixels: where the scene differs from the prop-less painting, inside known boxes.
+    Dark boxes (legs, posts, distant poles) only count dark pixels; wood boxes (the pole) only
+    wood-colored or dark ones, since sky and clouds differ a little between the two paintings."""
+    d = np.abs(with_props.astype(int) - without.astype(int)).max(2) > 40
+    lum = 0.299 * with_props[..., 0] + 0.587 * with_props[..., 1] + 0.114 * with_props[..., 2]
+    boxes = np.zeros((H, W), bool)
+    for x0, y0, x1, y1 in rects: boxes[y0:y1, x0:x1] = True
+    dark = np.zeros((H, W), bool)
+    for x0, y0, x1, y1 in rects_dark: dark[y0:y1, x0:x1] = True
+    wood = np.zeros((H, W), bool)
+    for x0, y0, x1, y1 in rects_wood: wood[y0:y1, x0:x1] = True
+    woody = (with_props[..., 0].astype(int) > with_props[..., 2].astype(int) + 20) | (lum < 100)
+    m = majority(d & (boxes | (dark & (lum < 140)) | (wood & woody)), 3)
+    m = majority(m, 1) & (boxes | dark | wood)
+    for box in rects + rects_dark + rects_wood: fill_holes(m, box)
+    return m
 
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--art', default=None, help='config name under art/ (default: the one in art/current)')
     ap.add_argument('--debug', metavar='DIR')
-    ap.add_argument('--scale', type=int, default=1, help='upsample the art N times (nearest) to test a bigger scene')
+    ap.add_argument('--scale', type=int, default=1, help='upsample the painting N times (nearest) to test a bigger scene')
     args = ap.parse_args()
-    if args.scale != 1: setscale(args.scale)
+    name = args.art or (open(os.path.join(ROOT, 'art/current')).read().strip() if os.path.exists(os.path.join(ROOT, 'art/current')) else DEFAULT_ART)
+    cfg = json.load(open(os.path.join(ROOT, 'art', name + '.json')))
+    art = Image.open(os.path.join(ROOT, 'art', cfg['art'])).convert('RGB')
+    bare = Image.open(os.path.join(ROOT, 'art', cfg['bare'])).convert('RGB')
+    ref_w, ref_h = cfg['ref']
+    # scale: the painting may be an exact multiple of the config's reference size
+    k = args.scale
+    if k == 1 and art.size[0] != ref_w:
+        k = art.size[0] // ref_w
+        assert art.size[0] == ref_w * k and abs(art.size[1] - ref_h * k) <= k, 'art must be the ref size or an exact multiple of it'
+    elif k != 1:
+        art = art.resize((art.size[0] * k, art.size[1] * k), Image.NEAREST)
+    if bare.size != art.size: bare = bare.resize(art.size, Image.LANCZOS)
+    W, H = ref_w * k, ref_h * k
+    S = lambda v: int(round(v * k))
+    pts = lambda L: [(S(p[0]), S(p[1])) for p in L]
+    rects = lambda L: [tuple(S(v) for v in r) for r in L]
 
-    art1 = Image.open(os.path.join(ROOT, 'art/concept_art_01.jpg')).convert('RGB')
-    art3 = Image.open(os.path.join(ROOT, 'art/concept_art_03.png')).convert('RGB')
-    # The art may be an exact multiple of the 1024x767 original (a repaint at higher
-    # resolution): then the scale comes from its size. --scale upsamples the original instead.
-    assert art1.size == art3.size, (art1.size, art3.size)
-    if SCALE == 1 and art3.size != (1024, 767):
-        k = art3.size[0] // 1024
-        assert art3.size == (1024 * k, 767 * k), 'art must be 1024x767 or an exact multiple of it'
-        setscale(k)
-    elif SCALE != 1:
-        art1 = art1.resize((1024 * SCALE, 767 * SCALE), Image.NEAREST)
-        art3 = art3.resize((1024 * SCALE, 767 * SCALE), Image.NEAREST)
-    pad = lambda im: np.concatenate([np.array(im), np.array(im)[-SCALE:]], 0)   # 767 -> 768 rows
-    bare = pad(art1)
-    rgb = pad(art3)
-    prop = prop_mask(rgb, bare)
-    rgb = clear_cork(remove_trail(rgb))
-    crop = Image.fromarray(rgb)
-    tan, green, dark, navy = classify(bare)   # the sky boundary comes from the painting without props
-    br, bg, bb = [bare[..., i].astype(int) for i in range(3)]
-    blum = 0.299 * br + 0.587 * bg + 0.114 * bb
-    yy0 = np.mgrid[0:H, 0:W][0]
-    hazy = (bb < 176) & (bb > br + 8) & (blum < 150) & (yy0 >= 380 * SCALE)   # distant ridges fading into the sky (never the dark upper sky)
-    skyish = (bb > 176) | (blum > 170)                        # sky blue and cloud white
-    terrain = majority(tan | green | dark | navy | hazy)
+    def pad(im):
+        a = np.array(im)
+        while a.shape[0] < H: a = np.concatenate([a, a[-1:]], 0)
+        return a[:H, :W]
+    rgb = pad(art); bare_np = pad(bare)
 
-    # First row in each column where 6 (scaled) consecutive rows are terrain.
-    run = np.zeros(W, int); top = np.full(W, H, int)
-    for y in range(H):
-        run = np.where(terrain[y], run + 1, 0)
-        hit = (run >= 6 * SCALE) & (top == H)
-        top[hit] = y - (6 * SCALE - 1)
+    PEAK = pts(cfg['peak']); FAR_MID = pts(cfg['far_mid']); MEADOW = pts(cfg['meadow'])
+    PROP_RECTS = rects(cfg['prop_rects']); PROP_DARK = rects(cfg['prop_rects_dark']); PROP_WOOD = rects(cfg['prop_rects_wood'])
+    CORK = tuple(S(v) for v in cfg['cork'])
+    ridge_min_y = S(cfg['ridge_min_y']); snow_max_y = S(cfg['snow_max_y'])
+    far_x = S(cfg['far_x']); farhill_x = S(cfg['farhill_x'])
+
+    if cfg.get('props_only'):
+        # the props alone on a near-black background: anything brighter than that is a prop
+        po = Image.open(os.path.join(ROOT, 'art', cfg['props_only'])).convert('RGB')
+        if po.size != art.size: po = po.resize(art.size, Image.NEAREST)
+        po = pad(po).astype(int)
+        plum = 0.299 * po[..., 0] + 0.587 * po[..., 1] + 0.114 * po[..., 2]
+        prop = majority(plum > 26, 3)
+        prop = majority(prop, 2)
+    else:
+        prop = prop_mask(rgb, bare_np, PROP_RECTS, PROP_DARK, PROP_WOOD, H, W)
+    rgb = clear_cork(rgb, CORK)
     yy, xx = np.mgrid[0:H, 0:W]
-    peak = poly_mask(PEAK)
-    sky = skyish & (yy < top[None, :] + 8 * SCALE) & (~peak)
-    sky |= (yy < top[None, :] - 1) & (~peak)   # nothing above the crest is terrain
+    peak = poly_mask(PEAK, W, H)
+
+    # --- sky: bright blue or white, above the crest. The crest comes from a traced skyline when
+    # the config has one, else from a column scan of the prop-less painting.
+    br, bg, bb = [bare_np[..., i].astype(int) for i in range(3)]
+    blum = 0.299 * br + 0.587 * bg + 0.114 * bb
+    skyish = (bb > 176) | (blum > 170)
+    if cfg.get('skyline'):
+        # the traced line, raised wherever a scan finds hillside or trees above it
+        top = polyline_y(pts(cfg['skyline']), W)
+        tan, green, dark, navy = classify(bare_np)
+        near_line = yy > (top[None, :] - 16 * k)          # crest pines are dark; the upper sky is too, so only near the trace
+        solid = majority(tan | green | (dark & near_line))
+        run = np.zeros(W, int); scan = np.full(W, H, int)
+        for y in range(H):
+            run = np.where(solid[y], run + 1, 0)
+            hit = (run >= 6 * k) & (scan == H)
+            scan[hit] = y - (6 * k - 1)
+        # on the grass-and-trees side the scan is the truth; the trace only covers the ranges and peak
+        scan = scan.astype(float)
+        use_scan = (np.arange(W) < far_x) & (scan < H) & (np.abs(scan - top) < 40 * k)
+        top = np.where(use_scan, scan, top)
+    else:
+        tan, green, dark, navy = classify(bare_np)
+        hazy = (bb < 176) & (bb > br + 8) & (blum < 150) & (yy >= ridge_min_y)
+        terrain = majority(tan | green | dark | navy | hazy)
+        run = np.zeros(W, int); top = np.full(W, H, int)
+        for y in range(H):
+            run = np.where(terrain[y], run + 1, 0)
+            hit = (run >= 6 * k) & (top == H)
+            top[hit] = y - (6 * k - 1)
+        top = top.astype(float)
+    sky = skyish & (yy < top[None, :] + 8 * k) & (~peak)
+    sky |= (yy < top[None, :] - 1) & (~peak)
     sky = majority(sky)
     sky &= ~prop
 
-    # Layers, far to near: the snowy peak, the forested navy range in front of it, the distant
-    # grass hill beyond the trees, Sentinel's flank at the left, the tree band, the meadow.
-    far_mid = polyline_y(FAR_MID)
-    meadow = polyline_y(MEADOW)
+    # --- layers, far to near
+    far_mid = polyline_y(FAR_MID, W); meadow = polyline_y(MEADOW, W)
+    tan, green, dark, navy = classify(rgb)
     foliage = majority(green | dark)
     sr, sg, sb = [rgb[..., i].astype(int) for i in range(3)]
     slum = 0.299 * sr + 0.587 * sg + 0.114 * sb
-    navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= 380 * SCALE)), 5)
+    navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= ridge_min_y)), 5)
     above_meadow = yy < meadow[None, :]
-    farzone = (xx >= (503 + OX) * SCALE) & (yy < far_mid[None, :]) & (~foliage)
+    farzone = (xx >= far_x) & (yy < far_mid[None, :]) & (~foliage)
     L_PEAK, L_RANGE, L_FARHILL, L_FLANK, L_TREES, L_NEAR = 1, 2, 3, 4, 5, 6
     layer = np.zeros((H, W), np.uint8)
     mid = above_meadow & ~farzone & ~peak
-    layer[mid & ~foliage & (xx < 600 * SCALE)] = L_FLANK
-    layer[mid & ~foliage & (xx >= 600 * SCALE)] = L_FARHILL
+    layer[mid & ~foliage & (xx < farhill_x)] = L_FLANK
+    layer[mid & ~foliage & (xx >= farhill_x)] = L_FARHILL
     layer[mid & foliage] = L_TREES
     layer[farzone & ~navyish] = L_FARHILL
     layer[(farzone | mid | peak) & navyish & ~foliage] = L_RANGE
     layer[peak & ~navyish] = L_PEAK
     layer[~above_meadow] = L_NEAR
-    # anything left over (dark forest at the foot of the peak, odd colors) joins its neighbors
     left = (layer == 0) & above_meadow
     layer[left & peak] = L_RANGE
     layer[left & ~peak & foliage] = L_TREES
-    layer[left & ~peak & ~foliage & (xx < 600 * SCALE)] = L_FLANK
-    layer[left & ~peak & ~foliage & (xx >= 600 * SCALE)] = L_FARHILL
+    layer[left & ~peak & ~foliage & (xx < farhill_x)] = L_FLANK
+    layer[left & ~peak & ~foliage & (xx >= farhill_x)] = L_FARHILL
     layer[sky] = 0
     layer[prop] = L_NEAR
-    # Keep the painting's true colors: a 256-color quantize flattens the distant ranges' pale haze.
-    out_np = rgb.copy(); out_np[sky] = 0
-    outq = Image.fromarray(out_np)
-    q = out_np
 
-    # Materials.
+    # --- materials
+    q = rgb.copy(); q[sky] = 0
     r, g, b = [q[..., i].astype(int) for i in range(3)]
     lum = 0.299 * r + 0.587 * g + 0.114 * b
     mx = np.maximum(np.maximum(r, g), b); mn = np.minimum(np.minimum(r, g), b)
@@ -250,7 +225,7 @@ def main():
     dirt = majority((np.abs(r - g) < 30) & (r - b > 10) & (r - b < 60) & (r > 100) & (r < 200))
     mat = np.zeros((H, W), np.uint8)
     mat[layer == L_PEAK] = 3
-    mat[(layer == L_PEAK) & (lum > 182) & (sat < 0.3) & (yy < 445 * SCALE)] = 4   # summit snow (the pale haze at the foot is rock)
+    mat[(layer == L_PEAK) & (lum > 182) & (sat < 0.3) & (yy < snow_max_y)] = 4
     mat[layer == L_RANGE] = 3
     mat[(layer == L_FARHILL) | (layer == L_FLANK)] = 1
     mat[layer == L_TREES] = 2
@@ -261,9 +236,9 @@ def main():
     mat[nearm & (mat == 0)] = 1
     mat[prop] = 7
 
-    # Height fraction within the layer column: 0 at the layer's bottom line, 255 at its top.
+    # --- height fraction within the layer column: 0 at the layer's bottom line, 255 at its top
     hf = np.zeros((H, W), np.float32)
-    peak_top = np.minimum(top, polyline_y(PEAK[:-2]))
+    peak_top = np.minimum(top, polyline_y(PEAK[:-2], W))
     for lid, (top_line, bot_line) in {
         L_PEAK: (peak_top, far_mid), L_RANGE: (top, far_mid), L_FARHILL: (top, meadow),
         L_FLANK: (top, meadow), L_TREES: (top, meadow), L_NEAR: (meadow, np.full(W, H, float)),
@@ -273,35 +248,49 @@ def main():
         hf[sel] = t[sel]
     mask = np.stack([layer, mat, (hf * 255).astype(np.uint8)], -1)
 
+    # --- outputs
     os.makedirs(os.path.join(ROOT, 'assets'), exist_ok=True)
-    with open(os.path.join(ROOT, 'assets/backdrop.json'), 'w') as f:
-        f.write('{"w": %d, "h": %d, "horizon": %d}\n' % (W, H, HORIZON))
-    outq.save(os.path.join(ROOT, 'assets/backdrop.png'), optimize=True)
+    Image.fromarray(q).save(os.path.join(ROOT, 'assets/backdrop.png'), optimize=True)
     Image.fromarray(mask).save(os.path.join(ROOT, 'assets/backdrop_mask.png'), optimize=True)
-    print('sky px', int(sky.sum()), 'layers', {i: int((layer == i).sum()) for i in range(7)},
+    props = {}
+    for pid, p in cfg['props'].items():
+        props[pid] = { 'x': S(p['rect'][0]), 'y': S(p['rect'][1]), 'w': S(p['rect'][2]), 'h': S(p['rect'][3]),
+                       'label': p.get('label'), 'baseY': S(p['baseY']), 'footprint': [S(p['footprint'][0]), S(p['footprint'][1])],
+                       'height': S(p['height']), 'hot': p['hot'] }
+    meta = {
+        'w': W, 'h': H, 'horizon': S(cfg['horizon']), 'art': name,
+        'props': props,
+        'cork': { 'x': CORK[0], 'y': CORK[1], 'w': CORK[2] - CORK[0], 'h': CORK[3] - CORK[1] },
+        'lamp': { 'x': S(cfg['lamp'][0]), 'y': S(cfg['lamp'][1]) }, 'lampPoolY': S(cfg['lamp_pool_y']),
+        'views': { v: { 'cx': S(d['cx']), 'cy': S(d['cy']), 's': d['s'], 'dock': d['dock'] } for v, d in cfg['views'].items() },
+        'inversionTop': S(cfg['inversion_top']), 'nearHazeY': S(cfg['near_haze_y']),
+        'inversionReachX': [S(v) for v in cfg['inversion_reach_x']], 'bankReachX': [S(v) for v in cfg['bank_reach_x']],
+        'snowCaps': [[S(v) for v in c] for c in cfg['snow_caps']],
+        'notes': [[S(n[0]), S(n[1]), S(n[2]), S(n[3]), n[4], n[5]] for n in cfg['notes']],
+    }
+    with open(os.path.join(ROOT, 'assets/backdrop.json'), 'w') as f: json.dump(meta, f)
+    print(name, W, 'x', H, 'sky px', int(sky.sum()), 'layers', {i: int((layer == i).sum()) for i in range(7)},
           'materials', {i: int((mat == i).sum()) for i in range(8)})
 
     if args.debug:
         os.makedirs(args.debug, exist_ok=True)
-        ov = np.array(crop).copy()
+        ov = rgb.copy()
         ov[sky] = (255, 0, 255)
-        ov[prop] = (ov[prop] * 0.5 + np.array((0, 255, 255)) * 0.5).astype(np.uint8)
         tint = {1: (255, 0, 0), 2: (255, 0, 128), 3: (255, 160, 0), 4: (255, 255, 0), 5: (0, 255, 0), 6: (0, 0, 255)}
         for lid, c in tint.items():
             sel = layer == lid
             ov[sel] = (ov[sel] * 0.6 + np.array(c) * 0.4).astype(np.uint8)
+        ov[prop] = (ov[prop] * 0.5 + np.array((0, 255, 255)) * 0.5).astype(np.uint8)
         im = Image.fromarray(ov); d = ImageDraw.Draw(im)
         d.line(PEAK[:-2], fill=(255, 255, 255)); d.line(FAR_MID, fill=(0, 255, 255)); d.line(MEADOW, fill=(255, 128, 0))
         d.line([(x, int(top[x])) for x in range(W)], fill=(0, 0, 0))
         im.save(os.path.join(args.debug, 'overlay.png'))
-        im.crop((760, 0, 1024, 200)).resize((792, 600), Image.NEAREST).save(os.path.join(args.debug, 'overlay_pole_3x.png'))
-        im.crop((120, 460, 830, 768)).resize((1420, 616), Image.NEAREST).save(os.path.join(args.debug, 'overlay_props_2x.png'))
         mv = np.zeros((H, W, 3), np.uint8)
         pal = {0: (0, 0, 0), 1: (200, 170, 90), 2: (40, 120, 40), 3: (120, 120, 130), 4: (240, 245, 255), 5: (130, 100, 70), 6: (110, 130, 80), 7: (0, 200, 220)}
         for m, c in pal.items(): mv[mat == m] = c
         Image.fromarray(mv).save(os.path.join(args.debug, 'materials.png'))
         Image.fromarray(mask[..., 2]).save(os.path.join(args.debug, 'height.png'))
-        outq.convert('RGB').save(os.path.join(args.debug, 'backdrop_preview.png'))
+        Image.fromarray(q).save(os.path.join(args.debug, 'backdrop_preview.png'))
     return 0
 
 

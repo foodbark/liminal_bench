@@ -1,4 +1,4 @@
-import { W, H, SEASON_SNOW, SCALE, SY } from '../state.js';
+import { W, H, SEASON_SNOW, SCALE, META } from '../state.js';
 import { bayer, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum, smooth } from '../util/pixel.js';
 import { valueNoise1D, valueNoise2D, hash2 } from '../util/noise.js';
 import { LAYER, MAT } from '../assets.js';
@@ -54,7 +54,8 @@ const snowN = valueNoise1D(7);
 const invN = valueNoise1D(31);
 const fogN = valueNoise2D(43), fogN2 = valueNoise2D(47);
 // The inversion's flat top (screen y) and how far below it the fog is solid.
-const INVERSION_TOP = Math.round(452 * SY), INVERSION_BAND = Math.round(22 * SCALE);
+const INVERSION_TOP = META.inversionTop, INVERSION_BAND = Math.round(22 * SCALE);
+const [INV_X0, INV_X1] = META.inversionReachX, [BANK_X0, BANK_X1] = META.bankReachX;
 
 function putPx(data, i, c) {
   data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
@@ -118,7 +119,7 @@ export function renderTerrain(img, env, assets) {
   }
 
   for (let y = 0; y < H; y++) {
-    const nearHaze = clamp(1 - (y - 526 * SY) / (50 * SCALE), 0, 1) * 0.2;
+    const nearHaze = clamp(1 - (y - META.nearHazeY) / (50 * SCALE), 0, 1) * 0.2;
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
       const layer = mask[i];
@@ -198,7 +199,7 @@ export function renderTerrain(img, env, assets) {
 
       // --- inversion: a sea of fog fills the far valley behind the trees, flat-topped, lit on top
       if (inversion > 0 && (layer === LAYER.PEAK || layer === LAYER.RANGE || layer === LAYER.FARHILL || layer === LAYER.FLANK)) {
-        const reach = layer === LAYER.FLANK ? clamp((x / SCALE - 260) / 260, 0, 1) : 1;
+        const reach = layer === LAYER.FLANK ? clamp((x - INV_X0) / INV_X1, 0, 1) : 1;
         const yTop = INVERSION_TOP + (invN(x * 0.02 / SCALE) - 0.5) * 8 * SCALE;
         const below = y - yTop;
         if (below > -1 && reach > 0) {
@@ -213,7 +214,7 @@ export function renderTerrain(img, env, assets) {
         // banks hang from the crest down to mid-slope, stretched along the slope, stippled
         const lo = layer === LAYER.PEAK ? 0.2 : layer === LAYER.RANGE ? 0.3 : 0.35;
         let w = smooth(clamp((e - lo) / 0.2, 0, 1));
-        if (layer === LAYER.FLANK) w *= 0.6 * clamp((x / SCALE - 200) / 300, 0, 1);   // Sentinel's near end is too close for banks
+        if (layer === LAYER.FLANK) w *= 0.6 * clamp((x - BANK_X0) / BANK_X1, 0, 1);   // Sentinel's near end is too close for banks
         if (w > 0) {
           const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
           const dens = clamp((n - (0.9 - mountainFog * 0.45)) / 0.32, 0, 1) * w;

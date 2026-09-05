@@ -1,13 +1,8 @@
-import { W, H, SX, SY, formatTime } from './state.js';
+import { W, H, META, formatTime } from './state.js';
 import { HOTSPOTS } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
 
-const VIEWS = {
-  scene: { cx: W / 2, cy: H / 2, s: 1 },
-  phone: { cx: 640 * SX, cy: 554 * SY, s: 1.8, dock: 'left' },
-  board: { cx: 640 * SX, cy: 540 * SY, s: 1.7, dock: 'right' },
-  bench: { cx: 390 * SX, cy: 554 * SY, s: 1.8, dock: 'right' },
-};
+const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
 
 export function setupUI(state, canvas) {
   const $ = (id) => document.getElementById(id);
