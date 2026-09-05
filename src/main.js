@@ -38,6 +38,15 @@ function computeEnv() {
   let cover = w.cover;
   if (o.enabled && o.cover >= 0) cover = o.cover / 100;
   const cond = { ...conditionsFromCode(w.code), cover };
+  // Inversion: fog in a cold month means the valley is a sea of fog with the ranges above it.
+  // Mountain fog: low cloud hanging on the slopes.
+  const preset = o.enabled && o.weather !== 'live' ? WEATHER_PRESETS[o.weather] : null;
+  const cold = month >= 10 || month <= 1 || (w.temp != null && w.temp < 36);
+  const inversion = preset ? (preset.inversion || 0) : (cond.fog && cold ? 1 : 0);
+  let mountainFog = preset ? (preset.lowcloud || 0) : Math.max(0, Math.min(1, ((w.coverLow ?? 0) - 0.5) / 0.35));
+  if (!preset && cond.precip.intensity > 0) mountainFog = Math.max(mountainFog, cond.precip.intensity * 0.6);
+  if (inversion) { cond.fog = false; cond.label = 'inversion'; }
+  else if (mountainFog > 0.5 && !cond.fog && cond.precip.intensity === 0) cond.label = 'low clouds';
   const sun = sunPosition(now, LAT, LON);
   const phase = moonPhase(now);
   let moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
@@ -55,10 +64,10 @@ function computeEnv() {
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
-    now, month, sun, moon, pal, cond, snowAmount, groundSnow, sunSide,
+    now, month, sun, moon, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}`,
     ambientKey,
   };
 }

@@ -2,7 +2,7 @@ import { LAT, LON } from './state.js';
 
 const URL = 'https://api.open-meteo.com/v1/forecast'
   + `?latitude=${LAT}&longitude=${LON}`
-  + '&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
+  + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
   + '&hourly=snow_depth&forecast_days=1&timezone=America%2FDenver'
   + '&temperature_unit=fahrenheit&wind_speed_unit=mph';
 
@@ -18,7 +18,7 @@ export async function fetchWeather() {
   }
   return {
     ok: true, fetchedAt: Date.now(),
-    temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100,
+    temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100,
     wind: c.wind_speed_10m, windDir: c.wind_direction_10m,
     precip: c.precipitation, snowfall: c.snowfall, snowDepth,
   };
@@ -48,5 +48,7 @@ export const WEATHER_PRESETS = {
   rain:     { code: 63, cover: 0.95, temp: 46, wind: 11, snowDepth: 0 },
   snow:     { code: 73, cover: 0.95, temp: 24, wind: 8,  snowDepth: 0.25 },
   fog:      { code: 45, cover: 0.55, temp: 39, wind: 2,  snowDepth: 0 },
+  inversion: { code: 45, cover: 0.08, temp: 28, wind: 1, snowDepth: 0, inversion: 1 },   // snow follows the season
+  mountainfog: { code: 3, cover: 0.8, coverLow: 0.9, temp: 41, wind: 3, snowDepth: 0, lowcloud: 1 },
   storm:    { code: 95, cover: 1.0,  temp: 66, wind: 22, snowDepth: 0 },
 };

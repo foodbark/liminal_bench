@@ -18,5 +18,13 @@ async function loadPixels(url) {
 
 export async function loadBackdrop() {
   const [rgb, mask] = await Promise.all([loadPixels('assets/backdrop.png'), loadPixels('assets/backdrop_mask.png')]);
-  return { rgb, mask };
+  // first terrain row in each column (ignoring painted props like the pole), for fog over the crest
+  const ridge = new Int16Array(W).fill(H);
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) {
+      const i = (y * W + x) * 4;
+      if (mask[i] !== LAYER.SKY && mask[i + 1] !== MAT.PROP) { ridge[x] = y; break; }
+    }
+  }
+  return { rgb, mask, ridge };
 }
