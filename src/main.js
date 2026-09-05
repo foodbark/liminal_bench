@@ -31,7 +31,7 @@ function computeEnv() {
   const o = state.override;
   const now = o.enabled ? overrideDate(o.month, o.hour) : new Date();
   state.now = now;
-  const { month } = localParts(now);
+  const { month, hour: hourLocal, minute } = localParts(now);
   let w = state.weather;
   if (o.enabled && o.weather !== 'live') w = { ...w, ok: true, ...WEATHER_PRESETS[o.weather] };
   state.weatherShown = w;
@@ -47,6 +47,10 @@ function computeEnv() {
   if (!preset && cond.precip.intensity > 0) mountainFog = Math.max(mountainFog, cond.precip.intensity * 0.6);
   if (inversion) { cond.fog = false; cond.label = 'inversion'; }
   else if (mountainFog > 0.5 && !cond.fog && cond.precip.intensity === 0) cond.label = 'low clouds';
+  // Overnight dusting on the hills, melting from the bottom up with hours above freezing.
+  const dustAmount = preset ? (preset.freshSnow || 0) : Math.min(1, (w.freshSnow || 0) / 2);
+  const thawHours = preset ? Math.max(0, hourLocal + minute / 60 - 7.5) : (w.thawHours || 0);
+  const dusting = { amount: dustAmount, thaw: thawHours };
   const sun = sunPosition(now, LAT, LON);
   const phase = moonPhase(now);
   let moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
@@ -64,10 +68,10 @@ function computeEnv() {
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
-    now, month, sun, moon, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog,
+    now, month, sun, moon, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog, dusting,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}|${dusting.amount.toFixed(2)}|${dusting.thaw.toFixed(1)}`,
     ambientKey,
   };
 }

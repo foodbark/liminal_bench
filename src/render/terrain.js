@@ -12,11 +12,13 @@ import { LAYER, MAT } from '../assets.js';
 
 // Per-layer character, far to near. horizon: sun altitude (deg) at which the layer is lit.
 const LAYERS = {
-  [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, snowBias: 0.0, hill: true },
-  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, snowBias: -0.05, hill: true },
-  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, snowBias: -0.12, hill: true },
-  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, snowBias: -0.15, hill: true, backlitAM: true },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
-  [LAYER.TREES]:   { depth: 0.22, horizon: 0.0, snowBias: -0.1, hill: true },
+  // meltHours: how many hours above freezing it takes a dusting to melt off the whole layer,
+  // bottom up; the high forested range (Dean Stone) holds it longest.
+  [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, snowBias: 0.0, hill: true, meltHours: 16 },
+  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, snowBias: -0.05, hill: true, meltHours: 9.5 },
+  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, snowBias: -0.12, hill: true, meltHours: 5 },
+  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, snowBias: -0.15, hill: true, backlitAM: true, meltHours: 6.5 },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
+  [LAYER.TREES]:   { depth: 0.22, horizon: 0.0, snowBias: -0.1, hill: true, meltHours: 4.5 },
   [LAYER.NEAR]:    { depth: 0.0, horizon: 0.6, snowBias: 0, hill: false },
 };
 
@@ -100,6 +102,8 @@ export function renderTerrain(img, env, assets) {
     const L = LAYERS[id];
     const cov = clamp(extraSnow + L.snowBias, 0, 1);
     const sunK = smooth(clamp((alt - (L.horizon - 1.2)) / 2.4, 0, 1));
+    const dust = env.dusting || { amount: 0, thaw: 0 };
+    const meltLine = L.meltHours ? clamp(dust.thaw / L.meltHours, 0, 1) : 1;   // height fraction below which it has melted
     const backlit = !!L.backlitAM && env.sun.azimuth < 180;   // morning sun behind this ridge
     per[id] = {
       snowThresh: cov > 0 ? 1 - Math.min(1, Math.pow(cov, 1.4) * 1.35) : 2,
@@ -108,6 +112,8 @@ export function renderTerrain(img, env, assets) {
       rimK: backlit ? 1.8 : 1,          // but its outline burns
       rimReach: backlit ? 4 : 3,
       persp: L.depth * 0.08,
+      dustLine: dust.amount > 0 && meltLine < 1 ? meltLine : 2,
+      dustK: dust.amount * (0.55 + 0.3 * (1 - meltLine)),   // thins as it melts
     };
   }
 
@@ -157,6 +163,11 @@ export function renderTerrain(img, env, assets) {
             if (mat === MAT.FOLIAGE) {
               if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.45) { c = lerpRGB(c, SNOW_LIT, 0.6); snowy = true; }
             } else { c = lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 200, 0, 1)); snowy = true; }
+          } else if (e > P.dustLine + (snowN(x * 0.07 + 9) - 0.5) * 0.14 + (d - 0.5) * 0.08) {
+            // last night's dusting: thin, grass and rock still showing through
+            if (mat === MAT.FOLIAGE) {
+              if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.5) { c = lerpRGB(c, SNOW_LIT, 0.45 * P.dustK); snowy = true; }
+            } else { c = lerpRGB(c, lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 200, 0, 1)), P.dustK); snowy = true; }
           }
         }
       }
