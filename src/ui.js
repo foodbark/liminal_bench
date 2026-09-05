@@ -5,9 +5,8 @@ import { lerp, clamp } from './util/pixel.js';
 const VIEWS = {
   scene: { cx: W / 2, cy: H / 2, s: 1 },
   phone: { cx: 734, cy: 320, s: 2.2, dock: 'left' },
-  board: { cx: 388, cy: 335, s: 2.4, dock: 'right' },
-  bench: { cx: 256, cy: 408, s: 2.6, dock: 'right' },
-  sign: { cx: 105, cy: 405, s: 3, dock: 'right' },
+  board: { cx: 213, cy: 335, s: 2.4, dock: 'right' },
+  bench: { cx: 478, cy: 372, s: 2.6, dock: 'top' },
 };
 
 export function setupUI(state, canvas) {
@@ -124,11 +123,6 @@ const PANELS = {
       ['pin a note', () => { document.getElementById('panel-body').innerHTML = 'You pat your pockets. No pen. (posting is coming)'; }],
       ['step back', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))],
     ],
-  }),
-  sign: (state, api) => ({
-    title: 'trailhead park',
-    body: 'Hand-lettered, sun-faded, straight enough. Someone cared about this once and probably still does.\nThe path behind it goes up the hill and does not come back for a while.',
-    actions: [['walk on', api.leave]],
   }),
   bench: (state, api) => {
     const t = state.weatherShown.temp;

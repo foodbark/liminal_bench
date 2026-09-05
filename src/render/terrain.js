@@ -1,4 +1,4 @@
-import { W, H } from '../state.js';
+import { W, H, SEASON_SNOW } from '../state.js';
 import { bayer, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum } from '../util/pixel.js';
 import { valueNoise1D, hash2 } from '../util/noise.js';
 import { LAYER, MAT } from '../assets.js';
@@ -30,10 +30,14 @@ function grassTint(month, hill) {
   return [0, 1, 2].map((i) => clamp(now[i] / ref[i], 0.5, 1.6));
 }
 
-const SNOW_DARK = [146, 166, 208], SNOW_LIT = [250, 251, 255];
+const SNOW_DARK = [118, 140, 196], SNOW_LIT = [250, 251, 255];
 const GROUND_SNOW_DARK = [190, 202, 230], GROUND_SNOW_LIT = [246, 248, 252];
 const PACKED_DARK = [176, 184, 205], PACKED_LIT = [214, 220, 236];
-const SNOW_BIAS = { [LAYER.FAR]: 0.25, [LAYER.FLANK]: -0.15, [LAYER.TREES]: -0.1 };
+// The painting already carries late-summer snow on the peak, so only snow beyond that is added.
+const ART_SNOW = 0.12;  // the painted summit snow is about a June amount
+const BARE_BELOW = 0.1;  // less than this and the painted snow is recolored as rock
+const ROCK_LIT = [110, 150, 214], ROCK_MID = [79, 122, 187];
+const SNOW_BIAS = { [LAYER.FAR]: 0, [LAYER.FLANK]: -0.15, [LAYER.TREES]: -0.1 };
 const snowN = valueNoise1D(7);
 
 function putPx(data, i, c) {
@@ -53,11 +57,13 @@ export function renderTerrain(img, env, assets) {
   const tintMeadow = grassTint(env.month, false), tintHill = grassTint(env.month, true);
   // Snow threshold per layer: the height fraction above which pixels are snowy.
   const snowThresh = {};
+  const extraSnow = clamp((env.snowAmount - ART_SNOW) / (1 - ART_SNOW), 0, 1);
   for (const L of [LAYER.FAR, LAYER.FLANK, LAYER.TREES]) {
-    const cov = clamp(env.snowAmount + SNOW_BIAS[L], 0, 1);
+    const cov = clamp(extraSnow + SNOW_BIAS[L], 0, 1);
     snowThresh[L] = cov > 0 ? 1 - Math.min(1, Math.pow(cov, 1.4) * 1.35) : 2;
   }
   const groundSnow = env.groundSnow;
+  const bare = env.snowAmount < BARE_BELOW;
 
   for (let y = 0; y < H; y++) {
     const nearHaze = clamp(1 - (y - 336) / 50, 0, 1) * 0.2;
@@ -82,19 +88,21 @@ export function renderTerrain(img, env, assets) {
           else c = lerpRGB(GROUND_SNOW_DARK, GROUND_SNOW_LIT, f);
         } else if (wet) c = scaleRGB(c, 0.82);
       } else {
+        if (mat === MAT.SNOW && bare) c = lerpRGB(ROCK_MID, ROCK_LIT, 0.45 + hash2(x, y, 5) * 0.55);
         const thresh = snowThresh[layer] + (snowN(x * 0.045) - 0.5) * 0.12 + (d - 0.5) * 0.06;
         if (e > thresh) {
           if (mat === MAT.FOLIAGE) {
             if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.45) c = lerpRGB(c, SNOW_LIT, 0.6);
-          } else c = lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 170, 0, 1));
+          } else c = lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 200, 0, 1));
         }
       }
 
       c = quantRGB(c, 9, d);
       let persp;
-      if (layer === LAYER.FAR) persp = 0.22;
-      else if (layer === LAYER.FLANK) persp = 0.03 + 0.22 * clamp(x / 640, 0, 1);
-      else if (layer === LAYER.TREES) persp = Math.min(0.12, 0.03 + 0.22 * clamp(x / 640, 0, 1));
+      // light: the painting already has its own aerial perspective
+      if (layer === LAYER.FAR) persp = 0.06;
+      else if (layer === LAYER.FLANK) persp = 0.02 + 0.1 * clamp(x / 640, 0, 1);
+      else if (layer === LAYER.TREES) persp = Math.min(0.08, 0.02 + 0.1 * clamp(x / 640, 0, 1));
       else persp = nearHaze;
       const fog = layer === LAYER.NEAR ? fogK * 0.78 : fogK;
       c = lerpRGB(c, horizon, persp + fog * (1 - persp));

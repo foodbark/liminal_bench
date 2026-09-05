@@ -2,7 +2,8 @@ export const W = 960, H = 540, HORIZON = 360;
 export const LAT = 46.872, LON = -113.994, TZ = 'America/Denver';
 
 // Typical snow coverage on the surrounding peaks by month (0 = none, 1 = down to the valley).
-export const SEASON_SNOW = [1, 0.95, 0.8, 0.55, 0.3, 0.12, 0.03, 0.02, 0.08, 0.35, 0.7, 0.95];
+// Peaks are bare from July through October; first snow usually arrives in November.
+export const SEASON_SNOW = [1, 0.95, 0.8, 0.55, 0.3, 0.12, 0.02, 0.02, 0.02, 0.04, 0.5, 0.95];
 
 export function createState() {
   return {

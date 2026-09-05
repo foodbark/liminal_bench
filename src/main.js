@@ -9,14 +9,14 @@ import { loadBackdrop } from './assets.js';
 
 const state = createState();
 state.notes = [
-  makeNote('lost: orange cat, answers to "biscuit"', { x: 352, y: 258, w: 24, h: 38, paper: 0, age: 0.55 }),
-  makeNote('free piano. you haul.', { x: 382, y: 256, w: 18, h: 26, paper: 2, age: 0.2 }),
-  makeNote('trail map', { x: 404, y: 254, w: 30, h: 44, paper: 4, age: 0.3 }),
-  makeNote('open mic thursdays', { x: 382, y: 290, w: 12, h: 18, paper: 1, age: 0.85 }),
-  makeNote('room for rent, quiet house', { x: 350, y: 302, w: 26, h: 34, paper: 5, age: 0.05 }),
-  makeNote('the river is low this year', { x: 400, y: 304, w: 20, h: 30, paper: 0, age: 0.4 }),
-  makeNote('call me', { x: 382, y: 314, w: 14, h: 16, paper: 1, age: 0.7 }),
-  makeNote('lost: blue mitten', { x: 422, y: 302, w: 14, h: 26, paper: 2, age: 0.6 }),
+  makeNote('lost: orange cat, answers to "biscuit"', { x: 177, y: 258, w: 24, h: 38, paper: 0, age: 0.55 }),
+  makeNote('free piano. you haul.', { x: 207, y: 256, w: 18, h: 26, paper: 2, age: 0.2 }),
+  makeNote('trail map', { x: 229, y: 254, w: 30, h: 44, paper: 4, age: 0.3 }),
+  makeNote('open mic thursdays', { x: 207, y: 290, w: 12, h: 18, paper: 1, age: 0.85 }),
+  makeNote('room for rent, quiet house', { x: 175, y: 302, w: 26, h: 34, paper: 5, age: 0.05 }),
+  makeNote('the river is low this year', { x: 225, y: 304, w: 20, h: 30, paper: 0, age: 0.4 }),
+  makeNote('call me', { x: 207, y: 314, w: 14, h: 16, paper: 1, age: 0.7 }),
+  makeNote('lost: blue mitten', { x: 247, y: 302, w: 14, h: 26, paper: 2, age: 0.6 }),
 ];
 state.notesVersion = 1;
 

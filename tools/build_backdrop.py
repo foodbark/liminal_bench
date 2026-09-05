@@ -29,6 +29,10 @@ PEAK = [(703, 228), (728, 220), (746, 214), (755, 209), (763, 204), (773, 198), 
 FAR_MID = [(503, 240), (544, 250), (576, 262), (640, 280), (672, 287), (704, 276), (960, 276)]
 MEADOW = [(0, 346), (96, 358), (160, 350), (288, 353), (416, 347), (480, 340), (576, 336), (672, 336), (704, 359),
           (768, 374), (864, 371), (960, 370)]
+# The painted trail as measured left/right edges per row [y, x0, x1]; it is patched over with
+# meadow so the props sit on one plane instead of along a path into the distance.
+TRAIL = [(340, 574, 598), (360, 561, 614), (380, 537, 638), (400, 494, 634), (420, 461, 596), (440, 437, 562),
+         (470, 394, 522), (500, 351, 494), (540, 324, 506)]
 
 
 def polyline_y(points, w=W):
@@ -49,6 +53,27 @@ def poly_mask(points):
     im = Image.new('L', (W, H), 0)
     ImageDraw.Draw(im).polygon(points, fill=1)
     return np.array(im, bool)
+
+
+def remove_trail(rgb):
+    """Patch the trail with meadow: each row of the trail is replaced by mirroring the grass just
+    outside its left and right edges, so the texture stays coherent with its surroundings."""
+    out = rgb.copy()
+    rs = np.random.RandomState(5)
+    ys = np.array([t[0] for t in TRAIL], float)
+    x0s = np.array([t[1] for t in TRAIL], float) - 5; x1s = np.array([t[2] for t in TRAIL], float) + 5
+    top = int(ys.min())
+    for y in range(top, H):
+        a = int(round(np.interp(y, ys, x0s))); b = int(round(np.interp(y, ys, x1s)))
+        mid = (a + b) // 2
+        jl, jr = int(rs.rand() * 10), int(rs.rand() * 10)
+        if y > 478: jl += 72   # skip the boulders left of the trail's foot
+        for px in range(a, b + 1):
+            sx = (a - 1 - (px - a) - jl) if px <= mid else (b + 1 + (b - px) + jr)
+            sy = y + int(rs.rand() * 3) - 1
+            sx = min(max(sx, 0), W - 1); sy = min(max(sy, top), H - 1)
+            out[y, px] = rgb[sy, sx]
+    return out
 
 
 def classify(rgb):
@@ -73,6 +98,7 @@ def main():
     ref.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(os.path.join(ROOT, 'art/ref_props_960.png'), optimize=True)
 
     rgb = np.array(crop)
+    rgb = remove_trail(rgb)
     tan, green, dark, navy = classify(rgb)
     terrain = majority(tan | green | dark | navy)
 
@@ -106,8 +132,7 @@ def main():
     layer[sky] = 0
 
     # Quantize the painting to 256 colors (cleans JPEG noise, halves the PNG).
-    out = crop.copy()
-    out_np = np.array(out); out_np[sky] = 0
+    out_np = rgb.copy(); out_np[sky] = 0
     outq = Image.fromarray(out_np).quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     q = np.array(outq.convert('RGB'))
 
@@ -121,7 +146,7 @@ def main():
     dirt = majority((np.abs(r - g) < 30) & (r - b > 10) & (r - b < 60) & (r > 100) & (r < 200))
     mat = np.zeros((H, W), np.uint8)
     mat[layer == 1] = 3
-    mat[(layer == 1) & (lum > 200) & (sat < 0.22)] = 4
+    mat[(layer == 1) & (lum > 182) & (sat < 0.3)] = 4
     mat[(layer == 2)] = 1
     mat[(layer == 3)] = 2
     nearm = layer == 4

@@ -1,6 +1,7 @@
 import { W, H, HORIZON } from '../state.js';
 import { fillCircle, ditherPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
+import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
 
 const RAD = Math.PI / 180;
 
@@ -15,14 +16,14 @@ export class WeatherFX {
   update(env, dt) {
     this.t += dt;
     const cover = env.cond.cover;
-    const target = Math.round(cover * 15 + (cover > 0.02 ? 1 : 0));
+    const target = Math.round(cover * 11 + (cover > 0.02 ? 1 : 0));
     while (this.clouds.length < target) this.clouds.push(this.makeCloud(true));
     while (this.clouds.length > target) this.clouds.pop();
     const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
     const speed = (1.5 + env.wind.speed * 0.4) * sign;
     for (const c of this.clouds) {
       c.x += speed * c.depth * dt;
-      if (c.x > W + 260) c.x = -260; else if (c.x < -260) c.x = W + 260;
+      if (c.x > W + 40) c.x = -c.w - 40; else if (c.x < -c.w - 40) c.x = W + 40;
     }
     // precipitation
     const p = env.cond.precip;
@@ -53,48 +54,35 @@ export class WeatherFX {
 
   makeCloud(anywhere) {
     const r = this.rnd;
-    const depth = 0.5 + r() * 0.9;
-    const w = Math.floor((60 + r() * 120) * depth);
-    const puffs = [];
-    const n = 3 + Math.floor(r() * 4);
-    for (let i = 0; i < n; i++) puffs.push({ ox: Math.floor(w * (0.12 + 0.76 * (i / (n - 1 || 1))) + (r() - 0.5) * 10), r: Math.floor((8 + r() * 12) * depth) });
-    return { x: anywhere ? r() * (W + 300) - 150 : -200, y: Math.floor(30 + r() * 170), w, puffs, depth };
-  }
-
-  cloudColors(env) {
-    const { ambient, horizon, sunColor } = env.pal;
-    const alt = env.sun.altitude;
-    let lit = mulRGB([246, 247, 252], ambient);
-    let shade = lerpRGB(mulRGB([146, 154, 178], ambient), horizon, 0.35);
-    const sunset = clamp(1 - Math.abs(alt - 2) / 7, 0, 1) * (1 - env.cond.cover * 0.6);
-    if (sunset > 0) { shade = lerpRGB(shade, scaleRGB(sunColor, 0.85), sunset * 0.7); lit = lerpRGB(lit, sunColor, sunset * 0.25); }
-    if (env.cond.storm) { lit = scaleRGB(lit, 0.7); shade = scaleRGB(shade, 0.6); }
-    return { lit: rgb(lit), shade: rgb(shade), deck: rgb(scaleRGB(shade, 0.9)) };
+    const depth = 0.4 + r() * 1.0;
+    const c = layoutCloud(r, depth);
+    // near clouds ride high and large, far ones sit small toward the horizon
+    c.y = Math.floor(20 + (1.4 - depth) * 120 + r() * 50);
+    c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;
+    c.depth = depth;
+    return c;
   }
 
   drawClouds(ctx, env) {
     const cover = env.cond.cover;
     if (cover <= 0.02) return;
-    const { lit, shade, deck } = this.cloudColors(env);
-    const sunSide = env.sun.azimuth < 180 ? -1 : 1;
+    const sunOnLeft = env.sun.azimuth < 180;
+    const altK = clamp(env.sun.altitude / 60, 0, 1);
+    const lightX = (sunOnLeft ? -1 : 1) * (1.0 - 0.5 * altK), lightY = -(0.35 + 0.65 * altK);
     if (cover > 0.85) {
+      const { tones } = cloudTones(env, 1);
       const deckH = Math.floor(40 + (cover - 0.85) * 500);
-      ctx.fillStyle = deck; ctx.fillRect(0, 0, W, deckH);
+      ctx.fillStyle = rgb(tones[3]); ctx.fillRect(0, 0, W, deckH);
+      ctx.fillStyle = rgb(tones[4]);
       for (let x = -20; x < W + 20; x += 34) fillCircle(ctx, x, deckH - 4 + ((x / 34) % 3 | 0) * 4, 24);
-      ctx.fillStyle = ditherPattern(ctx, shade, 6);
+      ctx.fillStyle = ditherPattern(ctx, rgb(tones[3]), 6);
       for (let x = -20; x < W + 20; x += 34) fillCircle(ctx, x + 10, deckH - 10, 22);
     }
     const sorted = [...this.clouds].sort((a, b) => a.depth - b.depth);
     for (const c of sorted) {
-      const x = Math.round(c.x), y = c.y;
-      ctx.fillStyle = shade;
-      ctx.fillRect(x, y - 2, c.w, 6);
-      for (const p of c.puffs) fillCircle(ctx, x + p.ox, y - 2, p.r);
-      ctx.fillStyle = lit;
-      ctx.fillRect(x + 1, y - 3, c.w - 2, 4);
-      for (const p of c.puffs) fillCircle(ctx, x + p.ox + sunSide, y - 4, Math.max(1, p.r - 2));
-      ctx.fillStyle = ditherPattern(ctx, lit, 7);
-      ctx.fillRect(x + 2, y + 1, c.w - 4, 2);
+      const { tones, key } = cloudTones(env, c.depth);
+      const sprite = cloudSprite(c, tones, key, lightX, lightY);
+      ctx.drawImage(sprite, Math.round(c.x), c.y);
     }
   }
 

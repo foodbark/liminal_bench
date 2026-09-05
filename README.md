@@ -67,8 +67,9 @@ src/palette.js            sky and light keyframes by sun altitude
 src/render/sky.js         dithered sky gradient, stars, moon, sun
 src/assets.js             loads the painted backdrop and its layer/material mask
 src/render/terrain.js     re-lights the painted backdrop: seasonal grass, snowline, fog, ambient
-src/render/props.js       sign, bench, board and notes, pole and lamp, pay phone booth, shadows, glow
-src/render/weatherfx.js   clouds, rain, snow, fog, lightning
+src/render/props.js       bench, board and notes, pole and lamp, pay phone booth, shadows, glow
+src/render/clouds.js      cumulus sprites: seeded puff layout, height-field shading, five tones
+src/render/weatherfx.js   cloud field, rain, snow, fog, lightning
 src/render/renderer.js    layer compositor and caches
 src/ui.js                 hotspots, camera zoom, panels, debug controls
 art/                      concept art (source of the backdrop) and a props reference at scene scale

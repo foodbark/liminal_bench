@@ -5,11 +5,13 @@ import { hash2 } from '../util/noise.js';
 // Screen-space rectangles for the things you can look at, plus what casts shadows. Positions follow
 // art/ref_props_960.png (the concept art at scene scale): sign, bench and board on the left, the
 // path through the middle, the pay phone booth under the pole on the right.
+// All three sit on one ground line (y = 456): board left, bench center, booth right.
+export const GROUND = 456;
+export const BOARD_DX = -175; // the board is drawn with the concept art's coordinates, shifted left
 export const PROPS = {
-  sign:  { x: 60, y: 364, w: 92, h: 90, label: 'trailhead sign', baseY: 452, footprint: [98, 110], height: 60, hot: true },
-  bench: { x: 172, y: 358, w: 168, h: 104, label: 'park bench', baseY: 452, footprint: [178, 336], height: 60, hot: true },
-  board: { x: 322, y: 228, w: 134, h: 222, label: 'bulletin board', baseY: 448, footprint: [326, 452], height: 200, hot: true },
-  phone: { x: 694, y: 222, w: 98, h: 240, label: 'pay phone', baseY: 462, footprint: [700, 770], height: 150, hot: true },
+  board: { x: 322 + BOARD_DX, y: 228, w: 134, h: 230, label: 'bulletin board', baseY: GROUND, footprint: [326 + BOARD_DX, 452 + BOARD_DX], height: 200, hot: true },
+  bench: { x: 396, y: 364, w: 166, h: 94, label: 'park bench', baseY: GROUND, footprint: [402, 556], height: 60, hot: true },
+  phone: { x: 694, y: 222, w: 98, h: 236, label: 'pay phone', baseY: GROUND, footprint: [700, 770], height: 150, hot: true },
   pole:  { x: 782, y: 0, w: 34, h: 468, baseY: 468, footprint: [784, 816], height: 250, hot: false },
 };
 export const HOTSPOTS = Object.entries(PROPS).filter(([, p]) => p.hot).map(([id, p]) => ({ id, ...p }));
@@ -28,7 +30,6 @@ export function drawProps(ctx, state, sunSide, snow) {
   drawLamp(ctx, snow);
   drawBooth(ctx, snow);
   drawBoard(ctx, state.notes, snow);
-  drawSign(ctx, snow);
   drawBench(ctx, snow);
   drawSquirrel(ctx);
 }
@@ -131,8 +132,8 @@ function drawBooth(ctx, snow) {
   px(ctx, '#1c2024', 750, 330, 10, 8); px(ctx, '#8b9aa8', 752, 332, 6, 2);
   ctx.fillStyle = '#c8ccd2'; plotWire(ctx, 742, 326, 752, 340, 14);
   // pedestal and base
-  px(ctx, '#58503d', 745, B, 26, 82); px(ctx, '#7a7050', 745, B, 4, 82); px(ctx, '#3a3428', 763, B, 8, 82);
-  px(ctx, '#645636', 741, 456, 34, 6); px(ctx, '#3a3428', 741, 461, 34, 1);
+  px(ctx, '#58503d', 745, B, 26, GROUND - B); px(ctx, '#7a7050', 745, B, 4, GROUND - B); px(ctx, '#3a3428', 763, B, 8, GROUND - B);
+  px(ctx, '#645636', 741, GROUND - 5, 34, 6); px(ctx, '#3a3428', 741, GROUND, 34, 1);
   if (snow) { snowCap(ctx, L, T, R - L + 19, 3); }
 }
 function handsetIcon(ctx, x, y, w, h) {
@@ -144,8 +145,10 @@ function handsetIcon(ctx, x, y, w, h) {
 
 // --- bulletin board ------------------------------------------------------------------------
 function drawBoard(ctx, notes, snow) {
+  ctx.save(); ctx.translate(BOARD_DX, 0);
   // posts (frame sides run to the ground)
-  for (const x of [325, 438]) { px(ctx, '#6e5236', x, 244, 15, 204); px(ctx, '#886741', x, 244, 3, 204); px(ctx, '#4a3320', x + 11, 244, 4, 204); }
+  const ph = GROUND - 244;
+  for (const x of [325, 438]) { px(ctx, '#6e5236', x, 244, 15, ph); px(ctx, '#886741', x, 244, 3, ph); px(ctx, '#4a3320', x + 11, 244, 4, ph); }
   // roof
   px(ctx, '#452e26', 322, 230, 132, 14); px(ctx, '#675441', 322, 230, 132, 2); px(ctx, '#2e1e18', 322, 242, 132, 2);
   for (let x = 324; x < 454; x += 5) px(ctx, '#3a2620', x, 233, 1, 8);
@@ -157,13 +160,14 @@ function drawBoard(ctx, notes, snow) {
   ctx.fillStyle = ditherPattern(ctx, '#927058', 3); ctx.fillRect(341, 253, 96, 90);
   px(ctx, '#4a3320', 340, 252, 98, 1); px(ctx, '#4a3320', 340, 252, 1, 92);
   px(ctx, '#5a3d22', 325, 344, 128, 10); px(ctx, '#7a5a3a', 325, 344, 128, 1); px(ctx, '#3a2818', 325, 353, 128, 1);
-  for (const n of notes) drawNote(ctx, n);
   if (snow) { snowCap(ctx, 322, 230, 132, 4); snowCap(ctx, 340, 344, 98, 2); }
+  ctx.restore();
+  for (const n of notes) drawNote(ctx, n);
 }
 
 const PAPER = ['#efe6c8', '#f2d27a', '#cfe2f0', '#f0c9c9', '#c8d8b0', '#f7f2e8'];
 export function makeNote(text, opts = {}) {
-  return { text, x: opts.x ?? 352, y: opts.y ?? 258, w: opts.w ?? 24, h: opts.h ?? 30, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b' };
+  return { text, x: opts.x ?? 177, y: opts.y ?? 258, w: opts.w ?? 24, h: opts.h ?? 30, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b' };
 }
 function drawNote(ctx, n) {
   const fade = clamp(n.age, 0, 1);
@@ -184,44 +188,25 @@ function drawNote(ctx, n) {
   px(ctx, n.pin, x + (w >> 1) - 1, y + 1, 3, 3); px(ctx, '#ffd0c0', x + (w >> 1) - 1, y + 1, 1, 1);
 }
 
-// --- trailhead sign ------------------------------------------------------------------------
-function drawSign(ctx, snow) {
-  const x = 62, w = 86, slope = -10 / 86, top = 378, h = 46;
-  slab(ctx, '#8a7860', x + 1, top + 2, w, h, slope);       // shadowed edge
-  slab(ctx, '#d8c9a8', x, top, w, h, slope);
-  slab(ctx, '#ece0c4', x, top, w, 2, slope);
-  slab(ctx, '#b8a888', x, top + h - 3, w, 3, slope);
-  px(ctx, '#b8a888', x + w - 1, top - 10, 1, h);
-  drawText(ctx, 'TRAILHEAD', 70, 386, 2, '#4a3222', slope);
-  drawText(ctx, 'PARK', 90, 402, 2, '#4a3222', slope);
-  // post
-  px(ctx, '#514535', 98, 418, 12, 34); px(ctx, '#6b5c48', 98, 418, 3, 34); px(ctx, '#3a3024', 107, 418, 3, 34);
-  if (snow) { for (let i = 0; i < w; i += 2) px(ctx, SNOW, x + i, Math.round(top + slope * i) - 3, 2, 3); }
-}
-
 // --- bench ---------------------------------------------------------------------------------
 function drawBench(ctx, snow) {
-  const x = 178, w = 158, s = 0.08;
+  const x = 400, w = 158;
   const slat = (y, h) => {
-    slab(ctx, '#7c5f47', x, y, w, h, s);
-    slab(ctx, '#a08060', x, y, w, 2, s);
-    slab(ctx, '#5a4433', x, y + h - 1, w, 1, s);
-    for (const sx of [6, w - 8]) px(ctx, '#8fb4c8', x + sx, Math.round(y + s * sx) + 3, 2, 1);
+    px(ctx, '#7c5f47', x, y, w, h); px(ctx, '#a08060', x, y, w, 2); px(ctx, '#5a4433', x, y + h - 1, w, 1);
+    for (const sx of [6, w - 8]) px(ctx, '#8fb4c8', x + sx, y + 3, 2, 1);
   };
   // uprights behind the slats
-  px(ctx, '#5a4a30', 180, 360, 7, 88); px(ctx, '#3e3222', 185, 360, 2, 88);
-  px(ctx, '#5a4a30', 328, 372, 7, 88); px(ctx, '#3e3222', 333, 372, 2, 88);
+  for (const ux of [402, 550]) { px(ctx, '#5a4a30', ux, 366, 7, GROUND - 366); px(ctx, '#3e3222', ux + 5, 366, 2, GROUND - 366); }
   // back slats
-  slat(362, 8); slat(373, 8); slat(384, 8);
-  // seat: two boards
-  slab(ctx, '#4a3828', x - 2, 408, w + 4, 16, s);
-  slat(409, 6); slat(416, 6);
-  slab(ctx, '#5a4433', x - 2, 422, w + 4, 3, s);
+  slat(368, 8); slat(379, 8); slat(390, 8);
+  // seat: two boards on a dark underside
+  px(ctx, '#4a3828', x - 2, 414, w + 4, 16);
+  slat(415, 6); slat(422, 6);
+  px(ctx, '#5a4433', x - 2, 428, w + 4, 3);
   // front legs and stretcher
-  px(ctx, '#5a4a30', 186, 424, 6, 24); px(ctx, '#3e3222', 190, 424, 2, 24);
-  px(ctx, '#5a4a30', 322, 436, 6, 24); px(ctx, '#3e3222', 326, 436, 2, 24);
-  slab(ctx, '#4a3c28', 190, 440, 134, 3, s);
-  if (snow) { for (let i = 0; i < w; i += 2) { px(ctx, SNOW, x + i, Math.round(362 + s * i) - 3, 2, 3); px(ctx, SNOW, x + i, Math.round(409 + s * i) - 3, 2, 3); } }
+  for (const lx of [408, 544]) { px(ctx, '#5a4a30', lx, 431, 6, GROUND - 431); px(ctx, '#3e3222', lx + 4, 431, 2, GROUND - 431); }
+  px(ctx, '#4a3c28', 412, 446, 134, 3);
+  if (snow) { snowCap(ctx, x, 368, w, 3); snowCap(ctx, x, 415, w, 3); }
 }
 
 // --- a squirrel on the boulder at the right --------------------------------------------------
