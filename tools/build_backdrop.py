@@ -67,6 +67,12 @@ def clear_cork(rgb, cork):
     return out
 
 
+def boxcount(mask, rad, yy, xx, H, W):
+    """Number of true pixels in the (2*rad+1) square window around each pixel."""
+    ii = np.pad(np.cumsum(np.cumsum(mask.astype(np.int32), 0), 1), ((1, 0), (1, 0)))
+    y0 = np.clip(yy - rad, 0, H); y1 = np.clip(yy + rad + 1, 0, H); x0 = np.clip(xx - rad, 0, W); x1 = np.clip(xx + rad + 1, 0, W)
+    return ii[y1, x1] - ii[y0, x1] - ii[y1, x0] + ii[y0, x0]
+
 def fill_holes(mask, box):
     """Inside one box, mark as prop any non-prop pixel not connected to the box's border."""
     x0, y0, x1, y1 = box
@@ -156,7 +162,8 @@ def main():
     # the config has one, else from a column scan of the prop-less painting.
     br, bg, bb = [bare_np[..., i].astype(int) for i in range(3)]
     blum = 0.299 * br + 0.587 * bg + 0.114 * bb
-    skyish = (bb > 176) | (blum > 170)
+    ridgey = (bb > br + 35) & (br < 195) & (blum < 200)          # hazy lavender of a distant range
+    skyish = ((bb > 176) | (blum > 170)) & ~ridgey
     if cfg.get('skyline'):
         # the traced line, raised wherever a scan finds hillside or trees above it
         top = polyline_y(pts(cfg['skyline']), W)
@@ -182,14 +189,55 @@ def main():
             hit = (run >= 6 * k) & (top == H)
             top[hit] = y - (6 * k - 1)
         top = top.astype(float)
-    sky = skyish & (yy < top[None, :] + 8 * k) & (~peak)
+    # sky-colored pixels just under the traced crest are sky (clouds resting on a ridge, gaps
+    # between tree tips); the band is deeper across the distant ranges, where the snowy summits
+    # are protected by the peak polygon
+    band = np.where(np.arange(W) >= far_x, 48 * k, 8 * k)
+    sky = skyish & (yy < top[None, :] + band[None, :]) & (~peak)
     if cfg.get('skyline'):
         # left of the ranges, everything above the first real hillside row that is not hillside is
         # sky: painted cloud tufts sitting on Sentinel's crest go with the sky
-        hill = majority(tan | green | (dark & (yy > top[None, :] - 24 * k)), 4)
-        sky |= (~hill) & (yy < scan[None, :]) & (xx < far_x) & (~peak)
+        # Sentinel's crest carries semi-transparent painted cloud. Per column, the true crest is
+        # where the 9x9 window turns mostly tan; everything above it is sky, and cloud-colored
+        # pixels just below it are repainted from the clean hillside further down.
+        r4 = 4 * k
+        tanfrac = boxcount(tan, r4, yy, xx, H, W) / float((2 * r4 + 1) ** 2)
+        # the crest is searched only a little below the first solid hillside/tree row (scan), so
+        # a column that goes sky, trees, meadow keeps its trees
+        crest = np.array(scan, int).copy()
+        for x in range(min(W, far_x)):
+            lo = max(0, int(top[x]) - 40 * k); hi = min(H, int(scan[x]) + 24 * k)
+            hit = np.nonzero(tanfrac[lo:hi, x] >= 0.6)[0]
+            crest[x] = lo + hit[0] if len(hit) else int(scan[x])
+        leftside = (np.arange(W) < far_x)[None, :]
+        sky |= (yy < crest[None, :]) & leftside & (~peak)
+        cloudy = skyish | ((bb > br + 30) & (blum > 120) & ~tan)
+        strip = leftside & (yy >= crest[None, :]) & (yy < crest[None, :] + 40 * k) & cloudy & ~tan
+        # repaint each strip pixel from the nearest clean tan pixel below it in the same column
+        nxt = np.full((H, W), H - 1, int)
+        for y in range(H - 2, -1, -1):
+            nxt[y] = np.where(tan[y + 1], y + 1, nxt[y + 1])
+        ys_, xs_ = np.nonzero(strip)
+        src = np.minimum(H - 1, nxt[ys_, xs_] + np.random.RandomState(3).randint(0, 6 * k, len(ys_)))
+        rgb[ys_, xs_] = rgb[src, xs_]
+        top = np.where(leftside[0], np.minimum(top, crest), top)
+        if args.debug: np.save(os.path.join(args.debug, 'crest.npy'), crest); np.save(os.path.join(args.debug, 'scan.npy'), scan); np.save(os.path.join(args.debug, 'trace.npy'), polyline_y(pts(cfg['skyline']), W))
     sky |= (yy < top[None, :] - 1) & (~peak)
     sky = majority(sky)
+    # pale patches below the crest are cloud between tree crowns (sky) or snow on a summit
+    # (terrain): decide by the neighborhood, foliage around it vs rock around it
+    # (judged on the scene painting: the prop-less export can differ around the props)
+    tan0, green0, dark0, navy0 = classify(rgb)
+    sr0, sg0, sb0 = [rgb[..., i].astype(int) for i in range(3)]
+    ridgey0 = (sb0 > sr0 + 35) & (sr0 < 195) & (0.299 * sr0 + 0.587 * sg0 + 0.114 * sb0 < 200)
+    # what a pale pixel rests on decides it: the first foliage or rock pixel below it in its column
+    cls = np.where(green0 | dark0, 1, np.where(ridgey0 | navy0, 2, 0)).astype(np.int8)
+    below = np.zeros((H, W), np.int8)
+    for y in range(H - 2, -1, -1):
+        below[y] = np.where(cls[y + 1] != 0, cls[y + 1], below[y + 1])
+    slum0 = 0.299 * sr0 + 0.587 * sg0 + 0.114 * sb0
+    skyish_s = ((sb0 > 176) | (slum0 > 170)) & ~ridgey0
+    sky |= skyish_s & (below == 1) & (yy < top[None, :] + 90 * k) & (yy >= ridge_min_y)
     sky &= ~prop
 
     # --- layers, far to near
@@ -198,7 +246,7 @@ def main():
     foliage = majority(green | dark)
     sr, sg, sb = [rgb[..., i].astype(int) for i in range(3)]
     slum = 0.299 * sr + 0.587 * sg + 0.114 * sb
-    navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= ridge_min_y)), 5)
+    navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= ridge_min_y)) | ((sb > sr + 35) & (sr < 195) & (slum < 200) & (xx >= far_x) & (yy >= ridge_min_y)), 5)
     above_meadow = yy < meadow[None, :]
     farzone = (xx >= far_x) & (yy < far_mid[None, :]) & (~foliage)
     L_PEAK, L_RANGE, L_FARHILL, L_FLANK, L_TREES, L_NEAR = 1, 2, 3, 4, 5, 6
@@ -207,7 +255,8 @@ def main():
     layer[mid & ~foliage & (xx < farhill_x)] = L_FLANK
     layer[mid & ~foliage & (xx >= farhill_x)] = L_FARHILL
     layer[mid & foliage] = L_TREES
-    layer[farzone & ~navyish] = L_FARHILL
+    layer[farzone & ~navyish & (xx >= farhill_x)] = L_FARHILL
+    layer[farzone & ~navyish & (xx < farhill_x)] = L_FLANK
     layer[(farzone | mid | peak) & navyish & ~foliage] = L_RANGE
     layer[peak & ~navyish] = L_PEAK
     layer[~above_meadow] = L_NEAR

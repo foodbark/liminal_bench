@@ -15,7 +15,7 @@ const LAYERS = {
   // meltHours: how many hours above freezing it takes a dusting to melt off the whole layer,
   // bottom up; the high forested range (Dean Stone) holds it longest.
   [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, snowBias: 0.0, hill: true, meltHours: 16 },
-  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, snowBias: -0.05, hill: true, meltHours: 9.5 },
+  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18 },   // Dean Stone: a little more contrast than painted
   [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, snowBias: -0.12, hill: true, meltHours: 5 },
   [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, snowBias: -0.15, hill: true, backlitAM: true, meltHours: 6.5 },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
   [LAYER.TREES]:   { depth: 0.22, horizon: 0.0, snowBias: -0.1, hill: true, meltHours: 4.5 },
@@ -173,6 +173,7 @@ export function renderTerrain(img, env, assets) {
         }
       }
 
+      if (L.pop && !isProp) { const mid = 118; c = [mid + (c[0] - mid) * L.pop, mid + (c[1] - mid) * L.pop, mid + (c[2] - mid) * L.pop]; }
       c = quantRGB(c, 9, d);
       const persp = layer === LAYER.NEAR ? nearHaze : P.persp;
       const fog = layer === LAYER.NEAR ? fogK * 0.78 : fogK;
