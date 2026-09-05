@@ -78,17 +78,35 @@ function buildField(c) {
 // distant clouds and tinted by sunset color when the sun is low.
 export function cloudTones(env, depth) {
   const { ambient, horizon, sunColor } = env.pal;
+  const alt = env.sun.altitude;
   const base = [[250, 251, 255], [224, 231, 244], [166, 185, 214], [116, 142, 186], [84, 108, 154]];
-  const sunset = clamp(1 - Math.abs(env.sun.altitude - 2) / 7, 0, 1) * (1 - env.cond.cover * 0.6);
+  const cover = env.cond.cover;
+  // Low sun: tops take the sun color, undersides blaze when the sun is at or just below the horizon.
+  const glow = clamp(1 - Math.abs(alt - 1) / 7, 0, 1) * (1 - cover * 0.5);
+  const under = clamp(1 - Math.abs(alt + 1) / 5, 0, 1) * (1 - cover * 0.5);
+  const ember = lerpRGB(scaleRGB(sunColor, 0.95), [255, 110, 70], 0.4);
+  const dusk = clamp((-alt - 4) / 6, 0, 1);            // well after sunset: purple-gray
+  // Moonlight silvers the tops at night.
+  const nightK = clamp((-alt - 3) / 5, 0, 1);
+  const phaseB = 1 - Math.abs(env.moon.phase - 0.5) * 2;
+  const moonK = nightK * clamp(env.moon.altitude / 15, 0, 1) * (0.1 + 0.9 * phaseB);
   const haze = clamp((1.2 - depth) * 0.35, 0, 0.45);
   const tones = base.map((t, i) => {
     let c = mulRGB(t, ambient);
     const k = i / 4;
     c = lerpRGB(c, horizon, 0.08 + k * 0.12 + haze);
-    if (sunset > 0) c = lerpRGB(c, i < 2 ? sunColor : scaleRGB(sunColor, 0.8), sunset * (i < 2 ? 0.25 : 0.6));
+    if (glow > 0) c = lerpRGB(c, sunColor, glow * (i < 2 ? 0.35 : 0.15));
+    if (under > 0) c = lerpRGB(c, ember, under * (i >= 3 ? 0.8 : i === 2 ? 0.45 : 0.1));
+    if (dusk > 0) c = lerpRGB(c, [70, 62, 96], dusk * 0.35 * (0.5 + k));
+    if (moonK > 0) c = [c[0] + 120 * moonK * (i < 2 ? 0.5 : 0.2), c[1] + 140 * moonK * (i < 2 ? 0.5 : 0.2), c[2] + 200 * moonK * (i < 2 ? 0.5 : 0.2)];
     if (env.cond.storm) c = scaleRGB(c, i < 2 ? 0.75 : 0.62);
-    return c;
+    return c.map((v) => clamp(v, 0, 255));
   });
+  // rim: the silhouette facing the light, brighter and warmer than the top tone
+  let rim = lerpRGB(tones[0], [255, 255, 255], 0.4);
+  if (glow > 0) rim = lerpRGB(rim, lerpRGB(sunColor, [255, 240, 210], 0.3), glow * 0.8);
+  if (moonK > 0) rim = lerpRGB(rim, [220, 232, 255], moonK * 0.7);
+  tones.push(rim.map((v) => clamp(v, 0, 255)));
   const key = tones.map((c) => c.map((v) => v >> 3).join('.')).join('|');
   return { tones, key };
 }
@@ -114,12 +132,14 @@ export function cloudSprite(c, tones, key, lightX, lightY) {
     const ao = clamp((c.baseY - y) / (c.h * 0.4), 0, 1);
     b *= 0.5 + 0.5 * ao;
     // thin fringes at the silhouette pick up light; creases between lobes fall into shade
-    if (v < 3) b += 0.08;
+    const edge = v < 3.5;
+    if (edge) b += 0.08;
     const me = c.who[y * w + x];
     if ((x > 0 && field[y * w + x - 1] > 0 && c.who[y * w + x - 1] !== me) || (y > 0 && field[(y - 1) * w + x] > 0 && c.who[(y - 1) * w + x] !== me)) b -= 0.14;
     const d = bayer(x, y);
     const q = b + (d - 0.5) * 0.09;
-    const tone = q > 0.8 ? 0 : q > 0.62 ? 1 : q > 0.45 ? 2 : q > 0.3 ? 3 : 4;
+    let tone = q > 0.8 ? 0 : q > 0.62 ? 1 : q > 0.45 ? 2 : q > 0.3 ? 3 : 4;
+    if (edge && (-gx * Lx - gy * Ly) > 0.15) tone = 5;   // rim light on the edge facing the sun
     const col = tones[tone];
     const i = (y * w + x) * 4;
     data[i] = col[0]; data[i + 1] = col[1]; data[i + 2] = col[2]; data[i + 3] = 255;

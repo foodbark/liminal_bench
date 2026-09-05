@@ -40,7 +40,8 @@ function computeEnv() {
   const cond = { ...conditionsFromCode(w.code), cover };
   const sun = sunPosition(now, LAT, LON);
   const phase = moonPhase(now);
-  const moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
+  let moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
+  if (o.enabled && o.moon !== 'live') moon = { ...moon, ...{ full: { phase: 0.5, altitude: 40 }, half: { phase: 0.25, altitude: 30 }, none: { altitude: -20 } }[o.moon] };
   const pal = skyPalette(sun.altitude, cond);
   let snowAmount = SEASON_SNOW[month];
   if (w.snowDepth > 0.05) snowAmount = Math.max(snowAmount, 0.65);
@@ -52,11 +53,12 @@ function computeEnv() {
   const sunSide = sun.azimuth < 180 ? 1 : -1;
   const a2 = Math.round(sun.altitude * 2), c1 = cover.toFixed(1);
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
+  const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
     now, month, sun, moon, pal, cond, snowAmount, groundSnow, sunSide,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}`,
     ambientKey,
   };
 }

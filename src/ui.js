@@ -67,10 +67,10 @@ export function setupUI(state, canvas) {
   }
 
   // debug controls
-  const dbg = { enabled: $('dbg-enabled'), hour: $('dbg-hour'), month: $('dbg-month'), weather: $('dbg-weather'), cover: $('dbg-cover'), info: $('dbg-info') };
+  const dbg = { enabled: $('dbg-enabled'), hour: $('dbg-hour'), month: $('dbg-month'), weather: $('dbg-weather'), cover: $('dbg-cover'), moon: $('dbg-moon'), info: $('dbg-info') };
   const sync = () => {
     const o = state.override;
-    o.enabled = dbg.enabled.checked; o.hour = +dbg.hour.value; o.month = +dbg.month.value; o.weather = dbg.weather.value; o.cover = +dbg.cover.value;
+    o.enabled = dbg.enabled.checked; o.hour = +dbg.hour.value; o.month = +dbg.month.value; o.weather = dbg.weather.value; o.cover = +dbg.cover.value; o.moon = dbg.moon.value;
     const hh = Math.floor(o.hour), mm = Math.round((o.hour - hh) * 60);
     $('dbg-hour-val').textContent = `${String(hh % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     $('dbg-cover-val').textContent = o.cover < 0 ? 'auto' : o.cover + '%';

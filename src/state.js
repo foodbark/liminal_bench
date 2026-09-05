@@ -10,7 +10,7 @@ export const SEASON_SNOW = [1, 0.95, 0.8, 0.55, 0.3, 0.12, 0.02, 0.02, 0.02, 0.0
 export function createState() {
   return {
     now: new Date(),
-    override: { enabled: false, hour: 12, month: 6, weather: 'live', cover: -1 },
+    override: { enabled: false, hour: 12, month: 6, weather: 'live', cover: -1, moon: 'live' },
     weather: { ok: false, fetchedAt: 0, temp: null, code: 0, cover: 0.1, wind: 3, windDir: 270, precip: 0, snowfall: 0, snowDepth: 0 },
     env: null,        // derived per-frame environment (sun, palette, conditions)
     view: 'scene',    // scene | phone | board | bench
