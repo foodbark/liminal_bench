@@ -120,6 +120,11 @@ def main():
     art = Image.open(os.path.join(ROOT, 'art', cfg['art'])).convert('RGB')
     bare = Image.open(os.path.join(ROOT, 'art', cfg['bare'])).convert('RGB')
     ref_w, ref_h = cfg['ref']
+    # a painting a couple of pixels off the reference size (export rounding) is snapped to it
+    if art.size != (ref_w, ref_h) and abs(art.size[0] - ref_w) <= 4 and abs(art.size[1] - ref_h) <= 4:
+        art = art.resize((ref_w, ref_h), Image.NEAREST)
+    if bare.size != (ref_w, ref_h) and abs(bare.size[0] - ref_w) <= 4 and abs(bare.size[1] - ref_h) <= 4:
+        bare = bare.resize((ref_w, ref_h), Image.NEAREST)
     # scale: the painting may be an exact multiple of the config's reference size
     k = args.scale
     if k == 1 and art.size[0] != ref_w:
@@ -189,7 +194,7 @@ def main():
     else:
         tan, green, dark, navy = classify(bare_np)
         hazy = (bb < 176) & (bb > br + 8) & (blum < 150) & (yy >= ridge_min_y)
-        terrain = majority(tan | green | dark) if cfg.get('scan_simple') else majority(tan | green | dark | navy | hazy)
+        terrain = majority(tan | green | dark | navy) if cfg.get('scan_simple') else majority(tan | green | dark | navy | hazy)
         run = np.zeros(W, int); top = np.full(W, H, int)
         for y in range(H):
             run = np.where(terrain[y], run + 1, 0)
@@ -231,6 +236,9 @@ def main():
         if args.debug: np.save(os.path.join(args.debug, 'crest.npy'), crest); np.save(os.path.join(args.debug, 'scan.npy'), scan); np.save(os.path.join(args.debug, 'trace.npy'), polyline_y(pts(cfg['skyline']), W))
     sky |= (yy < top[None, :] - 1) & (~peak)
     sky = majority(sky)
+    # thin dark things standing on the crest (radio masts, lone pines) survive the filter
+    dark_raw = blum < 80
+    sky &= ~(dark_raw & (yy > top[None, :] - 70 * k) & (yy >= ridge_min_y))
     # pale patches below the crest are cloud between tree crowns (sky) or snow on a summit
     # (terrain): decide by the neighborhood, foliage around it vs rock around it
     # (judged on the scene painting: the prop-less export can differ around the props)

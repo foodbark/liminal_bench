@@ -1,6 +1,6 @@
 {
- "art": "mount_dean_stone.png",
- "bare": "mount_dean_stone.png",
+ "art": "dean_stone_alone.jpg",
+ "bare": "dean_stone_alone.jpg",
  "props_from": "wider_aspect.png",
  "props_only": "wider_aspect_just_props.png",
  "ref": [
