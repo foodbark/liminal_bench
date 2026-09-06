@@ -74,6 +74,18 @@ def boxcount(mask, rad, yy, xx, H, W):
     y0 = np.clip(yy - rad, 0, H); y1 = np.clip(yy + rad + 1, 0, H); x0 = np.clip(xx - rad, 0, W); x1 = np.clip(xx + rad + 1, 0, W)
     return ii[y1, x1] - ii[y0, x1] - ii[y1, x0] + ii[y0, x0]
 
+def key_checker(im, tol=10):
+    """Alpha for a JPEG whose transparent area was flattened to a gray/white checkerboard."""
+    a = np.array(im.convert('RGB')).astype(int)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    gray = (np.abs(r - g) < 8) & (np.abs(g - b) < 8)
+    checker = gray & ((np.abs(r - 199) < tol) | (r > 245))
+    solid = ~majority(checker, 3)
+    solid = majority(solid, 5)
+    # shave the edge: JPEG ringing against the checker leaves pale fringe pixels
+    for _ in range(2): solid = majority(solid, 9)
+    return solid
+
 def fill_holes(mask, box):
     """Inside one box, mark as prop any non-prop pixel not connected to the box's border."""
     x0, y0, x1, y1 = box
@@ -143,6 +155,27 @@ def main():
         while a.shape[0] < H: a = np.concatenate([a, a[-1:]], 0)
         return a[:H, :W]
     rgb = pad(art); bare_np = pad(bare)
+    # An optional front painting (the near hills, trees and meadow with a transparent sky, here
+    # flattened to a checkerboard) sits over the back painting; it may come at a lower resolution
+    # and is pixel-doubled, never resampled.
+    front = None
+    if cfg.get('front'):
+        fc = cfg['front']
+        fim = Image.open(os.path.join(ROOT, 'art', fc['file']))
+        alpha = key_checker(fim) if fc.get('key') == 'checker' else np.array(fim.convert('RGBA'))[..., 3] > 128
+        fr = np.array(fim.convert('RGB'))
+        sc = int(fc.get('scale', 1))
+        if sc > 1:
+            fr = np.repeat(np.repeat(fr, sc, 0), sc, 1); alpha = np.repeat(np.repeat(alpha, sc, 0), sc, 1)
+        def fit(a):
+            out = np.zeros((H, W) + a.shape[2:], a.dtype)
+            hh, ww = min(H, a.shape[0]), min(W, a.shape[1]); out[:hh, :ww] = a[:hh, :ww]
+            if ww < W: out[:, ww:] = out[:, ww - 1:ww]
+            if hh < H: out[hh:] = out[hh - 1:hh]
+            return out
+        fr = fit(fr); front = fit(alpha)
+        rgb = rgb.copy(); rgb[front] = fr[front]
+        bare_np = bare_np.copy(); bare_np[front] = fr[front]
 
     PEAK = pts(cfg['peak']); FAR_MID = pts(cfg['far_mid']); MEADOW = pts(cfg['meadow'])
     PROP_RECTS = rects(cfg['prop_rects']); PROP_DARK = rects(cfg['prop_rects_dark']); PROP_WOOD = rects(cfg['prop_rects_wood'])
@@ -254,6 +287,7 @@ def main():
     skyish_s = ((sb0 > 176) | (slum0 > 170)) & ~ridgey0
     sky |= skyish_s & (below == 1) & (yy < top[None, :] + 90 * k) & (yy >= ridge_min_y)
     sky &= ~prop
+    if front is not None: sky &= ~front
 
     # --- layers, far to near
     far_mid = polyline_y(FAR_MID, W); meadow = polyline_y(MEADOW, W)
@@ -264,6 +298,7 @@ def main():
     navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= ridge_min_y)) | ((sb > sr + 35) & (sr < 195) & (slum < 200) & (xx >= far_x) & (yy >= ridge_min_y)), 5)
     above_meadow = yy < meadow[None, :]
     farzone = (xx >= far_x) & (yy < far_mid[None, :]) & (~foliage if not cfg.get('far_is_forest') else True)
+    if front is not None: farzone = (~front) & above_meadow   # the back painting wherever the front lets it show
     L_PEAK, L_RANGE, L_FARHILL, L_FLANK, L_TREES, L_NEAR = 1, 2, 3, 4, 5, 6
     layer = np.zeros((H, W), np.uint8)
     mid = above_meadow & ~farzone & ~peak
