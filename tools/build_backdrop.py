@@ -373,7 +373,7 @@ def main():
         'cork': { 'x': CORK[0], 'y': CORK[1], 'w': CORK[2] - CORK[0], 'h': CORK[3] - CORK[1] },
         'lamp': { 'x': S(cfg['lamp'][0]), 'y': S(cfg['lamp'][1]) }, 'lampPoolY': S(cfg['lamp_pool_y']),
         'views': { v: { 'cx': S(d['cx']), 'cy': S(d['cy']), 's': d['s'], 'dock': d['dock'] } for v, d in cfg['views'].items() },
-        'inversionTop': S(cfg['inversion_top']), 'nearHazeY': S(cfg['near_haze_y']),
+        'inversionTop': S(cfg['inversion_top']), 'nearHazeY': S(cfg['near_haze_y']), 'hazeScale': cfg.get('haze_scale', 1),
         'inversionReachX': [S(v) for v in cfg['inversion_reach_x']], 'bankReachX': [S(v) for v in cfg['bank_reach_x']],
         'snowCaps': [[S(v) for v in c] for c in cfg['snow_caps']],
         'notes': [[S(n[0]), S(n[1]), S(n[2]), S(n[3]), n[4], n[5]] for n in cfg['notes']],

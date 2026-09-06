@@ -406,5 +406,6 @@
   "file": "mount_sentinel_alone_transparent_sky.jpg",
   "key": "checker",
   "scale": 1
- }
+ },
+ "haze_scale": 2.2
 }

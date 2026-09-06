@@ -18,7 +18,7 @@ const LAYERS = {
   // meltHours: how many hours above freezing it takes a dusting to melt off the whole layer,
   // bottom up; the high forested range (Dean Stone) holds it longest.
   [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, base: 1.0, snowBias: 0.0, hill: true, meltHours: 16 },
-  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, base: 3.2, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
+  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, base: 2.2, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
   [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, base: 3.0, snowBias: -0.12, hill: true, meltHours: 5 },
   [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, base: 4.0, snowBias: -0.15, hill: true, backlitAM: true, meltHours: 6.5 },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
   [LAYER.TREES]:   { depth: 0.22, horizon: 3.0, base: 4.2, snowBias: -0.1, hill: true, meltHours: 4.5 },
@@ -188,7 +188,11 @@ export function renderTerrain(img, env, assets) {
       const lm = lum(c) / 255;
       // this pixel's own horizon: the shadow line climbs from the layer's base to its top
       const hz = P.base + (P.horizon - P.base) * e;
-      const pixK = smooth(clamp((alt - (hz - 1.2)) / 2.4, 0, 1));
+      const direct = smooth(clamp((alt - (hz - 1.2)) / 2.4, 0, 1));
+      // alpenglow is scattered light: after the direct sun has left a mountain face it still
+      // washes the whole face, brighter toward the top, while the valley floor stays in shadow
+      const afterglow = L.depth >= 0.3 ? glow * (0.45 + 0.55 * e) * smooth(clamp((alt + 4.5) / 3, 0, 1)) : 0;
+      const pixK = Math.max(direct, afterglow);
       const sunK = P.backlit ? 0 : pixK;
       let lit = c;
       if (glow > 0 && sunK > 0) {
