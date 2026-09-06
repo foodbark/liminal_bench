@@ -12,14 +12,17 @@ import { LAYER, MAT } from '../assets.js';
 
 // Per-layer character, far to near. horizon: sun altitude (deg) at which the layer is lit.
 const LAYERS = {
+  // horizon: sun altitude (deg) at which the layer's top is lit; base: at which its bottom is.
+  // Missoula is a valley, so the floor loses the sun while ridge tops still glow: the shadow
+  // climbs each hill as the sun drops (base > horizon).
   // meltHours: how many hours above freezing it takes a dusting to melt off the whole layer,
   // bottom up; the high forested range (Dean Stone) holds it longest.
-  [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, snowBias: 0.0, hill: true, meltHours: 16 },
-  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
-  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, snowBias: -0.12, hill: true, meltHours: 5 },
-  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, snowBias: -0.15, hill: true, backlitAM: true, meltHours: 6.5 },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
-  [LAYER.TREES]:   { depth: 0.22, horizon: 0.0, snowBias: -0.1, hill: true, meltHours: 4.5 },
-  [LAYER.NEAR]:    { depth: 0.0, horizon: 0.6, snowBias: 0, hill: false },
+  [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, base: 1.0, snowBias: 0.0, hill: true, meltHours: 16 },
+  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, base: 3.2, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
+  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, base: 3.0, snowBias: -0.12, hill: true, meltHours: 5 },
+  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, base: 4.0, snowBias: -0.15, hill: true, backlitAM: true, meltHours: 6.5 },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
+  [LAYER.TREES]:   { depth: 0.22, horizon: 3.0, base: 4.2, snowBias: -0.1, hill: true, meltHours: 4.5 },
+  [LAYER.NEAR]:    { depth: 0.0, horizon: 4.5, base: 4.5, snowBias: 0, hill: false },
 };
 
 // Grass tone by month: green spring, greener early summer, tan by August, brown into winter.
@@ -82,8 +85,11 @@ export function renderTerrain(img, env, assets) {
   // full strength within about two degrees of the horizon, fading out over the next seven
   const glow = clamp(1 - (Math.abs(alt + 0.5) - 2) / 7, 0, 1) * (1 - env.cond.cover * 0.7);
   const glowRGB = lerpRGB([255, 118, 88], [255, 205, 150], clamp((alt + 3) / 6, 0, 1));
+  // the light's tint as a multiplier: deep orange at the horizon, gold a little higher
+  const glowMul = lerpRGB([1.28, 0.86, 0.64], [1.16, 1.02, 0.84], clamp((alt + 3) / 6, 0, 1));
   const litAmbient = lerpRGB(ambient, [1, 0.96, 0.92], glow);
-  const shadowTint = lerpRGB([1, 1, 1], [0.72, 0.78, 0.96], clamp(1 - Math.abs(alt + 2) / 7, 0, 1));
+  // ground in the valley's shadow near sunrise and sunset is lit only by the blue sky
+  const shadowTint = lerpRGB([1, 1, 1], [0.64, 0.72, 1.02], clamp(1 - Math.abs(alt + 1) / 8, 0, 1));
   // Moonlight: needs night, the moon up, and a bright phase (0.5 = full).
   const nightK = clamp((-alt - 3) / 5, 0, 1);
   const moonUp = clamp(env.moon.altitude / 15, 0, 1);
@@ -102,14 +108,13 @@ export function renderTerrain(img, env, assets) {
   for (const id in LAYERS) {
     const L = LAYERS[id];
     const cov = clamp(extraSnow + L.snowBias, 0, 1);
-    const sunK = smooth(clamp((alt - (L.horizon - 1.2)) / 2.4, 0, 1));
+    const sunK = smooth(clamp((alt - (L.horizon - 1.2)) / 2.4, 0, 1));   // at the layer's top
     const dust = env.dusting || { amount: 0, thaw: 0 };
     const meltLine = L.meltHours ? clamp(dust.thaw / L.meltHours, 0, 1) : 1;   // height fraction below which it has melted
     const backlit = !!L.backlitAM && env.sun.azimuth < 180;   // morning sun behind this ridge
     per[id] = {
       snowThresh: cov > 0 ? 1 - Math.min(1, Math.pow(cov, 1.4) * 1.35) : 2,
-      sunK,
-      faceK: backlit ? 0 : sunK,        // no glow on a face the sun is behind
+      sunK, backlit, horizon: L.horizon, base: L.base ?? L.horizon,
       rimK: backlit ? 1.8 : 1,          // but its outline burns
       rimReach: Math.round((backlit ? 4 : 3) * SCALE),
       persp: L.depth * 0.08,
@@ -181,16 +186,27 @@ export function renderTerrain(img, env, assets) {
 
       // --- sun: lit layers warm up toward the glow color, unlit ones cool into shadow
       const lm = lum(c) / 255;
-      const sunK = P.faceK;
+      // this pixel's own horizon: the shadow line climbs from the layer's base to its top
+      const hz = P.base + (P.horizon - P.base) * e;
+      const pixK = smooth(clamp((alt - (hz - 1.2)) / 2.4, 0, 1));
+      const sunK = P.backlit ? 0 : pixK;
       let lit = c;
       if (glow > 0 && sunK > 0) {
-        // the light lands as color: bright faces and snow go pink-orange, dark faces stay dark
-        const bright = Math.min(1.1, (snowy ? 1 : 0.45 + 0.6 * lm) * (L.glowBoost || 1));
-        lit = lerpRGB(c, scaleRGB(glowRGB, bright), glow * (snowy ? 0.95 : 0.85));
+        if (snowy) lit = lerpRGB(c, glowRGB, glow * 0.9);   // snow takes the color of the light
+        else {
+          // warm light on a surface: multiply by the light's tint so the surface keeps its own hue
+          // (forest stays a warm dark green, grass goes orange), plus a little added light on the
+          // bright faces; blending every color toward one gold would flatten the scene to beige
+          const g = glow * (L.glowBoost || 1);
+          const m0 = 1 + (glowMul[0] - 1) * g, m1 = 1 + (glowMul[1] - 1) * g, m2 = 1 + (glowMul[2] - 1) * g;
+          const add = 0.16 * g * lm;
+          lit = [c[0] * m0 + glowRGB[0] * add, c[1] * m1 + glowRGB[1] * add, c[2] * m2 + glowRGB[2] * add];
+        }
       }
       const shadowed = mulRGB(mulRGB(c, shadowTint), ambient);
       const sunlit = mulRGB(lit, lerpRGB(ambient, litAmbient, sunK));
       c = lerpRGB(shadowed, sunlit, sunK);
+      if (P.backlit && pixK > 0) c = lerpRGB(c, mulRGB(c, ambient), 0);   // (face stays shadowed; the rim below burns)
 
       // --- moon: silver on snow and pale rock, a little everywhere
       if (moonK > 0) {
@@ -233,7 +249,7 @@ export function renderTerrain(img, env, assets) {
       }
       if (dist && d < 1.15 - (dist / SCALE) * (P.rimReach > 3 * SCALE ? 0.25 : 0.33)) {
         const fall = 1 - ((dist - 1) / SCALE) * (P.rimReach > 3 * SCALE ? 0.22 : 0.3);
-        if (glow > 0 && P.sunK > 0.2) c = lerpRGB(c, rimColor, clamp(glow * P.sunK * 0.7 * fall * P.rimK, 0, 1));
+        if (glow > 0 && pixK > 0.2) c = lerpRGB(c, rimColor, clamp(glow * pixK * 0.7 * fall * P.rimK, 0, 1));
         else if (moonK > 0.05) c = lerpRGB(c, [200, 215, 245], moonK * 0.5 * fall);
       }
       putPx(data, i, [clamp(c[0], 0, 255), clamp(c[1], 0, 255), clamp(c[2], 0, 255)]);
