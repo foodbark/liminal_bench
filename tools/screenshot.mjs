@@ -13,7 +13,7 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 await page.goto('http://127.0.0.1:5173/', { waitUntil: 'load' });
 await page.waitForTimeout(2500);
 if (setup) await page.evaluate(setup);
-await page.waitForTimeout(3500);
+await page.waitForTimeout(10000);
 await page.screenshot({ path: out });
 console.log(errors.length ? errors.join('\n') : 'no console errors');
 await browser.close();

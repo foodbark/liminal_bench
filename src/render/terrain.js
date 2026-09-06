@@ -15,7 +15,7 @@ const LAYERS = {
   // meltHours: how many hours above freezing it takes a dusting to melt off the whole layer,
   // bottom up; the high forested range (Dean Stone) holds it longest.
   [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, snowBias: 0.0, hill: true, meltHours: 16 },
-  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18 },   // Dean Stone: a little more contrast than painted
+  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
   [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, snowBias: -0.12, hill: true, meltHours: 5 },
   [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, snowBias: -0.15, hill: true, backlitAM: true, meltHours: 6.5 },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
   [LAYER.TREES]:   { depth: 0.22, horizon: 0.0, snowBias: -0.1, hill: true, meltHours: 4.5 },
@@ -185,7 +185,7 @@ export function renderTerrain(img, env, assets) {
       let lit = c;
       if (glow > 0 && sunK > 0) {
         // the light lands as color: bright faces and snow go pink-orange, dark faces stay dark
-        const bright = snowy ? 1 : 0.45 + 0.6 * lm;
+        const bright = Math.min(1.1, (snowy ? 1 : 0.45 + 0.6 * lm) * (L.glowBoost || 1));
         lit = lerpRGB(c, scaleRGB(glowRGB, bright), glow * (snowy ? 0.95 : 0.85));
       }
       const shadowed = mulRGB(mulRGB(c, shadowTint), ambient);

@@ -39,6 +39,7 @@ def majority(mask, k=5):
 
 def poly_mask(points, w, h):
     im = Image.new('L', (w, h), 0)
+    if len(points) < 3: return np.array(im, bool)
     ImageDraw.Draw(im).polygon([tuple(p) for p in points], fill=1)
     return np.array(im, bool)
 
@@ -154,6 +155,12 @@ def main():
         prop = majority(prop, 2)
     else:
         prop = prop_mask(rgb, bare_np, PROP_RECTS, PROP_DARK, PROP_WOOD, H, W)
+    if cfg.get('props_from'):
+        # a prop-less painting plus the props copied from another painting of the same scene
+        pf = Image.open(os.path.join(ROOT, 'art', cfg['props_from'])).convert('RGB')
+        if pf.size != art.size: pf = pf.resize(art.size, Image.NEAREST)
+        pf = pad(pf)
+        rgb = rgb.copy(); rgb[prop] = pf[prop]
     rgb = clear_cork(rgb, CORK)
     yy, xx = np.mgrid[0:H, 0:W]
     peak = poly_mask(PEAK, W, H)
@@ -182,7 +189,7 @@ def main():
     else:
         tan, green, dark, navy = classify(bare_np)
         hazy = (bb < 176) & (bb > br + 8) & (blum < 150) & (yy >= ridge_min_y)
-        terrain = majority(tan | green | dark | navy | hazy)
+        terrain = majority(tan | green | dark) if cfg.get('scan_simple') else majority(tan | green | dark | navy | hazy)
         run = np.zeros(W, int); top = np.full(W, H, int)
         for y in range(H):
             run = np.where(terrain[y], run + 1, 0)
@@ -248,16 +255,22 @@ def main():
     slum = 0.299 * sr + 0.587 * sg + 0.114 * sb
     navyish = majority(navy | ((sb < 176) & (sb > sr + 8) & (slum < 150) & (yy >= ridge_min_y)) | ((sb > sr + 35) & (sr < 195) & (slum < 200) & (xx >= far_x) & (yy >= ridge_min_y)), 5)
     above_meadow = yy < meadow[None, :]
-    farzone = (xx >= far_x) & (yy < far_mid[None, :]) & (~foliage)
+    farzone = (xx >= far_x) & (yy < far_mid[None, :]) & (~foliage if not cfg.get('far_is_forest') else True)
     L_PEAK, L_RANGE, L_FARHILL, L_FLANK, L_TREES, L_NEAR = 1, 2, 3, 4, 5, 6
     layer = np.zeros((H, W), np.uint8)
     mid = above_meadow & ~farzone & ~peak
     layer[mid & ~foliage & (xx < farhill_x)] = L_FLANK
     layer[mid & ~foliage & (xx >= farhill_x)] = L_FARHILL
     layer[mid & foliage] = L_TREES
-    layer[farzone & ~navyish & (xx >= farhill_x)] = L_FARHILL
-    layer[farzone & ~navyish & (xx < farhill_x)] = L_FLANK
-    layer[(farzone | mid | peak) & navyish & ~foliage] = L_RANGE
+    if cfg.get('far_is_forest'):
+        # the far range is a forested dome: everything in the far zone that is not grass is range
+        layer[farzone & ~tan] = L_RANGE
+        layer[farzone & tan & (xx >= farhill_x)] = L_FARHILL
+        layer[farzone & tan & (xx < farhill_x)] = L_FLANK
+    else:
+        layer[farzone & ~navyish & (xx >= farhill_x)] = L_FARHILL
+        layer[farzone & ~navyish & (xx < farhill_x)] = L_FLANK
+        layer[(farzone | mid | peak) & navyish & ~foliage] = L_RANGE
     layer[peak & ~navyish] = L_PEAK
     layer[~above_meadow] = L_NEAR
     left = (layer == 0) & above_meadow
@@ -280,7 +293,7 @@ def main():
     mat = np.zeros((H, W), np.uint8)
     mat[layer == L_PEAK] = 3
     mat[(layer == L_PEAK) & (lum > 182) & (sat < 0.3) & (yy < snow_max_y)] = 4
-    mat[layer == L_RANGE] = 3
+    mat[layer == L_RANGE] = 2 if cfg.get('far_is_forest') else 3   # a forested range takes canopy snow
     mat[(layer == L_FARHILL) | (layer == L_FLANK)] = 1
     mat[layer == L_TREES] = 2
     nearm = layer == L_NEAR
@@ -292,7 +305,7 @@ def main():
 
     # --- height fraction within the layer column: 0 at the layer's bottom line, 255 at its top
     hf = np.zeros((H, W), np.float32)
-    peak_top = np.minimum(top, polyline_y(PEAK[:-2], W))
+    peak_top = np.minimum(top, polyline_y(PEAK[:-2], W)) if len(PEAK) >= 3 else top
     for lid, (top_line, bot_line) in {
         L_PEAK: (peak_top, far_mid), L_RANGE: (top, far_mid), L_FARHILL: (top, meadow),
         L_FLANK: (top, meadow), L_TREES: (top, meadow), L_NEAR: (meadow, np.full(W, H, float)),
@@ -336,7 +349,8 @@ def main():
             ov[sel] = (ov[sel] * 0.6 + np.array(c) * 0.4).astype(np.uint8)
         ov[prop] = (ov[prop] * 0.5 + np.array((0, 255, 255)) * 0.5).astype(np.uint8)
         im = Image.fromarray(ov); d = ImageDraw.Draw(im)
-        d.line(PEAK[:-2], fill=(255, 255, 255)); d.line(FAR_MID, fill=(0, 255, 255)); d.line(MEADOW, fill=(255, 128, 0))
+        if len(PEAK) >= 3: d.line(PEAK[:-2], fill=(255, 255, 255))
+        d.line(FAR_MID, fill=(0, 255, 255)); d.line(MEADOW, fill=(255, 128, 0))
         d.line([(x, int(top[x])) for x in range(W)], fill=(0, 0, 0))
         im.save(os.path.join(args.debug, 'overlay.png'))
         mv = np.zeros((H, W, 3), np.uint8)
