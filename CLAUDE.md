@@ -10,6 +10,7 @@ An interactive website styled like a Sierra point-and-click scene: a park bench,
 
 ## Commands
 
+- The public site is https://foodbark.github.io/liminal_bench/ (GitHub Pages from `master`, root, `.nojekyll`); a push to master redeploys it in about a minute, so master should always be a state you would show.
 - `npm run dev` — serves the site at http://127.0.0.1:5173 via `tools/serve.py` (static, with no-cache headers so a plain reload picks up edits). `npm run lan` serves the same on 0.0.0.0:5174 for other devices (reached as http://liminal.bench on the home network via a router DNS entry and a Windows port forward). No build step, no bundler, no framework; everything is native ES modules loaded by `index.html`.
 - `for f in $(find src -name '*.js'); do node --check "$f"; done` — the only automated check. There are no tests or linters.
 - `python3 tools/build_backdrop.py [--art NAME] [--debug DIR] [--scale N]` — regenerates `assets/backdrop.png`, `assets/backdrop_mask.png` and `assets/backdrop.json` from a painting and its config `art/NAME.json` (which files: the scene with props, the same scene without them, optionally the props alone on black; the traced silhouettes, prop boxes, cork, hotspots, camera targets, fog lines, snow caps, default notes). `art/current` names the painting in use. Needs Pillow + numpy. Run it after changing the art or its config; `--debug` writes mask overlays to look at; `--scale N` upsamples to test a bigger scene.

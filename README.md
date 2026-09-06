@@ -4,6 +4,10 @@ A quiet park scene that lives on the real clock and sky over Missoula, Montana. 
 
 ![The scene on a mostly clear September afternoon](docs/screenshot.png)
 
+## See it
+
+https://foodbark.github.io/liminal_bench/ (GitHub Pages, redeployed on every push to master)
+
 ## Run it
 
 ```
