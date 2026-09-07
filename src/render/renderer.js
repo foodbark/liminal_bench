@@ -24,9 +24,13 @@ export class Renderer {
     // Slower on a big painting, but the scene appears; an empty scene is never acceptable.
     this.workerReady = false; this.workerBusy = false; this.pendingKey = ''; this.pendingSkyKey = ''; this.dirty = true;
     this.useWorker = !/[?&]noworker\b/.test(location.search) && typeof Worker !== 'undefined';
+    this.diag = { t0: performance.now(), stages: [], errors: [] };
+    this.stage = (name) => this.diag.stages.push([name, Math.round(performance.now() - this.diag.t0)]);
+    this.stage('renderer created');
     const fallback = (why) => {
       if (!this.useWorker) return;
       this.useWorker = false; this.workerReady = false;
+      this.diag.errors.push('worker: ' + why); this.stage('fallback to main thread');
       console.warn('terrain worker unavailable (' + why + '); rendering on the main thread');
       try { this.worker && this.worker.terminate(); } catch (e) { /* ignore */ }
     };
@@ -38,11 +42,14 @@ export class Renderer {
       setTimeout(() => { if (!this.workerReady) fallback('no ready signal after 20s'); }, 20000);
     }
     if (this.worker) this.worker.onmessage = (e) => {
-      if (e.data.ready) { this.workerReady = true; return; }
+      if (e.data.ready) { this.workerReady = true; this.stage('worker ready'); return; }
+      if (e.data.error) { this.diag.errors.push('worker job: ' + e.data.error); fallback(e.data.error); return; }
       this.workerBusy = false;
       const g = e.data.kind === 'sky' ? this.skyCtx : this.terrainCtx;
-      g.clearRect(0, 0, W, H); g.drawImage(e.data.bmp, 0, 0); e.data.bmp.close();
-      if (e.data.kind === 'sky') this.skyKey = e.data.key; else this.terrainKey = e.data.key;
+      try { g.clearRect(0, 0, W, H); g.drawImage(e.data.bmp, 0, 0); e.data.bmp.close(); }
+      catch (err) { this.diag.errors.push('draw ' + e.data.kind + ': ' + err.message); }
+      if (e.data.kind === 'sky') { this.skyKey = e.data.key; if (!this.diag.skyDone) { this.diag.skyDone = true; this.stage('first sky'); } }
+      else { this.terrainKey = e.data.key; if (!this.diag.terrainDone) { this.diag.terrainDone = true; this.stage('first terrain'); } }
       this.dirty = true;
     };
     this.ctx = canvas.getContext('2d');
@@ -54,6 +61,16 @@ export class Renderer {
     [this.terrain, this.terrainCtx] = makeCanvas(W, H);
     [this.props, this.propsCtx] = makeCanvas(W, H);
     [this.propsLit, this.propsLitCtx] = makeCanvas(W, H);
+    // Show the painting at once, in its own daylight colors, so the scene is never empty while
+    // the first lighting pass runs (seconds on a big painting, much longer on a phone).
+    if (assets) {
+      const img = this.terrainCtx.createImageData(W, H), d = img.data, rgb = assets.rgb, m = assets.mask;
+      for (let i = 0; i < d.length; i += 4) {
+        if (m[i] === 0) continue;
+        d[i] = rgb[i]; d[i + 1] = rgb[i + 1]; d[i + 2] = rgb[i + 2]; d[i + 3] = 255;
+      }
+      this.terrainCtx.putImageData(img, 0, 0);
+    }
     this.skyKey = ''; this.terrainKey = ''; this.propsKey = ''; this.tintKey = '';
     this.fx = new WeatherFX();
   }
@@ -64,7 +81,7 @@ export class Renderer {
       // main-thread fallback: same passes, synchronous
       if (!this.skyImg) { this.skyImg = this.skyCtx.createImageData(W, H); this.terrainImg = this.terrainCtx.createImageData(W, H); }
       if (env.skyKey !== this.skyKey) { renderSkyGradient(this.skyImg, env); this.skyCtx.putImageData(this.skyImg, 0, 0); this.skyKey = env.skyKey; this.dirty = true; }
-      if (env.terrainKey !== this.terrainKey) { renderTerrain(this.terrainImg, env, this.assets); this.terrainCtx.putImageData(this.terrainImg, 0, 0); this.terrainKey = env.terrainKey; this.dirty = true; }
+      if (env.terrainKey !== this.terrainKey) { renderTerrain(this.terrainImg, env, this.assets); this.terrainCtx.putImageData(this.terrainImg, 0, 0); this.terrainKey = env.terrainKey; this.dirty = true; if (!this.diag.terrainDone) { this.diag.terrainDone = true; this.stage('first terrain (main thread)'); } }
     }
     // One job at a time in the worker; the sky is cheaper, so it goes first when both are stale.
     if (this.useWorker && this.workerReady && !this.workerBusy) {

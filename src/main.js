@@ -12,14 +12,34 @@ const NOTE_TEXTS = ['lost: orange cat, answers to "biscuit"', 'free piano. you h
 state.notes = META.notes.map(([x, y, w, h, paper, age], i) => makeNote(NOTE_TEXTS[i % NOTE_TEXTS.length], { x, y, w, h, paper, age }));
 state.notesVersion = 1;
 
+const T0 = performance.now();
+const bootErrors = [];
+window.addEventListener('error', (e) => bootErrors.push('page: ' + (e.message || e.type)));
+window.addEventListener('unhandledrejection', (e) => bootErrors.push('promise: ' + (e.reason && e.reason.message || e.reason)));
 let assets = null;
 try { assets = await loadBackdrop(); }
-catch (err) { console.warn('backdrop failed to load', err); }
+catch (err) { console.warn('backdrop failed to load', err); bootErrors.push('assets: ' + (err && err.message || err)); }
+const T_ASSETS = Math.round(performance.now() - T0);
 
 const canvas = document.getElementById('scene');
 canvas.width = W; canvas.height = H;
 const renderer = new Renderer(canvas, assets);
 window.__liminal = { state, renderer };   // for the screenshot/profiling tools
+renderer.diag.stages.unshift(['assets loaded', T_ASSETS]);
+renderer.diag.errors.push(...bootErrors);
+// ?diag shows what the page is doing, so a failing device can report it without dev tools
+if (/[?&]diag\b/.test(location.search)) {
+  const box = document.createElement('pre');
+  box.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99;background:rgba(0,0,0,.85);color:#cfe;font:12px/1.4 monospace;padding:8px;max-width:90vw;white-space:pre-wrap;';
+  document.body.appendChild(box);
+  setInterval(() => {
+    const d = renderer.diag;
+    box.textContent = `liminal bench diag  ${W}x${H}  worker=${renderer.useWorker} ready=${renderer.workerReady}\n`
+      + d.stages.map(([n, t]) => `${String(t).padStart(6)}ms  ${n}`).join('\n')
+      + (d.errors.length ? '\nERRORS:\n' + d.errors.join('\n') : '\nno errors')
+      + `\n${navigator.userAgent}`;
+  }, 500);
+}
 const ui = setupUI(state, canvas);
 
 function computeEnv() {

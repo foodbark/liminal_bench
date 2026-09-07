@@ -10,9 +10,13 @@ const assets = await loadBackdrop();
 const img = { data: new Uint8ClampedArray(W * H * 4) };
 self.onmessage = async (e) => {
   const { kind, key, env } = e.data;
-  if (kind === 'sky') renderSkyGradient(img, env); else renderTerrain(img, env, assets);
-  // hand back a bitmap: drawing it on the page is far cheaper than putImageData of a big buffer
-  const bmp = await createImageBitmap(new ImageData(img.data, W, H));
-  self.postMessage({ kind, key, bmp }, [bmp]);
+  try {
+    if (kind === 'sky') renderSkyGradient(img, env); else renderTerrain(img, env, assets);
+    // hand back a bitmap: drawing it on the page is far cheaper than putImageData of a big buffer
+    const bmp = await createImageBitmap(new ImageData(img.data, W, H));
+    self.postMessage({ kind, key, bmp }, [bmp]);
+  } catch (err) {
+    self.postMessage({ kind, key, error: String(err && err.message || err) });
+  }
 };
 self.postMessage({ ready: true });

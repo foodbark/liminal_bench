@@ -94,6 +94,8 @@ export function setupUI(state, canvas) {
         const bits = ['missoula, mt', formatTime(state.now).toLowerCase()];
         if (w.temp != null) bits.push(Math.round(w.temp) + '°f');
         bits.push(w.ok ? env.cond.label : 'weather unavailable');
+        const r = window.__liminal && window.__liminal.renderer;
+        if (r && !r.terrainKey) bits.push(r.diag && r.diag.errors.length ? 'scene failed to load, add ?diag to the address for details' : 'lighting the scene…');
         status.textContent = (state.override.enabled ? 'preview · ' : '') + bits.join(' · ');
         if (!$('debug').hidden) dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\nwind ${env.wind.speed} mph from ${env.wind.dir}°`;
       }
