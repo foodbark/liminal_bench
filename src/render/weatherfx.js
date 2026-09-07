@@ -17,8 +17,8 @@ export class WeatherFX {
 
   update(env, dt) {
     this.t += dt;
-    const cover = env.cond.cover;
-    const target = Math.round(cover * 11 + (cover > 0.02 ? 1 : 0));
+    const cover = env.sky ? env.sky.cumulus : env.cond.cover;
+    const target = Math.round(cover * 18 + (cover > 0.02 ? 1 : 0)) + (env.sky && env.sky.cb ? 1 : 0);
     while (this.clouds.length < target) this.clouds.push(this.makeCloud(true));
     while (this.clouds.length > target) this.clouds.pop();
     const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
@@ -41,33 +41,24 @@ export class WeatherFX {
 
   makeCloud(anywhere) {
     const r = this.rnd;
-    const depth = 0.4 + r() * 1.0;
-    const c = layoutCloud(r, depth);
-    // near clouds ride high and large, far ones sit small toward the horizon
-    c.y = Math.floor((40 + (1.4 - depth) * 220 + r() * 90) * SCALE);
+    // a third of the clouds are far rows near the cloud horizon, small and flat; the rest ride
+    // high and large; a storm gets one cumulonimbus
+    const far = r() < 0.35;
+    const depth = far ? 0.18 + r() * 0.22 : 0.45 + r() * 0.95;
+    const c = layoutCloud(r, depth, { tower: !far });
+    // far rows sit above where the mountains hide the cloud horizon
+    c.y = far ? Math.floor(HORIZON * (0.34 + r() * 0.14) - c.h) : Math.floor((30 + (1.4 - depth) * 200 + r() * 80) * SCALE);
     c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;
     c.depth = depth;
     return c;
   }
 
   drawClouds(ctx, env) {
-    const cover = env.cond.cover;
-    if (cover <= 0.02) return;
+    const cover = env.sky ? env.sky.cumulus : env.cond.cover;
+    if (cover <= 0.02 && !(env.sky && env.sky.cb)) return;
     const sunOnLeft = env.sun.azimuth < 180;
     const altK = clamp(env.sun.altitude / 60, 0, 1);
     const lightX = (sunOnLeft ? -1 : 1) * (1.0 - 0.5 * altK), lightY = -(0.35 + 0.65 * altK);
-    if (cover > 0.85) {
-      // a low ceiling: flat gray-blue deck with a scalloped, dithered underside
-      const { tones } = cloudTones(env, 1);
-      const deckH = Math.floor((40 + (cover - 0.85) * 500) * SCALE);
-      const st = Math.round(22 * SCALE), rr = Math.round(14 * SCALE);
-      ctx.fillStyle = rgb(tones[2]); ctx.fillRect(0, 0, W, deckH);
-      ctx.fillStyle = ditherPattern(ctx, rgb(tones[3]), 8); ctx.fillRect(0, Math.floor(deckH * 0.55), W, deckH - Math.floor(deckH * 0.55));
-      ctx.fillStyle = rgb(tones[3]);
-      for (let x = -st; x < W + st; x += st) fillCircle(ctx, x, deckH - 3 + ((x / st) % 3 | 0) * 3 * SCALE, rr);
-      ctx.fillStyle = ditherPattern(ctx, rgb(tones[3]), 5);
-      for (let x = -st; x < W + st; x += st) fillCircle(ctx, x + (st >> 1), deckH + Math.round(4 * SCALE), rr - 2);
-    }
     const sorted = [...this.clouds].sort((a, b) => a.depth - b.depth);
     for (const c of sorted) {
       const { tones, key } = cloudTones(env, c.depth);

@@ -20,7 +20,7 @@ Then open http://127.0.0.1:5173. Any static file server works; there is no build
 
 - The scene is a hand-painted (Gemini) pixel-art backdrop at 2752x1536, re-lit every few minutes by code: sky, sun, moon, clouds, alpenglow, snow, fog, and rain are procedural and dithered; the painting itself is never redrawn.
 - Sun and moon positions computed for Missoula in real time. Sky, light, and shadows follow.
-- Live weather from Open-Meteo (no key needed): cloud cover, precipitation, fog, wind, snow depth. Refreshes every 10 minutes.
+- Live weather from Open-Meteo (no key needed): low, mid and high cloud cover become cirrus, altocumulus, stratus, stratocumulus, nimbostratus and cumulus; precipitation, fog, wind, snow depth. Refreshes every 10 minutes.
 - Seasonal snow on the peaks, snow on the ground when there is snow on the ground.
 - Hover the pay phone, bulletin board, or bench and click to zoom in. Esc backs out.
 - Press `D` for the debug panel: override hour, month, weather, and cloud cover to preview any condition.
@@ -65,7 +65,6 @@ Forecast data says how cloudy it is; a camera says where the clouds are. Seeing 
 ## Next time (notes from 2026-09-05)
 
 - **The tan hill right of the trees.** The Sentinel painting (`art/mount_sentinel_alone_transparent_sky.jpg`) carries its tan slope all the way across the frame, so in the layered scene Dean Stone's base sits behind a flat tan ridge instead of running down into the trees. It bothers us. Fix is in the art, not the code: a version of the Sentinel file with that far tan hill left transparent (checkerboard is fine), so Dean Stone shows through down to the tree line. Everything else in the layering stays as is.
-- Overcast deck is still a plain scalloped band; low ceilings deserve their own look.
 - Smoke season, wind-swayed foliage. Mobile: phones now get a half-size scene; touch targets and a landscape layout are still to do.
 
 ## Layout

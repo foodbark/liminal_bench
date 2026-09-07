@@ -12,7 +12,7 @@ const MAX_W = Math.round(480 * SCALE), MAX_H = Math.round(380 * SCALE);
 
 // Lay out the puffs: base blobs along a flat bottom, a taller tower on one side, then smaller
 // puffs stacked on the upper arcs of their parents, twice.
-export function layoutCloud(rnd, depth) {
+export function layoutCloud(rnd, depth, opts = {}) {
   const span = Math.floor((120 + rnd() * 220) * depth * SCALE);   // nominal width of the base
   const puffs = [];
   const n0 = 3 + Math.floor(rnd() * 3);
@@ -24,7 +24,7 @@ export function layoutCloud(rnd, depth) {
     const cx = r0 * 1.2 * i + (rnd() - 0.5) * r0 * 0.4;
     const p = { x: cx, y: -r * 0.55, r };
     puffs.push(p); roots.push(p);
-    if (i === towerAt) {
+    if (i === towerAt && opts.tower !== false) {
       // a tower: three lobes stacked and leaning, the way cumulus builds
       let prev = p;
       for (let t = 0; t < 3; t++) {

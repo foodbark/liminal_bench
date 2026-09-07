@@ -2,7 +2,7 @@ import { LAT, LON } from './state.js';
 
 const URL = 'https://api.open-meteo.com/v1/forecast'
   + `?latitude=${LAT}&longitude=${LON}`
-  + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
+  + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
   + '&hourly=snow_depth,snowfall,temperature_2m&past_days=1&forecast_days=1&timezone=America%2FDenver'
   + '&temperature_unit=fahrenheit&wind_speed_unit=mph';
 
@@ -28,7 +28,7 @@ export async function fetchWeather() {
   }
   return {
     ok: true, fetchedAt: Date.now(),
-    temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100,
+    temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100, coverMid: (c.cloud_cover_mid ?? 0) / 100, coverHigh: (c.cloud_cover_high ?? 0) / 100,
     wind: c.wind_speed_10m, windDir: c.wind_direction_10m,
     precip: c.precipitation, snowfall: c.snowfall, snowDepth, freshSnow, thawHours,
   };
@@ -52,14 +52,17 @@ export function conditionsFromCode(code) {
 }
 
 export const WEATHER_PRESETS = {
-  clear:    { code: 0,  cover: 0.05, temp: 62, wind: 4,  snowDepth: 0 },
-  partly:   { code: 2,  cover: 0.45, temp: 58, wind: 7,  snowDepth: 0 },
-  overcast: { code: 3,  cover: 0.97, temp: 48, wind: 6,  snowDepth: 0 },
-  rain:     { code: 63, cover: 0.95, temp: 46, wind: 11, snowDepth: 0 },
-  snow:     { code: 73, cover: 0.95, temp: 24, wind: 8,  snowDepth: 0.25 },
-  fog:      { code: 45, cover: 0.55, temp: 39, wind: 2,  snowDepth: 0 },
-  inversion: { code: 45, cover: 0.08, temp: 28, wind: 1, snowDepth: 0, inversion: 1 },   // snow follows the season
-  dusting:   { code: 1,  cover: 0.2,  temp: 38, wind: 3, snowDepth: 0, freshSnow: 1 },     // last night's skiff, melting off through the day
-  mountainfog: { code: 3, cover: 0.8, coverLow: 0.9, temp: 41, wind: 3, snowDepth: 0, lowcloud: 1 },
-  storm:    { code: 95, cover: 1.0,  temp: 66, wind: 22, snowDepth: 0 },
+  clear:    { code: 0,  cover: 0.05, coverLow: 0.05, coverMid: 0, coverHigh: 0, temp: 62, wind: 4,  snowDepth: 0 },
+  partly:   { code: 2,  cover: 0.45, coverLow: 0.45, coverMid: 0.1, coverHigh: 0.2, temp: 58, wind: 7,  snowDepth: 0 },
+  cirrus:   { code: 1,  cover: 0.4,  coverLow: 0.05, coverMid: 0, coverHigh: 0.5, temp: 60, wind: 9, snowDepth: 0 },
+  altocumulus: { code: 2, cover: 0.6, coverLow: 0.15, coverMid: 0.6, coverHigh: 0.1, temp: 56, wind: 6, snowDepth: 0 },
+  stratocumulus: { code: 3, cover: 0.9, coverLow: 0.85, coverMid: 0.3, coverHigh: 0, temp: 50, wind: 8, snowDepth: 0 },
+  overcast: { code: 3,  cover: 0.97, coverLow: 0.97, coverMid: 0.9, coverHigh: 0.5, temp: 48, wind: 6,  snowDepth: 0, stratus: 1 },
+  rain:     { code: 63, cover: 0.95, coverLow: 0.95, coverMid: 0.9, coverHigh: 0.8, temp: 46, wind: 11, snowDepth: 0 },
+  snow:     { code: 73, cover: 0.95, coverLow: 0.95, coverMid: 0.9, coverHigh: 0.8, temp: 24, wind: 8,  snowDepth: 0.25 },
+  fog:      { code: 45, cover: 0.55, coverLow: 0.5, coverMid: 0.2, coverHigh: 0.1, temp: 39, wind: 2,  snowDepth: 0 },
+  inversion: { code: 45, cover: 0.08, coverLow: 0, coverMid: 0, coverHigh: 0.3, temp: 28, wind: 1, snowDepth: 0, inversion: 1 },   // snow follows the season
+  dusting:   { code: 1,  cover: 0.2, coverLow: 0.1, coverMid: 0.1, coverHigh: 0.3, temp: 38, wind: 3, snowDepth: 0, freshSnow: 1 },     // last night's skiff, melting off through the day
+  mountainfog: { code: 3, cover: 0.8, coverLow: 0.9, coverMid: 0.4, coverHigh: 0.2, temp: 41, wind: 3, snowDepth: 0, lowcloud: 1 },
+  storm:    { code: 95, cover: 1.0,  coverLow: 0.9, coverMid: 0.9, coverHigh: 0.7, temp: 66, wind: 22, snowDepth: 0 },
 };

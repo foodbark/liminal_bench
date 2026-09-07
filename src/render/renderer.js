@@ -1,12 +1,13 @@
-import { W, H, SMALL } from '../state.js';
+import { W, H, SMALL, SCALE } from '../state.js';
 import { makeCanvas, rgb, clamp } from '../util/pixel.js';
 import { drawStars, drawMoon, drawSun, setStarMask, renderSkyGradient } from './sky.js';
 import { renderTerrain } from './terrain.js';
+import { renderSheets } from './sheets.js';
 
 // The worker gets a plain copy of what renderTerrain reads from env.
 function envForWorker(env) {
   return {
-    pal: env.pal, sun: env.sun, moon: env.moon, cond: env.cond, month: env.month, snowAmount: env.snowAmount,
+    pal: env.pal, sun: env.sun, moon: env.moon, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
     groundSnow: env.groundSnow, inversion: env.inversion, mountainFog: env.mountainFog, dusting: env.dusting,
   };
 }
@@ -45,10 +46,11 @@ export class Renderer {
       if (e.data.ready) { this.workerReady = true; this.stage('worker ready'); return; }
       if (e.data.error) { this.diag.errors.push('worker job: ' + e.data.error); fallback(e.data.error); return; }
       this.workerBusy = false;
-      const g = e.data.kind === 'sky' ? this.skyCtx : this.terrainCtx;
+      const g = e.data.kind === 'sky' ? this.skyCtx : e.data.kind === 'sheets' ? this.sheetsCtx : this.terrainCtx;
       try { g.clearRect(0, 0, W, H); g.drawImage(e.data.bmp, 0, 0); e.data.bmp.close(); }
       catch (err) { this.diag.errors.push('draw ' + e.data.kind + ': ' + err.message); }
       if (e.data.kind === 'sky') { this.skyKey = e.data.key; if (!this.diag.skyDone) { this.diag.skyDone = true; this.stage('first sky'); } }
+      else if (e.data.kind === 'sheets') this.sheetKey = e.data.key;
       else { this.terrainKey = e.data.key; if (!this.diag.terrainDone) { this.diag.terrainDone = true; this.stage('first terrain'); } }
       this.dirty = true;
     };
@@ -60,6 +62,8 @@ export class Renderer {
     [this.sky, this.skyCtx] = makeCanvas(W, H);
     [this.terrain, this.terrainCtx] = makeCanvas(W, H);
     [this.props, this.propsCtx] = makeCanvas(W, H);
+    [this.sheets, this.sheetsCtx] = makeCanvas(W, H);
+    this.sheetKey = ''; this.pendingSheetKey = ''; this.sheetX = 0;
     [this.propsLit, this.propsLitCtx] = makeCanvas(W, H);
     // Show the painting at once, in its own daylight colors, so the scene is never empty while
     // the first lighting pass runs (seconds on a big painting, much longer on a phone).
@@ -81,6 +85,7 @@ export class Renderer {
       // main-thread fallback: same passes, synchronous
       if (!this.skyImg) { this.skyImg = this.skyCtx.createImageData(W, H); this.terrainImg = this.terrainCtx.createImageData(W, H); }
       if (env.skyKey !== this.skyKey) { renderSkyGradient(this.skyImg, env); this.skyCtx.putImageData(this.skyImg, 0, 0); this.skyKey = env.skyKey; this.dirty = true; }
+      if (env.sheetKey !== this.sheetKey) { if (!this.sheetImg) this.sheetImg = this.sheetsCtx.createImageData(W, H); renderSheets(this.sheetImg, env); this.sheetsCtx.putImageData(this.sheetImg, 0, 0); this.sheetKey = env.sheetKey; this.dirty = true; }
       if (env.terrainKey !== this.terrainKey) { renderTerrain(this.terrainImg, env, this.assets); this.terrainCtx.putImageData(this.terrainImg, 0, 0); this.terrainKey = env.terrainKey; this.dirty = true; if (!this.diag.terrainDone) { this.diag.terrainDone = true; this.stage('first terrain (main thread)'); } }
     }
     // One job at a time in the worker; the sky is cheaper, so it goes first when both are stale.
@@ -91,6 +96,9 @@ export class Renderer {
       } else if (env.terrainKey !== this.terrainKey && env.terrainKey !== this.pendingKey) {
         this.workerBusy = true; this.pendingKey = env.terrainKey;
         this.worker.postMessage({ kind: 'terrain', key: env.terrainKey, env: envForWorker(env) });
+      } else if (env.sheetKey !== this.sheetKey && env.sheetKey !== this.pendingSheetKey) {
+        this.workerBusy = true; this.pendingSheetKey = env.sheetKey;
+        this.worker.postMessage({ kind: 'sheets', key: env.sheetKey, env: envForWorker(env) });
       }
     }
     const propsKey = env.sunSide + '|' + env.groundSnow + '|' + state.notesVersion;
@@ -138,7 +146,12 @@ export class Renderer {
       this.baseKey = baseKey; this.dirty = true;
     }
     const night = env.sun.altitude < -3;
-    const clouds = env.cond.cover > 0.02;
+    const sk = env.sky;
+    const sheets = !!sk && (sk.cirrus + sk.veilHigh + sk.alto + sk.veilMid + sk.strato + sk.stratus + sk.nimbo) > 0.01;
+    const clouds = (sk ? sk.cumulus > 0.02 : env.cond.cover > 0.02) || sheets;
+    // sheets drift with the wind, high and slow
+    const sgn = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
+    this.sheetX = ((this.sheetX + (0.4 + env.wind.speed * 0.12) * SCALE * sgn * dt) % W + W) % W;
     const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0;
     if (!this.dirty && !animated && camKey === this.camKey) return;
     this.dirty = false; this.camKey = camKey;
@@ -154,6 +167,7 @@ export class Renderer {
     c.drawImage(this.base, 0, 0); lap('base');
     drawStars(c, env, t); lap('stars');
     if (clouds) {
+      if (sheets) { const ox = Math.round(this.sheetX); c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0); lap('sheets'); }
       this.fx.drawClouds(c, env); lap('clouds');
       c.drawImage(this.fg, 0, 0); lap('fg');
     }

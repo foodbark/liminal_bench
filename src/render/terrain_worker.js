@@ -5,13 +5,14 @@ import { W, H } from '../state.js';
 import { loadBackdrop } from '../assets.js';
 import { renderTerrain } from './terrain.js';
 import { renderSkyGradient } from './sky.js';
+import { renderSheets } from './sheets.js';
 
 const assets = await loadBackdrop();
 const img = { data: new Uint8ClampedArray(W * H * 4) };
 self.onmessage = async (e) => {
   const { kind, key, env } = e.data;
   try {
-    if (kind === 'sky') renderSkyGradient(img, env); else renderTerrain(img, env, assets);
+    if (kind === 'sky') renderSkyGradient(img, env); else if (kind === 'sheets') renderSheets(img, env); else renderTerrain(img, env, assets);
     // hand back a bitmap: drawing it on the page is far cheaper than putImageData of a big buffer
     const bmp = await createImageBitmap(new ImageData(img.data, W, H));
     self.postMessage({ kind, key, bmp }, [bmp]);
