@@ -8,7 +8,7 @@ import { SCALE } from '../state.js';
 // big lobes soften into one body), and small puffs get a bright cap, a shadow crease and a lit lip.
 // The sprite is rebuilt only when the palette or light direction changes.
 
-const MAX_W = Math.round(480 * SCALE), MAX_H = Math.round(380 * SCALE);
+const MAX_W = Math.round(900 * SCALE), MAX_H = Math.round(700 * SCALE);
 
 // Lay out the puffs: base blobs along a flat bottom, a taller tower on one side, then smaller
 // puffs stacked on the upper arcs of their parents, twice.
@@ -25,12 +25,24 @@ export function layoutCloud(rnd, depth, opts = {}) {
     const p = { x: cx, y: -r * 0.55, r };
     puffs.push(p); roots.push(p);
     if (i === towerAt && opts.tower !== false) {
-      // a tower: three lobes stacked and leaning, the way cumulus builds
+      // a tower: three lobes stacked and leaning, the way cumulus builds; a cumulonimbus
+      // stacks six and spreads an anvil downwind from the top
       let prev = p;
-      for (let t = 0; t < 3; t++) {
-        const tr = prev.r * (0.82 - t * 0.05);
-        const tp = { x: prev.x + (rnd() - 0.5) * prev.r * 0.6, y: prev.y - prev.r * 0.8, r: tr };
+      const levels = opts.anvil ? 6 : 3;
+      for (let t = 0; t < levels; t++) {
+        const tr = prev.r * (opts.anvil ? 0.94 - t * 0.02 : 0.82 - t * 0.05);
+        const tp = { x: prev.x + (rnd() - 0.5) * prev.r * 0.5 + (opts.anvil ? (opts.anvilDir || 1) * prev.r * 0.12 : 0), y: prev.y - prev.r * 0.78, r: tr };
         puffs.push(tp); roots.push(tp); prev = tp;
+      }
+      if (opts.anvil) {
+        const dir = opts.anvilDir || 1;
+        for (let a = 1; a <= 5; a++) {
+          const ar = prev.r * (0.75 - a * 0.08);
+          const ap = { x: prev.x + dir * prev.r * 0.9 * a, y: prev.y + prev.r * (0.05 + a * 0.06), r: ar };
+          puffs.push(ap); roots.push(ap);
+        }
+        const back = { x: prev.x - dir * prev.r * 0.8, y: prev.y + prev.r * 0.15, r: prev.r * 0.6 };
+        puffs.push(back); roots.push(back);
       }
     }
   }

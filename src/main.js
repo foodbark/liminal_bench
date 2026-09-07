@@ -80,7 +80,7 @@ function computeEnv() {
   const wet = cond.precip.intensity > 0 || cond.storm;
   const sky = {
     cirrus: high * (1 - veilHigh), veilHigh, alto: mid * (1 - veilMid), veilMid,
-    nimbo: wet ? Math.max(0.7, low) : 0,
+    nimbo: cond.storm ? 0.45 : wet ? Math.max(0.7, low) : 0,   // a storm's sheet is broken so the cell shows against sky
     stratus: !wet && (cond.fog || preset?.stratus) ? Math.max(0.8, low) : 0,
     strato: !wet && !cond.fog && !preset?.stratus ? Math.max(0, Math.min(1, (low - 0.55) / 0.3)) : 0,
     cumulus: 0, cb: cond.storm ? 1 : 0,

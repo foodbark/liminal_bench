@@ -20,13 +20,14 @@ function put(data, x, y, c) {
   data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
 }
 const depthAt = (y) => VANISH / Math.max(1, VANISH - y);
-// noise that repeats every W pixels in x, so the sheet scrolls seamlessly
-function wrapNoise(nf, x, y, fx, fy) {
+// noise that repeats every W screen pixels in x, so the sheet scrolls seamlessly; d is the
+// perspective compression applied to x inside the noise (the blend still runs in screen x)
+function wrapNoise(nf, x, y, fx, fy, d = 1) {
   const P = 320 * SCALE;
-  const a = nf(x * fx, y * fy);
+  const a = nf(x * d * fx, y * fy);
   if (x < W - P) return a;
   const t = (x - (W - P)) / P;
-  return lerp(a, nf((x - W) * fx, y * fy), t);
+  return lerp(a, nf((x - W) * d * fx, y * fy), t);
 }
 
 export function renderSheets(img, env) {
@@ -130,7 +131,7 @@ export function renderSheets(img, env) {
       for (let x = 0; x < W; x++) {
         let done = false;
         if (lumpy > 0) {
-          const n = 0.6 * wrapNoise(nB, x * d, v * 60, 0.0035 / SCALE, 0.02) + 0.4 * wrapNoise(nC, x * d, v * 60, 0.011 / SCALE, 0.06);
+          const n = 0.6 * wrapNoise(nB, x, v * 60, 0.0035 / SCALE, 0.02, d) + 0.4 * wrapNoise(nC, x, v * 60, 0.011 / SCALE, 0.06, d);
           const thr = 1 - lumpy * 0.92;
           const q = n + (bayer(x, y) - 0.5) * 0.05;
           if (q > thr) {
@@ -140,7 +141,7 @@ export function renderSheets(img, env) {
           }
         }
         if (!done && flat > 0) {
-          const n = wrapNoise(nA, x * d, v * 40, 0.002 / SCALE, 0.03);
+          const n = wrapNoise(nA, x, v * 40, 0.002 / SCALE, 0.03, d);
           const ragged = y > VANISH * 0.82 && bayer(x, y) > flat * (0.2 + n) * 3;   // frayed lower edge
           if (!ragged && bayer(x, y) < flat * (0.85 + 0.15 * n)) {
             const c = n > 0.62 ? top1 : n > 0.35 ? shade : under;

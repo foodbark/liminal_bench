@@ -18,15 +18,20 @@ export class WeatherFX {
   update(env, dt) {
     this.t += dt;
     const cover = env.sky ? env.sky.cumulus : env.cond.cover;
-    const target = Math.round(cover * 18 + (cover > 0.02 ? 1 : 0)) + (env.sky && env.sky.cb ? 1 : 0);
+    const target = Math.round(cover * 18 + (cover > 0.02 ? 1 : 0));
     while (this.clouds.length < target) this.clouds.push(this.makeCloud(true));
     while (this.clouds.length > target) this.clouds.pop();
+    // a storm has one cumulonimbus, kept apart from the fair-weather field
+    const wantCb = !!(env.sky && env.sky.cb);
+    if (wantCb && !this.cb) this.cb = this.makeCumulonimbus(env);
+    if (!wantCb) this.cb = null;
     const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
     const speed = (1.5 + env.wind.speed * 0.4) * sign * SCALE;
     for (const c of this.clouds) {
       c.x += speed * c.depth * dt;
       if (c.x > W + 40) c.x = -c.w - 40; else if (c.x < -c.w - 40) c.x = W + 40;
     }
+    if (this.cb) this.cb.x += speed * 0.25 * dt;   // the storm cell crawls
     // precipitation scrolls as tiled layers; only the phase advances here
     const p = env.cond.precip;
     if (p.type === 'rain') this.rain.t += dt; else this.rain.t = 0;
@@ -53,6 +58,16 @@ export class WeatherFX {
     return c;
   }
 
+  makeCumulonimbus(env) {
+    const r = mulberry32(1234 + Math.floor(env.wind.dir));
+    const dir = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;   // the anvil streams downwind
+    const c = layoutCloud(r, 1.6, { tower: true, anvil: true, anvilDir: dir });
+    c.depth = 1.3; c.cb = true;
+    c.x = Math.floor(W * (dir > 0 ? 0.08 : 0.4) + r() * W * 0.15);
+    c.y = Math.floor(HORIZON * 0.5 - c.h);   // its dark base sits low over the ranges
+    return c;
+  }
+
   drawClouds(ctx, env) {
     const cover = env.sky ? env.sky.cumulus : env.cond.cover;
     if (cover <= 0.02 && !(env.sky && env.sky.cb)) return;
@@ -60,6 +75,7 @@ export class WeatherFX {
     const altK = clamp(env.sun.altitude / 60, 0, 1);
     const lightX = (sunOnLeft ? -1 : 1) * (1.0 - 0.5 * altK), lightY = -(0.35 + 0.65 * altK);
     const sorted = [...this.clouds].sort((a, b) => a.depth - b.depth);
+    if (this.cb) sorted.push(this.cb);
     for (const c of sorted) {
       const { tones, key } = cloudTones(env, c.depth);
       const sprite = cloudSprite(c, tones, key, lightX, lightY);
