@@ -87,15 +87,17 @@ let moonCanvas = null, moonKey = '';
 function moonSprite(phase) {
   const key = phase.toFixed(2);
   if (moonKey === key) return moonCanvas;
-  const r = 9; const [c, g] = makeCanvas(2 * r + 3, 2 * r + 3);
+  const r = Math.max(6, Math.round(13 * SCALE)); const [c, g] = makeCanvas(2 * r + 3, 2 * r + 3);
   const f = Math.cos(phase * 2 * Math.PI);
+  const k = Math.max(1, Math.round(SCALE));   // crater pattern in scene pixels, not sprite pixels
   for (let dy = -r; dy <= r; dy++) {
     const w = Math.sqrt(r * r - dy * dy);
     for (let dx = -r; dx <= r; dx++) {
       if (dx * dx + dy * dy > r * r + 0.5) continue;
       const tx = f * w;
       const lit = phase < 0.5 ? dx > tx : dx < -tx;
-      const crater = ((dx * 7 + dy * 13) % 5 === 0 && (dx + dy) % 3 === 0);
+      const cx = Math.floor(dx / k), cy = Math.floor(dy / k);
+      const crater = ((cx * 7 + cy * 13) % 5 === 0 && (cx + cy) % 3 === 0);
       if (!lit) continue; // the dark side stays transparent so it never shows as a gray disc by day
       g.fillStyle = crater ? '#c9cbc0' : '#f1f0e4';
       g.fillRect(dx + r + 1, dy + r + 1, 1, 1);
@@ -113,7 +115,7 @@ export function drawMoon(ctx, env) {
   if (vis < 0.05) return;
   const spr = moonSprite(m.phase);
   ctx.globalAlpha = vis;
-  ctx.drawImage(spr, p.x - 10, p.y - 10);
+  ctx.drawImage(spr, p.x - (spr.width >> 1), p.y - (spr.height >> 1));
   ctx.globalAlpha = 1;
 }
 
@@ -128,7 +130,7 @@ export function drawSun(ctx, env) {
   const r = (v) => Math.max(1, Math.round(v * SCALE));
   // a solid disc; only the corona is graded, in rings that thin out through the dither
   if (dim > 0.05) {
-    const rings = [[22, 2], [18, 4], [14, 7], [11, 10]];
+    const rings = [[32, 2], [26, 4], [20, 7], [16, 10]];
     for (const [rad, lv] of rings) {
       const level = Math.round(lv * dim);
       if (level < 1) continue;
@@ -136,6 +138,6 @@ export function drawSun(ctx, env) {
     }
   }
   // the disc itself is always solid; cloud sheets in front of it do the hiding
-  ctx.fillStyle = col; fillCircle(ctx, p.x, p.y, r(9));
-  ctx.fillStyle = bright; fillCircle(ctx, p.x, p.y, r(7));
+  ctx.fillStyle = col; fillCircle(ctx, p.x, p.y, r(13));
+  ctx.fillStyle = bright; fillCircle(ctx, p.x, p.y, r(11));
 }
