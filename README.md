@@ -18,7 +18,7 @@ Then open http://127.0.0.1:5173. Any static file server works; there is no build
 
 ## What it does right now
 
-- Hi-res shaded pixel art rendered procedurally on a 960x540 canvas with ordered dithering.
+- The scene is a hand-painted (Gemini) pixel-art backdrop at 2752x1536, re-lit every few minutes by code: sky, sun, moon, clouds, alpenglow, snow, fog, and rain are procedural and dithered; the painting itself is never redrawn.
 - Sun and moon positions computed for Missoula in real time. Sky, light, and shadows follow.
 - Live weather from Open-Meteo (no key needed): cloud cover, precipitation, fog, wind, snow depth. Refreshes every 10 minutes.
 - Seasonal snow on the peaks, snow on the ground when there is snow on the ground.
