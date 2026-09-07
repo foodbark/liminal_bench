@@ -1,18 +1,19 @@
 import { makeCanvas, bayer, clamp, lerpRGB, mulRGB, scaleRGB } from '../util/pixel.js';
 import { SCALE } from '../state.js';
 
-// Cumulus built the way the concept art paints them: a cauliflower of overlapping rounded puffs
-// in a handful of flat tones, lit from the sun's side, bright on top, blue-gray underneath, with
-// hard stepped edges and dither only where one tone meets the next. Each cloud is laid out once
-// (seeded) as a list of puffs, turned into a height field, and rendered into a sprite that is
-// rebuilt only when the palette changes.
+// Cumulus the way the reference paintings have them: a big soft mass with a scalloped outline of
+// many small lobes, a flat cream top and lavender-purple shade, peach and ember at sunset, and
+// almost no dither. Each cloud is laid out once (seeded) as a list of puffs; the max of their
+// hemispheres gives the silhouette, a blurred copy gives the shading normals (so the joins between
+// big lobes soften into one body), and small puffs get a bright cap, a shadow crease and a lit lip.
+// The sprite is rebuilt only when the palette or light direction changes.
 
-const MAX_W = Math.round(420 * SCALE), MAX_H = Math.round(300 * SCALE);
+const MAX_W = Math.round(480 * SCALE), MAX_H = Math.round(380 * SCALE);
 
 // Lay out the puffs: base blobs along a flat bottom, a taller tower on one side, then smaller
 // puffs stacked on the upper arcs of their parents, twice.
 export function layoutCloud(rnd, depth) {
-  const span = Math.floor((100 + rnd() * 200) * depth * SCALE);   // nominal width of the base
+  const span = Math.floor((120 + rnd() * 220) * depth * SCALE);   // nominal width of the base
   const puffs = [];
   const n0 = 3 + Math.floor(rnd() * 3);
   const towerAt = Math.floor(rnd() * n0);
@@ -24,23 +25,30 @@ export function layoutCloud(rnd, depth) {
     const p = { x: cx, y: -r * 0.55, r };
     puffs.push(p); roots.push(p);
     if (i === towerAt) {
-      const t1 = { x: cx + (rnd() - 0.5) * r * 0.5, y: p.y - r * 0.9, r: r * 0.85 };
-      const t2 = { x: t1.x + (rnd() - 0.5) * r * 0.4, y: t1.y - t1.r * 0.9, r: r * 0.65 };
-      puffs.push(t1, t2); roots.push(t1, t2);
+      // a tower: three lobes stacked and leaning, the way cumulus builds
+      let prev = p;
+      for (let t = 0; t < 3; t++) {
+        const tr = prev.r * (0.82 - t * 0.05);
+        const tp = { x: prev.x + (rnd() - 0.5) * prev.r * 0.6, y: prev.y - prev.r * 0.8, r: tr };
+        puffs.push(tp); roots.push(tp); prev = tp;
+      }
     }
   }
+  // three generations of smaller lobes on the upper arcs; the last is what scallops the edge
   const grow = (parent, count, scale, out) => {
     for (let k = 0; k < count; k++) {
-      const a = (-165 + (140 / Math.max(count - 1, 1)) * k + (rnd() - 0.5) * 30) * Math.PI / 180;
-      const r = parent.r * scale * (0.8 + rnd() * 0.4);
-      out.push({ x: parent.x + Math.cos(a) * parent.r * 0.8, y: parent.y + Math.sin(a) * parent.r * 0.8, r });
+      const a = (-170 + (150 / Math.max(count - 1, 1)) * k + (rnd() - 0.5) * 24) * Math.PI / 180;
+      const r = parent.r * scale * (0.75 + rnd() * 0.5);
+      out.push({ x: parent.x + Math.cos(a) * parent.r * 0.82, y: parent.y + Math.sin(a) * parent.r * 0.82, r });
     }
   };
   const kids = [];
-  for (const p of roots) grow(p, 3 + Math.floor(rnd() * 3), 0.55, kids);
+  for (const p of roots) grow(p, 4 + Math.floor(rnd() * 3), 0.5, kids);
   const grand = [];
-  for (const p of kids) grow(p, 2 + Math.floor(rnd() * 2), 0.55, grand);
-  puffs.push(...kids, ...grand);
+  for (const p of kids) grow(p, 3 + Math.floor(rnd() * 2), 0.5, grand);
+  const great = [];
+  for (const p of grand) if (p.r * 0.55 >= 2 * SCALE) grow(p, 2 + Math.floor(rnd() * 3), 0.55, great);
+  puffs.push(...kids, ...grand, ...great);
   // size the sprite to the puffs (y = 0 is the flat base) and shift into it
   let minX = Infinity, maxX = -Infinity, minY = Infinity;
   for (const p of puffs) { p.r = Math.max(2, p.r); minX = Math.min(minX, p.x - p.r); maxX = Math.max(maxX, p.x + p.r); minY = Math.min(minY, p.y - p.r); }
@@ -51,7 +59,8 @@ export function layoutCloud(rnd, depth) {
   return { w, h, baseY, puffs, wave, field: null, sprite: null, spriteKey: '' };
 }
 
-// Height field: the max of hemispheres, so lobes stay distinct, cut flat at the base.
+// Height field: the max of hemispheres, so the big form reads as one mass; the small lobes only
+// show where they stand proud of it, which is at the silhouette (scallops) and as creases.
 function buildField(c) {
   const { w, h, puffs } = c;
   const f = new Float32Array(w * h), who = new Int16Array(w * h).fill(-1);
@@ -63,7 +72,7 @@ function buildField(c) {
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const dx = x - p.x, dy = y - p.y, d2 = dx * dx + dy * dy;
       if (d2 >= r2) continue;
-      const v = Math.sqrt(r2 - d2) * 0.7;
+      const v = Math.sqrt(r2 - d2) * 0.8;
       const i = y * w + x;
       if (v > f[i]) { f[i] = v; who[i] = pi; }
     }
@@ -73,6 +82,29 @@ function buildField(c) {
     for (let y = Math.max(0, cut); y < h; y++) f[y * w + x] = 0;
   }
   c.field = f; c.who = who;
+  // a blurred copy for the shading normals: the joins between big lobes soften into one mass
+  // while the raw field keeps the scalloped silhouette
+  const k = Math.max(3, Math.round(9 * SCALE));
+  const tmp = new Float32Array(w * h), fs = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    let acc = 0;
+    for (let x = -k; x < w; x++) {
+      if (x + k < w) acc += f[y * w + x + k];
+      if (x - k - 1 >= 0) acc -= f[y * w + x - k - 1];
+      if (x >= 0) tmp[y * w + x] = acc / (2 * k + 1);
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let acc = 0;
+    for (let y = -k; y < h; y++) {
+      if (y + k < h) acc += tmp[(y + k) * w + x];
+      if (y - k - 1 >= 0) acc -= tmp[(y - k - 1) * w + x];
+      if (y >= 0) fs[y * w + x] = acc / (2 * k + 1);
+    }
+  }
+  c.smooth = fs;
+  let maxR = 0; for (const p of puffs) maxR = Math.max(maxR, p.r);
+  c.maxR = maxR;
 }
 
 // Five tones from the palette: white tops down to a blue-gray base, hazed toward the horizon for
@@ -80,7 +112,8 @@ function buildField(c) {
 export function cloudTones(env, depth) {
   const { ambient, horizon, sunColor } = env.pal;
   const alt = env.sun.altitude;
-  const base = [[250, 251, 255], [224, 231, 244], [166, 185, 214], [116, 142, 186], [84, 108, 154]];
+  // cream tops through a warm mid to lavender and purple shadow, like the concept clouds
+  const base = [[255, 250, 242], [240, 226, 220], [196, 182, 216], [158, 146, 200], [118, 110, 168]];
   const cover = env.cond.cover;
   // Low sun: tops take the sun color, undersides blaze when the sun is at or just below the horizon.
   const glow = clamp(1 - Math.abs(alt - 1) / 7, 0, 1) * (1 - cover * 0.5);
@@ -96,7 +129,7 @@ export function cloudTones(env, depth) {
     let c = mulRGB(t, ambient);
     const k = i / 4;
     c = lerpRGB(c, horizon, 0.08 + k * 0.12 + haze);
-    if (glow > 0) c = lerpRGB(c, sunColor, glow * (i < 2 ? 0.35 : 0.15));
+    if (glow > 0) c = lerpRGB(c, i < 2 ? lerpRGB(sunColor, [255, 214, 170], 0.5) : sunColor, glow * (i < 2 ? 0.45 : 0.2));
     if (under > 0) c = lerpRGB(c, ember, under * (i >= 3 ? 0.8 : i === 2 ? 0.45 : 0.1));
     if (dusk > 0) c = lerpRGB(c, [70, 62, 96], dusk * 0.35 * (0.5 + k));
     if (moonK > 0) c = [c[0] + 120 * moonK * (i < 2 ? 0.5 : 0.2), c[1] + 140 * moonK * (i < 2 ? 0.5 : 0.2), c[2] + 200 * moonK * (i < 2 ? 0.5 : 0.2)];
@@ -121,28 +154,45 @@ export function cloudSprite(c, tones, key, lightX, lightY) {
   const data = c.img.data; data.fill(0);
   const lz = 0.55, ln = Math.hypot(lightX, lightY, lz);
   const Lx = lightX / ln, Ly = lightY / ln, Lz = lz / ln;
-  const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : field[y * w + x];
+  const smooth = c.smooth;
+  const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : smooth[y * w + x];
+  const { puffs, who } = c;
+  let top = h;
+  for (let i = 0; i < w * h; i++) if (field[i] > 0) { top = (i / w) | 0; break; }
+  const tall = Math.max(1, c.baseY - top);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const v = field[y * w + x];
+    const i0 = y * w + x;
+    const v = field[i0];
     if (v <= 0) continue;
-    const gx = (at(x + 2, y) - at(x - 2, y)) * 0.25, gy = (at(x, y + 2) - at(x, y - 2)) * 0.25;
+    // the big form: a broad light from the sun's side and above, in three flat steps
+    const gx = (at(x + 4, y) - at(x - 4, y)) / 8, gy = (at(x, y + 4) - at(x, y - 4)) / 8;
     const nn = Math.hypot(gx, gy, 1);
-    const ndl = (-gx * Lx - gy * Ly + Lz) / nn;
-    let b = 0.34 + 0.66 * clamp(ndl, 0, 1);
-    // undersides darken toward the flat base
-    const ao = clamp((c.baseY - y) / (c.h * 0.4), 0, 1);
-    b *= 0.5 + 0.5 * ao;
-    // thin fringes at the silhouette pick up light; creases between lobes fall into shade
-    const edge = v < 3.5;
-    if (edge) b += 0.08;
-    const me = c.who[y * w + x];
-    if ((x > 0 && field[y * w + x - 1] > 0 && c.who[y * w + x - 1] !== me) || (y > 0 && field[(y - 1) * w + x] > 0 && c.who[(y - 1) * w + x] !== me)) b -= 0.14;
-    const d = bayer(x, y);
-    const q = b + (d - 0.5) * 0.09;
-    let tone = q > 0.8 ? 0 : q > 0.62 ? 1 : q > 0.45 ? 2 : q > 0.3 ? 3 : 4;
-    if (edge && (-gx * Lx - gy * Ly) > 0.15) tone = 5;   // rim light on the edge facing the sun
+    const ndl = clamp((-gx * Lx - gy * Ly + Lz) / nn, 0, 1);
+    const fy = (c.baseY - y) / tall;
+    let b = 0.12 + 0.62 * ndl + 0.26 * fy;
+    b *= 0.55 + 0.45 * clamp(fy * 2.2, 0, 1);          // the flat underside sits in shade
+    // each lobe: a bright cap on its lit crown, a shadow band along its underside
+    const p = puffs[who[i0]];
+    const ldx = (x - p.x) / p.r, ldy = (y - p.y) / p.r;
+    const facing = -(ldx * Lx + ldy * Ly);
+    const small = p.r < c.maxR * 0.45;
+    if (small && ldy < -0.45 && facing > 0.2) b += 0.12;
+    if (small && ldy > 0.45) b -= 0.12;
+    // where a small puff sits on a bigger one: a crease under it, a bright lip on its lit side.
+    // Boundaries between two big lobes are left alone, or the body reads as a cracked shell.
+    const me = who[i0];
+    const upI = i0 - w, sideI = Lx < 0 ? i0 - 1 : i0 + 1;
+    const upO = y > 0 && field[upI] > 0 ? who[upI] : -1;
+    const sideO = (Lx < 0 ? x > 0 : x < w - 1) && field[sideI] > 0 ? who[sideI] : -1;
+    const smallR = c.maxR * 0.45;
+    if (upO >= 0 && upO !== me && puffs[upO].r < smallR && puffs[upO].r < p.r) b -= 0.2;   // a small puff above me: its shadow
+    else if (small && sideO >= 0 && sideO !== me && puffs[sideO].r > p.r * 1.3) b += facing > 0 ? 0.12 : -0.12;   // I am a small puff on a big one
+    const edge = v < 2.5 * SCALE;
+    const q = b + (bayer(x, y) - 0.5) * 0.03;
+    let tone = q > 0.8 ? 0 : q > 0.62 ? 1 : q > 0.46 ? 2 : q > 0.32 ? 3 : 4;
+    if (edge && (-gx * Lx - gy * Ly) > 0.15 && fy > 0.2) tone = 5;   // rim light on the silhouette facing the sun
     const col = tones[tone];
-    const i = (y * w + x) * 4;
+    const i = i0 * 4;
     data[i] = col[0]; data[i + 1] = col[1]; data[i + 2] = col[2]; data[i + 3] = 255;
   }
   c.spriteCtx.putImageData(c.img, 0, 0);
