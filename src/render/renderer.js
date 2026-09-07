@@ -1,6 +1,7 @@
 import { W, H } from '../state.js';
 import { makeCanvas, rgb, clamp } from '../util/pixel.js';
-import { drawStars, drawMoon, drawSun, setStarMask } from './sky.js';
+import { drawStars, drawMoon, drawSun, setStarMask, renderSkyGradient } from './sky.js';
+import { renderTerrain } from './terrain.js';
 
 // The worker gets a plain copy of what renderTerrain reads from env.
 function envForWorker(env) {
@@ -18,9 +19,25 @@ export class Renderer {
     this.assets = assets;
     if (assets) setStarMask(assets.mask);
     // terrain rebuilds run in a worker; until the first one lands the terrain canvas is empty
-    this.worker = new Worker(new URL('./terrain_worker.js', import.meta.url), { type: 'module' });
+    // If the worker cannot run here (older browser: no module workers, no OffscreenCanvas, no
+    // top-level await in workers) or never reports ready, the same passes run on the main thread.
+    // Slower on a big painting, but the scene appears; an empty scene is never acceptable.
     this.workerReady = false; this.workerBusy = false; this.pendingKey = ''; this.pendingSkyKey = ''; this.dirty = true;
-    this.worker.onmessage = (e) => {
+    this.useWorker = !/[?&]noworker\b/.test(location.search) && typeof Worker !== 'undefined';
+    const fallback = (why) => {
+      if (!this.useWorker) return;
+      this.useWorker = false; this.workerReady = false;
+      console.warn('terrain worker unavailable (' + why + '); rendering on the main thread');
+      try { this.worker && this.worker.terminate(); } catch (e) { /* ignore */ }
+    };
+    try {
+      this.worker = this.useWorker ? new Worker(new URL('./terrain_worker.js', import.meta.url), { type: 'module' }) : null;
+    } catch (e) { fallback(e.message); }
+    if (this.worker) {
+      this.worker.onerror = (e) => fallback(e.message || 'error');
+      setTimeout(() => { if (!this.workerReady) fallback('no ready signal after 20s'); }, 20000);
+    }
+    if (this.worker) this.worker.onmessage = (e) => {
       if (e.data.ready) { this.workerReady = true; return; }
       this.workerBusy = false;
       const g = e.data.kind === 'sky' ? this.skyCtx : this.terrainCtx;
@@ -43,8 +60,14 @@ export class Renderer {
 
   refreshCaches(state) {
     const env = state.env;
+    if (!this.useWorker) {
+      // main-thread fallback: same passes, synchronous
+      if (!this.skyImg) { this.skyImg = this.skyCtx.createImageData(W, H); this.terrainImg = this.terrainCtx.createImageData(W, H); }
+      if (env.skyKey !== this.skyKey) { renderSkyGradient(this.skyImg, env); this.skyCtx.putImageData(this.skyImg, 0, 0); this.skyKey = env.skyKey; this.dirty = true; }
+      if (env.terrainKey !== this.terrainKey) { renderTerrain(this.terrainImg, env, this.assets); this.terrainCtx.putImageData(this.terrainImg, 0, 0); this.terrainKey = env.terrainKey; this.dirty = true; }
+    }
     // One job at a time in the worker; the sky is cheaper, so it goes first when both are stale.
-    if (this.workerReady && !this.workerBusy) {
+    if (this.useWorker && this.workerReady && !this.workerBusy) {
       if (env.skyKey !== this.skyKey && env.skyKey !== this.pendingSkyKey) {
         this.workerBusy = true; this.pendingSkyKey = env.skyKey;
         this.worker.postMessage({ kind: 'sky', key: env.skyKey, env: envForWorker(env) });

@@ -9,11 +9,12 @@ export const MAT = { NONE: 0, GRASS: 1, FOLIAGE: 2, ROCK: 3, SNOW: 4, DIRT: 5, S
 
 // Works on the page and in a worker (no Image or document there).
 async function loadPixels(url) {
-  const blob = await (await fetch(url)).blob();
-  const bmp = await createImageBitmap(blob);
+  let src;
+  if (typeof createImageBitmap === 'function') src = await createImageBitmap(await (await fetch(url)).blob());
+  else { src = new Image(); src.src = url; await src.decode(); }   // older page contexts
   const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : makeCanvas(W, H)[0];
   const g = c.getContext('2d', { willReadFrequently: true });
-  g.drawImage(bmp, 0, 0);
+  g.drawImage(src, 0, 0);
   return g.getImageData(0, 0, W, H).data;
 }
 
