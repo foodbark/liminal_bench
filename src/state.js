@@ -1,7 +1,20 @@
 // The scene is the size of the painted backdrop; tools/build_backdrop.py writes these.
 // tools/build_backdrop.py writes it from the painting's config: size, horizon, hotspots, cork,
 // lantern, camera targets, fog lines, snow caps, default notes (all already in scene pixels).
-export const META = await (await fetch(new URL('../assets/backdrop.json', import.meta.url))).json();
+// Phones and small screens get the half-size scene (a quarter of the pixels to light and hold);
+// ?small or ?full in the page URL overrides. The worker is told through its own URL.
+function wantSmall() {
+  if (typeof window !== 'undefined') {
+    const q = location.search;
+    if (/[?&]full\b/.test(q)) return false;
+    if (/[?&]small\b/.test(q)) return true;
+    return Math.max(screen.width, screen.height) < 1100;
+  }
+  return /[?&]small\b/.test(self.location.search);   // worker
+}
+export const SMALL = wantSmall();
+export const ASSET_DIR = SMALL ? 'assets/small' : 'assets';
+export const META = await (await fetch(new URL('../' + ASSET_DIR + '/backdrop.json', import.meta.url))).json();
 export const W = META.w, H = META.h, HORIZON = META.horizon;
 // Procedural pixel sizes (clouds, rain, glow, rim widths) were tuned on a 1024-wide painting.
 export const SCALE = W / 1024;

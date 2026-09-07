@@ -1,4 +1,4 @@
-import { W, H } from '../state.js';
+import { W, H, SMALL } from '../state.js';
 import { makeCanvas, rgb, clamp } from '../util/pixel.js';
 import { drawStars, drawMoon, drawSun, setStarMask, renderSkyGradient } from './sky.js';
 import { renderTerrain } from './terrain.js';
@@ -35,7 +35,7 @@ export class Renderer {
       try { this.worker && this.worker.terminate(); } catch (e) { /* ignore */ }
     };
     try {
-      this.worker = this.useWorker ? new Worker(new URL('./terrain_worker.js', import.meta.url), { type: 'module' }) : null;
+      this.worker = this.useWorker ? new Worker(new URL('./terrain_worker.js' + (SMALL ? '?small=1' : ''), import.meta.url), { type: 'module' }) : null;
     } catch (e) { fallback(e.message); }
     if (this.worker) {
       this.worker.onerror = (e) => fallback(e.message || 'error');

@@ -66,7 +66,7 @@ Forecast data says how cloudy it is; a camera says where the clouds are. Seeing 
 
 - **The tan hill right of the trees.** The Sentinel painting (`art/mount_sentinel_alone_transparent_sky.jpg`) carries its tan slope all the way across the frame, so in the layered scene Dean Stone's base sits behind a flat tan ridge instead of running down into the trees. It bothers us. Fix is in the art, not the code: a version of the Sentinel file with that far tan hill left transparent (checkerboard is fine), so Dean Stone shows through down to the tree line. Everything else in the layering stays as is.
 - Overcast deck is still a plain scalloped band; low ceilings deserve their own look.
-- Smoke season, wind-swayed foliage, mobile landscape, public hosting (GitHub Pages is the easy path now that the repo is public).
+- Smoke season, wind-swayed foliage. Mobile: phones now get a half-size scene; touch targets and a landscape layout are still to do.
 
 ## Layout
 

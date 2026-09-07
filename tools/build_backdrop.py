@@ -379,6 +379,29 @@ def main():
         'notes': [[S(n[0]), S(n[1]), S(n[2]), S(n[3]), n[4], n[5]] for n in cfg['notes']],
     }
     with open(os.path.join(ROOT, 'assets/backdrop.json'), 'w') as f: json.dump(meta, f)
+
+    # A half-size copy for phones and small screens: a quarter of the pixels to light and hold.
+    # Colors average over each 2x2 block of non-sky pixels (so no dark fringe at the sky edge);
+    # the mask takes the top-left pixel of each block; every coordinate halves.
+    small = os.path.join(ROOT, 'assets/small'); os.makedirs(small, exist_ok=True)
+    H2, W2 = H // 2, W // 2
+    qf = q[:H2 * 2, :W2 * 2].astype(np.float64).reshape(H2, 2, W2, 2, 3)
+    nz = (layer[:H2 * 2, :W2 * 2] != 0).reshape(H2, 2, W2, 2, 1).astype(np.float64)
+    num = (qf * nz).sum(axis=(1, 3)); den = nz.sum(axis=(1, 3))
+    q2 = np.where(den > 0, num / np.maximum(den, 1), 0).astype(np.uint8)
+    m2 = mask[:H2 * 2:2, :W2 * 2:2]
+    Image.fromarray(q2).save(os.path.join(small, 'backdrop.png'), optimize=True)
+    Image.fromarray(np.ascontiguousarray(m2)).save(os.path.join(small, 'backdrop_mask.png'), optimize=True)
+    def halve(v):
+        if isinstance(v, bool): return v
+        if isinstance(v, int): return v // 2
+        if isinstance(v, float): return v
+        if isinstance(v, list): return [halve(x) for x in v]
+        if isinstance(v, dict): return {k: (halve(x) if k not in ('s', 'dock', 'label', 'hot', 'art', 'hazeScale', 'paper', 'age') else x) for k, x in v.items()}
+        return v
+    meta2 = halve(meta); meta2['w'] = W2; meta2['h'] = H2; meta2['small'] = True
+    meta2['notes'] = [[n[0] // 2, n[1] // 2, n[2] // 2, n[3] // 2, n[4], n[5]] for n in meta['notes']]
+    with open(os.path.join(small, 'backdrop.json'), 'w') as f: json.dump(meta2, f)
     print(name, W, 'x', H, 'sky px', int(sky.sum()), 'layers', {i: int((layer == i).sum()) for i in range(7)},
           'materials', {i: int((mat == i).sum()) for i in range(8)})
 

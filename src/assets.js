@@ -1,4 +1,4 @@
-import { W, H } from './state.js';
+import { W, H, ASSET_DIR } from './state.js';
 import { makeCanvas } from './util/pixel.js';
 
 // The painted backdrop (from art/concept_art_01.jpg via tools/build_backdrop.py) and its mask.
@@ -19,7 +19,7 @@ async function loadPixels(url) {
 }
 
 export async function loadBackdrop() {
-  const [rgb, mask] = await Promise.all([loadPixels(new URL('../assets/backdrop.png', import.meta.url)), loadPixels(new URL('../assets/backdrop_mask.png', import.meta.url))]);
+  const [rgb, mask] = await Promise.all([loadPixels(new URL('../' + ASSET_DIR + '/backdrop.png', import.meta.url)), loadPixels(new URL('../' + ASSET_DIR + '/backdrop_mask.png', import.meta.url))]);
   // first terrain row in each column (ignoring painted props like the pole), for fog over the crest
   const ridge = new Int16Array(W).fill(H);
   for (let x = 0; x < W; x++) {
