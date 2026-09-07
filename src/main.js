@@ -14,8 +14,10 @@ state.notesVersion = 1;
 
 const T0 = performance.now();
 const bootErrors = [];
-window.addEventListener('error', (e) => bootErrors.push('page: ' + (e.message || e.type)));
-window.addEventListener('unhandledrejection', (e) => bootErrors.push('promise: ' + (e.reason && e.reason.message || e.reason)));
+// errors go to the diag overlay: into bootErrors until the renderer exists, then straight to it
+const report = (msg) => { const r = window.__liminal && window.__liminal.renderer; if (r) r.diag.errors.push(msg); else bootErrors.push(msg); };
+window.addEventListener('error', (e) => report('page: ' + (e.message || e.type) + (e.filename ? ' @' + e.filename.split('/').pop() + ':' + e.lineno : '')));
+window.addEventListener('unhandledrejection', (e) => report('promise: ' + (e.reason && e.reason.message || e.reason)));
 let assets = null;
 try { assets = await loadBackdrop(); }
 catch (err) { console.warn('backdrop failed to load', err); bootErrors.push('assets: ' + (err && err.message || err)); }
@@ -29,12 +31,15 @@ renderer.diag.stages.unshift(['assets loaded', T_ASSETS]);
 renderer.diag.errors.push(...bootErrors);
 // ?diag shows what the page is doing, so a failing device can report it without dev tools
 if (/[?&]diag\b/.test(location.search)) {
+  let frames = 0;
   const box = document.createElement('pre');
   box.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99;background:rgba(0,0,0,.85);color:#cfe;font:12px/1.4 monospace;padding:8px;max-width:90vw;white-space:pre-wrap;';
   document.body.appendChild(box);
   setInterval(() => {
     const d = renderer.diag;
-    box.textContent = `liminal bench diag  ${W}x${H}  worker=${renderer.useWorker} ready=${renderer.workerReady}\n`
+    frames++;
+    box.textContent = `liminal bench diag  ${W}x${H}  worker=${renderer.useWorker} ready=${renderer.workerReady}  frames=${frameCount}\n`
+      + `weather: ${d.weather || 'pending'}  cover=${state.env.cond.cover}  ${state.env.cond.label}\n`
       + d.stages.map(([n, t]) => `${String(t).padStart(6)}ms  ${n}`).join('\n')
       + (d.errors.length ? '\nERRORS:\n' + d.errors.join('\n') : '\nno errors')
       + `\n${navigator.userAgent}`;
@@ -92,14 +97,16 @@ function computeEnv() {
 }
 
 async function refreshWeather() {
-  try { state.weather = await fetchWeather(); }
-  catch (err) { console.warn('weather fetch failed', err); state.weather.ok = false; }
+  try { state.weather = await fetchWeather(); renderer.diag.weather = 'ok ' + new Date().toLocaleTimeString(); }
+  catch (err) { console.warn('weather fetch failed', err); state.weather.ok = false; renderer.diag.weather = 'failed: ' + (err && err.message || err); }
 }
 refreshWeather();
 setInterval(refreshWeather, 10 * 60 * 1000);
 
 let last = performance.now();
+let frameCount = 0;
 function frame(ts) {
+  frameCount++;
   const dt = Math.min(0.05, (ts - last) / 1000); last = ts;
   computeEnv();
   ui.update(dt, ts);
