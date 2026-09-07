@@ -128,15 +128,14 @@ export function drawSun(ctx, env) {
   const r = (v) => Math.max(1, Math.round(v * SCALE));
   // a solid disc; only the corona is graded, in rings that thin out through the dither
   if (dim > 0.05) {
-    const rings = [[22, 2], [18, 4], [14, 7], [11, 11]];
+    const rings = [[22, 2], [18, 4], [14, 7], [11, 10]];
     for (const [rad, lv] of rings) {
       const level = Math.round(lv * dim);
       if (level < 1) continue;
       ctx.fillStyle = ditherPattern(ctx, col, level); fillCircle(ctx, p.x, p.y, r(rad));
     }
   }
-  // behind thick cloud the disc itself fades to a pale smudge
-  const core = cover > 0.85 ? Math.round(lerp(16, 6, (cover - 0.85) / 0.15)) : 16;
-  ctx.fillStyle = ditherPattern(ctx, col, core); fillCircle(ctx, p.x, p.y, r(9));
-  ctx.fillStyle = ditherPattern(ctx, bright, core); fillCircle(ctx, p.x, p.y, r(7));
+  // the disc itself is always solid; cloud sheets in front of it do the hiding
+  ctx.fillStyle = col; fillCircle(ctx, p.x, p.y, r(9));
+  ctx.fillStyle = bright; fillCircle(ctx, p.x, p.y, r(7));
 }
