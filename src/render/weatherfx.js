@@ -31,7 +31,7 @@ export class WeatherFX {
       c.x += speed * c.depth * dt;
       if (c.x > W + 40) c.x = -c.w - 40; else if (c.x < -c.w - 40) c.x = W + 40;
     }
-    if (this.cb) this.cb.x += speed * 0.25 * dt;   // the storm cell crawls
+    if (this.cb) { this.cb.x += speed * 2.2 * dt; if (this.cb.x > W + 60) this.cb.x = -this.cb.w - 60; else if (this.cb.x < -this.cb.w - 60) this.cb.x = W + 60; }   // valley storms move fast
     // precipitation scrolls as tiled layers; only the phase advances here
     const p = env.cond.precip;
     if (p.type === 'rain') this.rain.t += dt; else this.rain.t = 0;
@@ -39,9 +39,9 @@ export class WeatherFX {
     // lightning
     if (env.cond.storm) {
       this.nextFlash -= dt;
-      if (this.nextFlash <= 0) { this.flash = 0.12 + Math.random() * 0.1; this.nextFlash = 5 + Math.random() * 12; }
+      if (this.nextFlash <= 0) { this.strike(); this.nextFlash = 4 + Math.random() * 10; }
     }
-    if (this.flash > 0) this.flash -= dt;
+    if (this.flash > 0 && !this.holdBolt) this.flash -= dt;
   }
 
   makeCloud(anywhere) {
@@ -58,13 +58,39 @@ export class WeatherFX {
     return c;
   }
 
+  // A lightning strike: the whole-frame flash plus a jagged bolt with a couple of branches
+  // from the storm cell's base down toward the ridge. strike(true) holds it, for screenshots.
+  strike(hold) {
+    this.flash = 0.16 + Math.random() * 0.12; this.holdBolt = !!hold;
+    const cb = this.cb;
+    const x0 = cb ? cb.x + cb.w * (0.35 + Math.random() * 0.3) : Math.random() * W;
+    const y0 = cb ? cb.y + cb.h - 6 * SCALE : HORIZON * 0.25;
+    const y1 = HORIZON * (0.52 + Math.random() * 0.12);   // down to the ridge line
+    const walk = (x, y, yEnd, spread) => {
+      const pts = [[x, y]];
+      while (y < yEnd) {
+        y += (10 + Math.random() * 12) * SCALE;
+        x += (Math.random() - 0.5) * spread * SCALE;
+        pts.push([x, y]);
+      }
+      return pts;
+    };
+    const main = walk(x0, y0, y1, 22);
+    const branches = [];
+    for (let b = 0; b < 2 + Math.floor(Math.random() * 2); b++) {
+      const at = main[1 + Math.floor(Math.random() * Math.max(1, main.length - 3))];
+      branches.push(walk(at[0], at[1], at[1] + (y1 - at[1]) * (0.3 + Math.random() * 0.4), 34));
+    }
+    this.bolt = { main, branches };
+  }
+
   makeCumulonimbus(env) {
     const r = mulberry32(1234 + Math.floor(env.wind.dir));
     const dir = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;   // the anvil streams downwind
-    const c = layoutCloud(r, 1.6, { tower: true, anvil: true, anvilDir: dir });
+    const c = layoutCloud(r, 1.75, { tower: true, anvil: true, anvilDir: dir });
     c.depth = 1.3; c.cb = true;
     c.x = Math.floor(W * (dir > 0 ? 0.08 : 0.4) + r() * W * 0.15);
-    c.y = Math.floor(HORIZON * 0.5 - c.h);   // its dark base sits low over the ranges
+    c.y = Math.floor(HORIZON * 0.36 - c.h);   // its dark base hangs over the ranges, with room for bolts beneath
     return c;
   }
 
@@ -153,7 +179,20 @@ export class WeatherFX {
       }
     }
     if (this.flash > 0) {
-      ctx.fillStyle = ditherPattern(ctx, '#e8ecff', this.flash > 0.1 ? 9 : 4); ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = ditherPattern(ctx, '#e8ecff', this.flash > 0.1 ? 3 : 1); ctx.fillRect(0, 0, W, H);
+      if (this.bolt) {
+        const strokes = [['#9fb4ff', 6, 3], ['#dfe8ff', 16, 1], ['#ffffff', 16, 0]];   // glow, body, core
+        const draw = (pts, thin) => {
+          for (const [color, level, spread] of strokes) {
+            if (thin && spread === 0) continue;
+            ctx.fillStyle = level < 16 ? ditherPattern(ctx, color, level) : color;
+            const k = Math.max(0, Math.round(spread * SCALE));
+            for (let o = -k; o <= k; o++) for (let i = 1; i < pts.length; i++) plotLine(ctx, pts[i - 1][0] + o, pts[i - 1][1], pts[i][0] + o, pts[i][1]);
+          }
+        };
+        for (const b of this.bolt.branches) draw(b, true);
+        draw(this.bolt.main, false);
+      }
     }
   }
 }

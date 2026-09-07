@@ -125,9 +125,18 @@ export function drawSun(ctx, env) {
   const col = rgb(env.pal.sunColor);
   const bright = rgb(lerpRGB(env.pal.sunColor, [255, 255, 245], clamp(alt / 12, 0, 0.8)));
   const dim = clamp(1 - cover * 1.1, 0, 1);
+  const r = (v) => Math.max(1, Math.round(v * SCALE));
+  // a solid disc; only the corona is graded, in rings that thin out through the dither
   if (dim > 0.05) {
-    ctx.fillStyle = ditherPattern(ctx, col, Math.round(4 * dim)); fillCircle(ctx, p.x, p.y, Math.round(18 * SCALE));
-    ctx.fillStyle = ditherPattern(ctx, col, Math.round(8 * dim)); fillCircle(ctx, p.x, p.y, Math.round(13 * SCALE));
+    const rings = [[22, 2], [18, 4], [14, 7], [11, 11]];
+    for (const [rad, lv] of rings) {
+      const level = Math.round(lv * dim);
+      if (level < 1) continue;
+      ctx.fillStyle = ditherPattern(ctx, col, level); fillCircle(ctx, p.x, p.y, r(rad));
+    }
   }
-  ctx.fillStyle = ditherPattern(ctx, bright, Math.round(lerp(4, 16, dim))); fillCircle(ctx, p.x, p.y, Math.round(9 * SCALE));
+  // behind thick cloud the disc itself fades to a pale smudge
+  const core = cover > 0.85 ? Math.round(lerp(16, 6, (cover - 0.85) / 0.15)) : 16;
+  ctx.fillStyle = ditherPattern(ctx, col, core); fillCircle(ctx, p.x, p.y, r(9));
+  ctx.fillStyle = ditherPattern(ctx, bright, core); fillCircle(ctx, p.x, p.y, r(7));
 }
