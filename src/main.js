@@ -89,7 +89,7 @@ function computeEnv() {
   const sun = sunPosition(now, LAT, LON);
   const phase = moonPhase(now);
   let moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
-  if (o.enabled && o.moon !== 'live') moon = { ...moon, ...{ full: { phase: 0.5, altitude: 40 }, half: { phase: 0.25, altitude: 30 }, none: { altitude: -20 } }[o.moon] };
+  if (o.enabled && o.moon !== 'live') moon = { ...moon, ...{ full: { phase: 0.5, altitude: 40, azimuth: 160 }, half: { phase: 0.25, altitude: 30, azimuth: 200 }, low: { phase: 0.5, altitude: 11, azimuth: 140 }, none: { altitude: -20 } }[o.moon] };
   const pal = skyPalette(sun.altitude, cond);
   let snowAmount = SEASON_SNOW[month];
   if (w.snowDepth > 0.05) snowAmount = Math.max(snowAmount, 0.65);

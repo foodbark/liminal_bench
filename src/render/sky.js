@@ -1,12 +1,17 @@
 import { W, H, HORIZON, SCALE } from '../state.js';
-import { bayer, lerpRGB, quant, clamp, rgb, fillCircle, ditherPattern, makeCanvas, lerp } from '../util/pixel.js';
+import { bayer, lerpRGB, quant, clamp, rgb, fillCircle, ditherPattern, makeCanvas, lerp, smooth } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 
 const SKY_BOTTOM = HORIZON + 24;
 
 // Where a sky object at (azimuth, altitude) lands on screen. The scene faces south.
+// Where a sun or moon at (azimuth, altitude) lands on screen. The scene faces south: azimuth
+// 90..270 runs left to right. Vertically, the ridge line (about half the horizon height) stands
+// for RIDGE_DEG of altitude, the way Missoula's hills sit about 8 degrees up from the valley,
+// and the top of the frame is about 58 degrees; anything lower than the ridge is behind it.
+const RIDGE_Y = Math.round(HORIZON * 0.5), RIDGE_DEG = 8, PX_PER_DEG = RIDGE_Y / 50;
 export function skyXY(az, alt) {
-  return { x: Math.round(W * ((az - 90) / 180)), y: Math.round(HORIZON - alt * 7 * SCALE) };
+  return { x: Math.round(W * ((az - 90) / 180)), y: Math.round(RIDGE_Y - (alt - RIDGE_DEG) * PX_PER_DEG) };
 }
 
 export function renderSkyGradient(img, env) {
@@ -83,26 +88,37 @@ export function drawStars(ctx, env, t) {
   ctx.drawImage(starLayer, 0, 0);
 }
 
-let moonCanvas = null, moonKey = '';
-function moonSprite(phase) {
-  const key = phase.toFixed(2);
+// The moon is the user's painted disc (assets/moon.png), scaled to the scene, with the unlit
+// part of the phase cut away. It swells near the horizon the way a rising moon looks (the moon
+// illusion, kept on purpose), and carries a soft dithered halo at night.
+let moonImg = null, moonCanvas = null, moonKey = '';
+if (typeof Image !== 'undefined') {
+  const im = new Image();
+  im.onload = () => { moonImg = im; };
+  im.src = new URL('../../assets/moon.png', import.meta.url).href;
+}
+function moonRadius(alt) {
+  const swell = smooth(clamp(1 - (alt - RIDGE_DEG) / 20, 0, 1));   // 1x high up, 2x just over the ridge
+  return Math.max(6, Math.round(14 * SCALE * (1 + 1.0 * swell)));
+}
+function moonSprite(phase, r) {
+  const key = phase.toFixed(2) + '|' + r;
   if (moonKey === key) return moonCanvas;
-  const r = Math.max(6, Math.round(13 * SCALE)); const [c, g] = makeCanvas(2 * r + 3, 2 * r + 3);
+  const D = 2 * r + 2, [c, g] = makeCanvas(D, D);
+  if (moonImg) { g.imageSmoothingEnabled = true; g.drawImage(moonImg, 1, 1, 2 * r, 2 * r); }
+  else { g.fillStyle = '#f1f0e4'; fillCircle(g, r + 1, r + 1, r); }
+  // carve the phase: the dark side goes transparent so it never shows as a gray disc by day
+  const img = g.getImageData(0, 0, D, D), d = img.data;
   const f = Math.cos(phase * 2 * Math.PI);
-  const k = Math.max(1, Math.round(SCALE));   // crater pattern in scene pixels, not sprite pixels
-  for (let dy = -r; dy <= r; dy++) {
-    const w = Math.sqrt(r * r - dy * dy);
-    for (let dx = -r; dx <= r; dx++) {
-      if (dx * dx + dy * dy > r * r + 0.5) continue;
-      const tx = f * w;
-      const lit = phase < 0.5 ? dx > tx : dx < -tx;
-      const cx = Math.floor(dx / k), cy = Math.floor(dy / k);
-      const crater = ((cx * 7 + cy * 13) % 5 === 0 && (cx + cy) % 3 === 0);
-      if (!lit) continue; // the dark side stays transparent so it never shows as a gray disc by day
-      g.fillStyle = crater ? '#c9cbc0' : '#f1f0e4';
-      g.fillRect(dx + r + 1, dy + r + 1, 1, 1);
-    }
+  for (let y = 0; y < D; y++) for (let x = 0; x < D; x++) {
+    const dx = x - (r + 1), dy = y - (r + 1);
+    if (dx * dx + dy * dy > (r + 0.5) * (r + 0.5)) { d[(y * D + x) * 4 + 3] = 0; continue; }
+    const w = Math.sqrt(Math.max(0, r * r - dy * dy));
+    const tx = f * w;
+    const lit = phase < 0.5 ? dx > tx : dx < -tx;
+    if (!lit) d[(y * D + x) * 4 + 3] = 0;
   }
+  g.putImageData(img, 0, 0);
   moonCanvas = c; moonKey = key; return c;
 }
 
@@ -113,7 +129,14 @@ export function drawMoon(ctx, env) {
   const nf = clamp((-env.sun.altitude + 2) / 10, 0, 1);
   const vis = (0.25 + 0.75 * nf) * (1 - env.cond.cover * 0.9);
   if (vis < 0.05) return;
-  const spr = moonSprite(m.phase);
+  const r = moonRadius(m.altitude);
+  const bright = 1 - Math.abs(m.phase - 0.5) * 2;
+  if (nf > 0.3 && bright > 0.3) {
+    // a soft halo, wider when the moon is low
+    ctx.fillStyle = ditherPattern(ctx, '#c9d3ec', 2); fillCircle(ctx, p.x, p.y, Math.round(r * 2.1));
+    ctx.fillStyle = ditherPattern(ctx, '#d8dff2', 4); fillCircle(ctx, p.x, p.y, Math.round(r * 1.5));
+  }
+  const spr = moonSprite(m.phase, r);
   ctx.globalAlpha = vis;
   ctx.drawImage(spr, p.x - (spr.width >> 1), p.y - (spr.height >> 1));
   ctx.globalAlpha = 1;
@@ -127,7 +150,8 @@ export function drawSun(ctx, env) {
   const col = rgb(env.pal.sunColor);
   const bright = rgb(lerpRGB(env.pal.sunColor, [255, 255, 245], clamp(alt / 12, 0, 0.8)));
   const dim = clamp(1 - cover * 1.1, 0, 1);
-  const r = (v) => Math.max(1, Math.round(v * SCALE));
+  const swell = 1 + 0.45 * smooth(clamp(1 - (alt - RIDGE_DEG) / 14, 0, 1));   // a fat sun just over the ridge
+  const r = (v) => Math.max(1, Math.round(v * SCALE * swell));
   // a solid disc; only the corona is graded, in rings that thin out through the dither
   if (dim > 0.05) {
     const rings = [[32, 2], [26, 4], [20, 7], [16, 10]];
