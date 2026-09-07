@@ -142,7 +142,7 @@ export function renderTerrain(img, env, assets) {
         }
         continue;
       }
-      const L = LAYERS[layer], P = per[layer];
+      const L = LAYERS[layer] || LAYERS[LAYER.NEAR], P = per[layer] || per[LAYER.NEAR];
       const mat = mask[i + 1], e = mask[i + 2] / 255;
       let c = [rgb[i], rgb[i + 1], rgb[i + 2]];
       let snowy = mat === MAT.SNOW && !bare;

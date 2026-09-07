@@ -9,8 +9,8 @@ targets and the numbers the renderer needs. Coordinates are in the config's "ref
 painting that is an exact multiple of that size scales them automatically. Writes:
 
   assets/backdrop.png       the painting at native pixels, sky masked out (black), notes cleared off the cork
-  assets/backdrop_mask.png  RGB: R = layer (0 sky, 1 peak, 2 range, 3 far hill, 4 flank, 5 trees, 6 near)
-                                 G = material (0 none, 1 grass, 2 foliage, 3 rock, 4 snow, 5 dirt, 6 shrub, 7 prop)
+  assets/backdrop_mask.png  RGB: R = 32 * layer (0 sky, 1 peak, 2 range, 3 far hill, 4 flank, 5 trees, 6 near)
+                                 G = 32 * material (0 none, 1 grass, 2 foliage, 3 rock, 4 snow, 5 dirt, 6 shrub, 7 prop)
                                  B = height within the layer's column (0 bottom .. 255 top)
   assets/backdrop.json      size, horizon and all scene geometry for the site (scaled)
 
@@ -356,7 +356,10 @@ def main():
         sel = layer == lid
         t = np.clip((bot_line[None, :] - yy) / np.maximum(bot_line[None, :] - top_line[None, :], 1), 0, 1)
         hf[sel] = t[sel]
-    mask = np.stack([layer, mat, (hf * 255).astype(np.uint8)], -1)
+    # layer and material codes are stored 32 apart (0, 32, 64, ...): some browsers color-manage
+    # PNGs on the way into a canvas, shifting values by a unit or two, and a code that lands on the
+    # wrong integer crashes the lighting pass. The loader snaps them back.
+    mask = np.stack([layer * 32, mat * 32, (hf * 255).astype(np.uint8)], -1).astype(np.uint8)
 
     # --- outputs
     os.makedirs(os.path.join(ROOT, 'assets'), exist_ok=True)

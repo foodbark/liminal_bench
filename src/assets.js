@@ -4,13 +4,14 @@ import { makeCanvas } from './util/pixel.js';
 // The painted backdrop (from art/concept_art_01.jpg via tools/build_backdrop.py) and its mask.
 // Mask channels: R = layer (0 sky, 1 peak, 2 range, 3 far hill, 4 flank, 5 trees, 6 near), G = material
 // (0 none, 1 grass, 2 foliage, 3 rock, 4 snow, 5 dirt, 6 shrub, 7 painted prop), B = height within the layer (0..255).
+// In the PNG the R and G codes are stored times 32; loadBackdrop snaps them back.
 export const LAYER = { SKY: 0, PEAK: 1, RANGE: 2, FARHILL: 3, FLANK: 4, TREES: 5, NEAR: 6 };
 export const MAT = { NONE: 0, GRASS: 1, FOLIAGE: 2, ROCK: 3, SNOW: 4, DIRT: 5, SHRUB: 6, PROP: 7 };
 
 // Works on the page and in a worker (no Image or document there).
 async function loadPixels(url) {
   let src;
-  if (typeof createImageBitmap === 'function') src = await createImageBitmap(await (await fetch(url)).blob());
+  if (typeof createImageBitmap === 'function') src = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
   else { src = new Image(); src.src = url; await src.decode(); }   // older page contexts
   const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : makeCanvas(W, H)[0];
   const g = c.getContext('2d', { willReadFrequently: true });
@@ -20,6 +21,9 @@ async function loadPixels(url) {
 
 export async function loadBackdrop() {
   const [rgb, mask] = await Promise.all([loadPixels(new URL('../' + ASSET_DIR + '/backdrop.png', import.meta.url)), loadPixels(new URL('../' + ASSET_DIR + '/backdrop_mask.png', import.meta.url))]);
+  // the mask stores layer and material codes 32 apart; snap them back to 0..7 so a browser
+  // that color-manages the PNG on the way in (a unit or two of drift) cannot corrupt them
+  for (let i = 0; i < mask.length; i += 4) { mask[i] = (mask[i] + 16) >> 5; mask[i + 1] = (mask[i + 1] + 16) >> 5; }
   // first terrain row in each column (ignoring painted props like the pole), for fog over the crest
   const ridge = new Int16Array(W).fill(H);
   for (let x = 0; x < W; x++) {
