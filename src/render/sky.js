@@ -120,7 +120,7 @@ function moonSprite(phase, r) {
     if (!lit) { d[i + 3] = 0; continue; }
     // keep the painting's pattern, drop its color: sunlight on rock, maria light gray, highlands white
     const L = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
-    const v = Math.round(188 + 67 * Math.pow(L, 0.7));
+    const v = Math.round(172 + 83 * Math.pow(L, 0.75));
     d[i] = v; d[i + 1] = v; d[i + 2] = Math.min(255, v + 4);
     d[i + 3] = 255;
   }
