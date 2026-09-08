@@ -137,10 +137,13 @@ export function drawMoon(ctx, env) {
   if (vis < 0.05) return;
   const r = moonRadius(m.altitude);
   const bright = 1 - Math.abs(m.phase - 0.5) * 2;
-  if (nf > 0.3 && bright > 0.3) {
-    // a soft halo, wider when the moon is low
-    ctx.fillStyle = ditherPattern(ctx, '#c9d3ec', 2); fillCircle(ctx, p.x, p.y, Math.round(r * 1.9));
-    ctx.fillStyle = ditherPattern(ctx, '#d8dff2', 3); fillCircle(ctx, p.x, p.y, Math.round(r * 1.4));
+  // a halo only when there is something in the air to make one: ice in a high veil, an
+  // altostratus veil, or fog; and then faint. Clear nights get the bare disc.
+  const sk = env.sky || {};
+  const haloK = Math.min(1, (sk.veilHigh || 0) * 1.0 + (sk.veilMid || 0) * 0.6 + (env.cond.fog ? 0.7 : 0));
+  if (nf > 0.3 && bright > 0.3 && haloK > 0.15) {
+    ctx.fillStyle = ditherPattern(ctx, '#b9c4e0', haloK > 0.6 ? 2 : 1); fillCircle(ctx, p.x, p.y, Math.round(r * 2.4));
+    ctx.fillStyle = ditherPattern(ctx, '#cfd7ee', haloK > 0.6 ? 3 : 2); fillCircle(ctx, p.x, p.y, Math.round(r * 1.5));
   }
   const spr = moonSprite(m.phase, r);
   // opaque at night so nothing shows through the disc; it only fades in daylight
