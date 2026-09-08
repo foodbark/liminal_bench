@@ -118,8 +118,10 @@ function moonSprite(phase, r) {
     const lit = phase < 0.5 ? dx > tx : dx < -tx;
     const i = (y * D + x) * 4;
     if (!lit) { d[i + 3] = 0; continue; }
-    // the painted disc is dark and blue; lift it toward white so it reads as a bright moon
-    d[i] = Math.min(255, d[i] * 1.2 + 55); d[i + 1] = Math.min(255, d[i + 1] * 1.2 + 55); d[i + 2] = Math.min(255, d[i + 2] * 1.15 + 50);
+    // keep the painting's pattern, drop its color: sunlight on rock, maria light gray, highlands white
+    const L = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+    const v = Math.round(206 + 49 * Math.pow(L, 0.7));
+    d[i] = v; d[i + 1] = v; d[i + 2] = Math.min(255, v + 4);
     d[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
