@@ -116,7 +116,11 @@ function moonSprite(phase, r) {
     const w = Math.sqrt(Math.max(0, r * r - dy * dy));
     const tx = f * w;
     const lit = phase < 0.5 ? dx > tx : dx < -tx;
-    if (!lit) d[(y * D + x) * 4 + 3] = 0;
+    const i = (y * D + x) * 4;
+    if (!lit) { d[i + 3] = 0; continue; }
+    // the painted disc is dark and blue; lift it toward white so it reads as a bright moon
+    d[i] = Math.min(255, d[i] * 1.2 + 55); d[i + 1] = Math.min(255, d[i + 1] * 1.2 + 55); d[i + 2] = Math.min(255, d[i + 2] * 1.15 + 50);
+    d[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
   moonCanvas = c; moonKey = key; return c;
@@ -137,7 +141,8 @@ export function drawMoon(ctx, env) {
     ctx.fillStyle = ditherPattern(ctx, '#d8dff2', 3); fillCircle(ctx, p.x, p.y, Math.round(r * 1.4));
   }
   const spr = moonSprite(m.phase, r);
-  ctx.globalAlpha = vis;
+  // opaque at night so nothing shows through the disc; it only fades in daylight
+  ctx.globalAlpha = nf > 0.4 ? 1 : vis;
   ctx.drawImage(spr, p.x - (spr.width >> 1), p.y - (spr.height >> 1));
   ctx.globalAlpha = 1;
 }
