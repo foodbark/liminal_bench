@@ -159,13 +159,24 @@ export class WeatherFX {
   drawClouds(ctx, env) {
     const cover = env.sky ? env.sky.cumulus : env.cond.cover;
     if (cover <= 0.02 && !(env.sky && env.sky.cb)) return;
-    const sunOnLeft = env.sun.azimuth < 180;
-    const altK = clamp(env.sun.altitude / 60, 0, 1);
-    const lightX = (sunOnLeft ? -1 : 1) * (1.0 - 0.5 * altK), lightY = -(0.35 + 0.65 * altK);
+    // by day the sun lights the clouds; at night, a moon that is up does, from where it stands
+    const moonLit = env.sun.altitude < -6 && env.moon.altitude > 0;
+    const src = moonLit ? env.moon : env.sun;
+    const onLeft = src.azimuth < 180;
+    const altK = clamp(src.altitude / 60, 0, 1);
+    const lightX = (onLeft ? -1 : 1) * (1.0 - 0.5 * altK), lightY = -(0.35 + 0.65 * altK);
+    const moonP = moonLit ? skyXY(env.moon.azimuth, env.moon.altitude) : null;
     const sorted = [...this.clouds].sort((a, b) => a.depth - b.depth);
     if (this.cb) sorted.push(this.cb);
     for (const c of sorted) {
-      const { tones, key } = cloudTones(env, c.depth);
+      // how close this cloud is to the moon: its edges catch the light
+      let near = 0;
+      if (moonP) {
+        const cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+        const dist = Math.hypot(cx - moonP.x, cy - moonP.y);
+        near = clamp(1 - dist / (Math.max(c.w, c.h) * 1.2 + 120 * SCALE), 0, 1);
+      }
+      const { tones, key } = cloudTones(env, c.depth, near);
       const sprite = cloudSprite(c, tones, key, lightX, lightY);
       ctx.drawImage(sprite, Math.round(c.x), c.y);
     }
