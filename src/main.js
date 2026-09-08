@@ -1,6 +1,6 @@
 import { createState, W, H, META, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
-import { sunPosition, moonPhase } from './util/solar.js';
+import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { skyPalette } from './palette.js';
 import { Renderer } from './render/renderer.js';
 import { makeNote } from './render/props.js';
@@ -87,6 +87,7 @@ function computeEnv() {
   };
   sky.cumulus = wet || cond.fog || preset?.stratus ? 0 : low * (1 - sky.strato * 0.75);
   const sun = sunPosition(now, LAT, LON);
+  const lst = siderealDeg(now, LON);
   const phase = moonPhase(now);
   let moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
   if (o.enabled && o.moon !== 'live') moon = { ...moon, ...{ full: { phase: 0.5, altitude: 40, azimuth: 160 }, half: { phase: 0.25, altitude: 30, azimuth: 200 }, low: { phase: 0.5, altitude: 11, azimuth: 140 }, none: { altitude: -20 } }[o.moon] };
@@ -103,9 +104,9 @@ function computeEnv() {
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
-    now, month, sun, moon, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog, dusting, sky,
+    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog, dusting, sky,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
-    skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}`,
+    skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
     terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}|${dusting.amount.toFixed(2)}|${dusting.thaw.toFixed(1)}`,
     sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}`,
     ambientKey,

@@ -7,7 +7,7 @@ import { renderSheets } from './sheets.js';
 // The worker gets a plain copy of what renderTerrain reads from env.
 function envForWorker(env) {
   return {
-    pal: env.pal, sun: env.sun, moon: env.moon, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
+    pal: env.pal, sun: env.sun, moon: env.moon, lst: env.lst, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
     groundSnow: env.groundSnow, inversion: env.inversion, mountainFog: env.mountainFog, dusting: env.dusting,
   };
 }

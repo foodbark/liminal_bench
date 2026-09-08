@@ -1,6 +1,7 @@
-import { W, H, HORIZON, SCALE } from '../state.js';
+import { W, H, HORIZON, SCALE, LAT } from '../state.js';
+import { starAltAz, altAzToRaDec, galacticLat } from '../util/solar.js';
 import { bayer, lerpRGB, quant, clamp, rgb, fillCircle, ditherPattern, makeCanvas, lerp, smooth } from '../util/pixel.js';
-import { mulberry32 } from '../util/noise.js';
+import { mulberry32, valueNoise2D as valueNoise2DSky } from '../util/noise.js';
 
 const SKY_BOTTOM = HORIZON + 24;
 
@@ -14,9 +15,16 @@ export function skyXY(az, alt) {
   return { x: Math.round(W * ((az - 90) / 180)), y: Math.round(RIDGE_Y - (alt - RIDGE_DEG) * PX_PER_DEG) };
 }
 
+const mwNoise = valueNoise2DSky(4321);
 export function renderSkyGradient(img, env) {
   const { top, horizon, sunColor } = env.pal;
   const data = img.data;
+  // the Milky Way shows on dark clear nights, washed out by a bright moon
+  const nightK = clamp((-env.sun.altitude - 6) / 8, 0, 1) * (1 - env.cond.cover);
+  const moonWash = env.moon.altitude > 0 ? (1 - Math.abs(env.moon.phase - 0.5) * 2) * 0.8 : 0;
+  const mw = nightK * (1 - moonWash);
+  const mwBottom = RIDGE_Y + 20 * SCALE;
+  let mwCell = 0;
   const sun = skyXY(env.sun.azimuth, env.sun.altitude);
   const alt = env.sun.altitude;
   const glowOn = alt > -9;
@@ -35,53 +43,75 @@ export function renderSkyGradient(img, env) {
       }
       const d = bayer(x, y);
       const i = (y * W + x) * 4;
+      if (mw > 0 && y < mwBottom && (x & 1) === 0) {
+        // the Milky Way: galactic latitude of this bit of sky, sampled every 2 px; a soft band
+        // about 12 degrees wide with gentle brightness variation along it
+        const azP = 90 + 180 * x / W, altP = RIDGE_DEG + (RIDGE_Y - y) / PX_PER_DEG;
+        const eq = altAzToRaDec(azP, altP, env.lst, LAT);
+        const b = galacticLat(eq.ra, eq.dec);
+        // mottled along its length, with dark rifts, like the real thing
+        const m1 = mwNoise(eq.ra * 0.06, eq.dec * 0.09), m2 = mwNoise(eq.ra * 0.2 + 7, eq.dec * 0.3 + 3);
+        mwCell = Math.exp(-(b * b) / 110) * (0.35 + 0.65 * m1) * (0.6 + 0.4 * m2) * mw * 1.3;
+      }
+      if (mwCell > 0.02 && d < mwCell * 0.45) c = lerpRGB(c, [188, 198, 228], 0.22 + 0.2 * mwCell);
       data[i] = quant(c[0], 9, d); data[i + 1] = quant(c[1], 9, d); data[i + 2] = quant(c[2], 9, d); data[i + 3] = 255;
     }
   }
 }
 
-// Fixed star field.
-const STARS = (() => {
-  const rnd = mulberry32(4242); const s = [];
-  for (let i = 0; i < Math.round(420 * SCALE * SCALE); i++) s.push({ x: Math.floor(rnd() * W), y: Math.floor(rnd() * (HORIZON - 10)), b: rnd(), tw: rnd() * 6.28, big: rnd() > 0.93 });
-  return s;
-})();
-let skyStars = null;
-// Only stars over open sky: filtered once against the terrain mask when it is known.
-export function setStarMask(mask) {
-  skyStars = STARS.filter((s) => mask[(s.y * W + s.x) * 4] === 0);
+// The real sky: the Bright Star Catalog down to magnitude 5.2 (assets/stars.json: ra, dec, mag,
+// spectral class), projected for Missoula by sidereal time, so Orion stands in the south on a
+// winter evening and the summer Milky Way core sits over the ridge. Loaded on the page; the
+// worker never needs it. Stars are drawn into their own layer about ten times a second.
+let CATALOG = null;
+if (typeof window !== 'undefined') {
+  fetch(new URL('../../assets/stars.json', import.meta.url)).then((r) => r.json()).then((j) => { CATALOG = j; }).catch(() => {});
 }
-
-// Stars twinkle slowly, so they are drawn into their own layer about ten times a second and
-// that layer is stamped each frame (thousands of 1px rects per frame add up on a big canvas).
+const STAR_TINT = [[190, 210, 255], [205, 220, 255], [235, 240, 255], [255, 250, 235], [255, 240, 205], [255, 215, 170], [255, 190, 150]];
+let terrainMask = null;
+export function setStarMask(mask) { terrainMask = mask; }
 let starLayer = null, starCtx = null, starStamp = -1, starKey = '';
 export function drawStars(ctx, env, t) {
   const nf = clamp((-env.sun.altitude - 3) / 9, 0, 1) * (1 - env.cond.cover) * (env.cond.fog ? 0.4 : 1);
-  if (nf <= 0.02) return;
+  if (nf <= 0.02 || !CATALOG) return;
   if (!starLayer) { [starLayer, starCtx] = makeCanvas(W, HORIZON); }
   const stamp = Math.floor(t * 10);
-  const key = nf.toFixed(2);
+  const key = nf.toFixed(2) + '|' + Math.round(env.lst * 4);
   if (stamp !== starStamp || key !== starKey) {
     starStamp = stamp; starKey = key;
     const g = starCtx;
     g.clearRect(0, 0, W, HORIZON);
-    // group by brightness so the fill color changes a few times, not once per star
-    const buckets = new Array(8).fill(null).map(() => []);
-    for (const s of (skyStars || STARS)) {
-      const tw = 0.7 + 0.3 * Math.sin(t * 1.7 + s.tw);
-      const b = s.b * nf * tw;
-      if (b < 0.15) continue;
-      buckets[Math.min(7, (b * 8) | 0)].push(s, b);
+    // moonlight washes the faint ones out
+    const moonUp = env.moon.altitude > 0 ? 1 - Math.abs(env.moon.phase - 0.5) * 2 : 0;
+    const limit = 5.2 - moonUp * 1.6;
+    const buckets = [];
+    for (let i = 0; i < CATALOG.length; i++) {
+      const st = CATALOG[i];
+      if (st[2] > limit) break;   // sorted by magnitude
+      const pos = starAltAz(st[0], st[1], env.lst, LAT);
+      if (pos.azimuth < 92 || pos.azimuth > 268 || pos.altitude < 4) continue;   // the scene faces south
+      const p = skyXY(pos.azimuth, pos.altitude);
+      if (p.y < 0 || p.y >= HORIZON || p.x < 0 || p.x >= W) continue;
+      if (terrainMask && terrainMask[(p.y * W + p.x) * 4] !== 0) continue;
+      const tw = 0.75 + 0.25 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
+      const b = (0.22 + 0.78 * clamp((5.2 - st[2]) / 6.2, 0, 1)) * nf * tw;   // magnitude 5 faint .. Sirius bright
+      if (b < 0.1) continue;
+      const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
+      (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2]);
     }
-    for (let k = 0; k < 8; k++) {
-      const list = buckets[k];
-      if (!list.length) continue;
-      const v = Math.round(120 + 135 * ((k + 0.5) / 8));
-      g.fillStyle = `rgb(${v},${v},${Math.min(255, v + 15)})`;
-      for (let i = 0; i < list.length; i += 2) {
-        const s = list[i], b = list[i + 1];
-        if (s.big && b > 0.6) { g.fillRect(s.x - 1, s.y, 3, 1); g.fillRect(s.x, s.y - 1, 1, 3); }
-        else g.fillRect(s.x, s.y, 1, 1);
+    for (let k = 0; k < buckets.length; k++) {
+      const list = buckets[k]; if (!list) continue;
+      const lvl = (k / 8) | 0, tint = STAR_TINT[k % 8] || STAR_TINT[3];
+      const v = (lvl + 0.5) / 8;
+      g.fillStyle = `rgb(${(tint[0] * (0.62 + 0.38 * v)) | 0},${(tint[1] * (0.62 + 0.38 * v)) | 0},${(tint[2] * (0.62 + 0.38 * v)) | 0})`;
+      // sizes in scene pixels so the stars survive being shown at half size
+      const u = Math.max(1, Math.round(SCALE * 0.6));
+      for (let i = 0; i < list.length; i += 3) {
+        const x = list[i], y = list[i + 1], mag = list[i + 2];
+        if (mag < 1.5) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // the brightest: a cross
+        else if (mag < 3.0) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1);
+        else if (mag < 4.3) g.fillRect(x, y, u, u);
+        else g.fillRect(x, y, 1, 1);
       }
     }
   }
