@@ -50,7 +50,7 @@ Three rules that override everything else:
 
 ## Open items
 
-The "Next time" list in README.md. First on it: the Sentinel painting's tan slope runs across the frame and hides Dean Stone's base right of the trees; it needs a re-export of that painting with the far hill transparent, not a code change.
+The "Next time" list in README.md: the tan ridge right of the trees (needs a re-export of the Sentinel painting, not code), the magical-sky wishes (moon and cloud interaction, real stars by sidereal time, shooting stars), the open-topped trash can with critters, mobile touch and layout.
 
 ## Roadmap (not built yet)
 

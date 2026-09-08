@@ -65,6 +65,8 @@ Forecast data says how cloudy it is; a camera says where the clouds are. Seeing 
 ## Next time (notes from 2026-09-05)
 
 - **The tan hill right of the trees.** The Sentinel painting (`art/mount_sentinel_alone_transparent_sky.jpg`) carries its tan slope all the way across the frame, so in the layered scene Dean Stone's base sits behind a flat tan ridge instead of running down into the trees. It bothers us. Fix is in the art, not the code: a version of the Sentinel file with that far tan hill left transparent (checkerboard is fine), so Dean Stone shows through down to the tree line. Everything else in the layering stays as is.
+- **Magical sky (wanted, 2026-09-08).** Lots of moon and cloud interaction: clouds crossing the moon with silver-lit edges, the moon dimming behind veils and vanishing behind sheets, moonlit cloud tops on bright nights (the moon as a second light source for the cumulus shading). Real stars: a catalog of the brighter stars placed by Missoula's latitude and sidereal time so the constellations are where they really are that night, plus the Milky Way as a faint dithered band in dark months. Shooting stars: occasional meteors that streak and fade, more during known showers (Perseids mid-August, Geminids mid-December).
+- An open-topped trash can prop is coming (user's art), so sprite critters can pop out of it later; the build copies new props from the props-only file, and the can's rim needs a small mask so critters draw behind it.
 - Smoke season, wind-swayed foliage. Mobile: phones now get a half-size scene; touch targets and a landscape layout are still to do.
 
 ## Layout
