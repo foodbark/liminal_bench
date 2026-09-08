@@ -98,8 +98,8 @@ if (typeof Image !== 'undefined') {
   im.src = new URL('../../assets/moon.png', import.meta.url).href;
 }
 function moonRadius(alt) {
-  const swell = smooth(clamp(1 - (alt - RIDGE_DEG) / 20, 0, 1));   // 1x high up, 2x just over the ridge
-  return Math.max(6, Math.round(14 * SCALE * (1 + 1.0 * swell)));
+  const swell = smooth(clamp(1 - (alt - RIDGE_DEG) / 20, 0, 1));   // 1x high up, 1.4x just over the ridge
+  return Math.max(6, Math.round(12 * SCALE * (1 + 0.4 * swell)));
 }
 function moonSprite(phase, r) {
   const key = phase.toFixed(2) + '|' + r;
@@ -133,8 +133,8 @@ export function drawMoon(ctx, env) {
   const bright = 1 - Math.abs(m.phase - 0.5) * 2;
   if (nf > 0.3 && bright > 0.3) {
     // a soft halo, wider when the moon is low
-    ctx.fillStyle = ditherPattern(ctx, '#c9d3ec', 2); fillCircle(ctx, p.x, p.y, Math.round(r * 2.1));
-    ctx.fillStyle = ditherPattern(ctx, '#d8dff2', 4); fillCircle(ctx, p.x, p.y, Math.round(r * 1.5));
+    ctx.fillStyle = ditherPattern(ctx, '#c9d3ec', 2); fillCircle(ctx, p.x, p.y, Math.round(r * 1.9));
+    ctx.fillStyle = ditherPattern(ctx, '#d8dff2', 3); fillCircle(ctx, p.x, p.y, Math.round(r * 1.4));
   }
   const spr = moonSprite(m.phase, r);
   ctx.globalAlpha = vis;
