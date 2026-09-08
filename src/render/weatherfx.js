@@ -2,8 +2,38 @@ import { W, H, HORIZON, SCALE } from '../state.js';
 import { fillCircle, ditherPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine, makeCanvas } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
+import { starAltAz } from '../util/solar.js';
+import { skyXY } from './sky.js';
+import { LAT } from '../state.js';
 
 const RAD = Math.PI / 180;
+
+// The year's meteor showers: peak (month 0-11, day), width in days, radiant (ra, dec), and how
+// many times the sporadic rate they bring at peak.
+const SHOWERS = [
+  { name: 'Quadrantids', m: 0, d: 3, w: 1.5, ra: 230, dec: 49, k: 6 },
+  { name: 'Lyrids', m: 3, d: 22, w: 2, ra: 271, dec: 34, k: 3 },
+  { name: 'Eta Aquariids', m: 4, d: 6, w: 4, ra: 338, dec: -1, k: 3 },
+  { name: 'Perseids', m: 7, d: 12, w: 4, ra: 48, dec: 58, k: 7 },
+  { name: 'Orionids', m: 9, d: 21, w: 3, ra: 95, dec: 16, k: 3 },
+  { name: 'Leonids', m: 10, d: 17, w: 2, ra: 152, dec: 22, k: 3 },
+  { name: 'Geminids', m: 11, d: 14, w: 3, ra: 112, dec: 33, k: 7 },
+];
+function showerWeight(sh, now) {
+  const peak = new Date(now.getFullYear(), sh.m, sh.d, 12);
+  const days = Math.abs(now - peak) / 86400000;
+  return Math.exp(-(days * days) / (2 * sh.w * sh.w));
+}
+function activeShower(now) {
+  let best = null, bw = 0.15;
+  for (const sh of SHOWERS) { const w = showerWeight(sh, now); if (w > bw) { bw = w; best = sh; } }
+  return best;
+}
+function showerRate(now) {
+  let k = 1;
+  for (const sh of SHOWERS) k += (sh.k - 1) * showerWeight(sh, now);
+  return k;
+}
 const patCtx = makeCanvas(1, 1)[1];
 const ctx_pattern = (cv) => ({ cv });
 
@@ -12,6 +42,7 @@ export class WeatherFX {
     this.clouds = []; this.rnd = mulberry32(99);
     this.rain = { t: 0, tiles: null, key: '' }; this.snow = { t: 0, tiles: null, key: '' };
     this.flash = 0; this.nextFlash = 4;
+    this.meteors = []; this.nextMeteor = 20 + Math.random() * 60;
     this.t = 0;
   }
 
@@ -42,6 +73,14 @@ export class WeatherFX {
       if (this.nextFlash <= 0) { this.strike(); this.nextFlash = 4 + Math.random() * 10; }
     }
     if (this.flash > 0 && !this.holdBolt) this.flash -= dt;
+    // shooting stars: on dark clear nights, one every minute or two, many more during a shower
+    const dark = clamp((-env.sun.altitude - 6) / 6, 0, 1) * (1 - env.cond.cover);
+    if (dark > 0.2) {
+      this.nextMeteor -= dt * showerRate(env.now);
+      if (this.nextMeteor <= 0) { this.meteor(env); this.nextMeteor = 45 + Math.random() * 90; }
+    }
+    for (const m of this.meteors) if (!m.hold) m.t += dt;   // hold: frozen for screenshots
+    this.meteors = this.meteors.filter((m) => m.t < m.life);
   }
 
   makeCloud(anywhere) {
@@ -56,6 +95,29 @@ export class WeatherFX {
     c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;
     c.depth = depth;
     return c;
+  }
+
+  // A meteor: a streak from near the shower's radiant (or anywhere, for a sporadic), lasting
+  // under a second, with a bright head and a tail that thins out through the dither.
+  meteor(env) {
+    const sh = activeShower(env.now);
+    let x0, y0, dx, dy;
+    const r = sh ? starAltAz(sh.ra, sh.dec, env.lst, LAT) : null;
+    if (r && r.altitude > -10 && r.azimuth > 70 && r.azimuth < 290) {
+      // radiate away from the radiant, starting some way out from it
+      const rp = skyXY(r.azimuth, r.altitude);
+      const a = Math.random() * Math.PI * 2;
+      const d0 = (60 + Math.random() * 300) * SCALE;
+      x0 = rp.x + Math.cos(a) * d0; y0 = rp.y + Math.sin(a) * d0;
+      dx = Math.cos(a); dy = Math.sin(a);
+      if (y0 < 0 || y0 > HORIZON * 0.45 || x0 < 0 || x0 > W) { x0 = Math.random() * W; y0 = Math.random() * HORIZON * 0.35; }
+    } else {
+      x0 = Math.random() * W; y0 = Math.random() * HORIZON * 0.35;
+      const a = (Math.random() < 0.5 ? 0.35 : 2.8) + (Math.random() - 0.5) * 0.6;   // down-right or down-left
+      dx = Math.cos(a); dy = Math.abs(Math.sin(a));
+    }
+    const n = Math.hypot(dx, dy) || 1;
+    this.meteors.push({ x: x0, y: y0, dx: dx / n, dy: dy / n, v: (700 + Math.random() * 600) * SCALE, len: (90 + Math.random() * 160) * SCALE, t: 0, life: 0.45 + Math.random() * 0.35, bright: Math.random() < 0.15 });
   }
 
   // A lightning strike: the whole-frame flash plus a jagged bolt with a couple of branches
@@ -177,6 +239,19 @@ export class WeatherFX {
         const ox = ((this.snow.t * drift * kk + Math.sin(this.snow.t * (layer ? 0.9 : 1.3)) * 14 * SCALE) % T + T) % T;
         tileOver(ctx, tiles[layer].cv, T, ox, oy);
       }
+    }
+    for (const m of this.meteors) {
+      const fade = 1 - m.t / m.life;
+      const hx = m.x + m.dx * m.v * m.t, hy = m.y + m.dy * m.v * m.t;
+      const L = m.len * Math.min(1, m.t * 4) * (0.5 + 0.5 * fade);
+      const segs = [[0.0, 0.25, m.bright ? '#ffffff' : '#f4f6ff', 16], [0.25, 0.6, '#dfe6ff', 8], [0.6, 1.0, '#b8c4ee', 3]];
+      for (const [a, b, color, level] of segs) {
+        ctx.fillStyle = level < 16 ? ditherPattern(ctx, color, Math.max(1, Math.round(level * fade))) : color;
+        plotLine(ctx, hx - m.dx * L * a, hy - m.dy * L * a, hx - m.dx * L * b, hy - m.dy * L * b);
+        if (m.bright && a === 0) plotLine(ctx, hx - m.dx * L * a + 1, hy - m.dy * L * a, hx - m.dx * L * b + 1, hy - m.dy * L * b);
+      }
+      const u = Math.max(1, Math.round(SCALE * 0.6));
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(hx) - (u >> 1), Math.round(hy) - (u >> 1), u + (m.bright ? 1 : 0), u + (m.bright ? 1 : 0));
     }
     if (this.flash > 0) {
       ctx.fillStyle = ditherPattern(ctx, '#e8ecff', this.flash > 0.1 ? 3 : 1); ctx.fillRect(0, 0, W, H);
