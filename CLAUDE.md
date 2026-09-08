@@ -46,7 +46,7 @@ Three rules that override everything else:
 
 **Props** (`src/render/props.js`) are painted; this module only knows where they are (`PROPS`/`HOTSPOTS` from `META`) and draws what changes: notes on the cork, snow caps, sun shadows, the lantern's night glow. Redrawn only when `sunSide`, `groundSnow`, or `state.notesVersion` changes; bump `notesVersion` after mutating `state.notes`.
 
-**UI** (`src/ui.js`): hover captions, click-to-zoom (`VIEWS` from `META`), HTML panels (`PANELS`, placeholder text), the debug panel (`D`), the status line. The canvas is CSS-scaled by `--s`; UI sizes are multiples of it. Desktop first; a mobile landscape version is a later job.
+**UI** (`src/ui.js`): hover captions, click-to-zoom (`VIEWS` from `META`), HTML panels (`PANELS`, placeholder text), the debug panel (`D`), the status line. The canvas is CSS-scaled by `--s`; UI sizes are multiples of it. When the scene is shown smaller than its pixels the canvas uses smooth scaling (`image-rendering: auto`, set in `fitStage`), because nearest-neighbor downscaling drops rows of the 4x4 Bayer pattern and turns every dither into blotches; crisp scaling only when shown larger. The screenshot tool renders at native size and never shows this, so judge dither on a real window. Desktop first; a mobile landscape version is a later job.
 
 ## Open items
 

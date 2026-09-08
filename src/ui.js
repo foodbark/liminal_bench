@@ -13,6 +13,10 @@ export function setupUI(state, canvas) {
   function fitStage() {
     const s = Math.min(window.innerWidth / W, window.innerHeight / H);
     document.documentElement.style.setProperty('--s', s);
+    // shown smaller than its pixels, the scene is scaled smoothly so the dither averages into
+    // the soft tones it was drawn for (nearest-neighbor drops rows of the 4x4 pattern and turns
+    // it into blotches); shown larger, pixels stay crisp
+    canvas.style.imageRendering = s < 1 ? 'auto' : 'pixelated';
     document.documentElement.style.setProperty('--w', W + 'px');
     document.documentElement.style.setProperty('--h', H + 'px');
   }
