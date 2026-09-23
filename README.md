@@ -28,7 +28,7 @@ Then open http://127.0.0.1:5173. Any static file server works; there is no build
 
 ## Coming
 
-Goal: have this up and running somewhere public, even barebones, by mid September 2026.
+It has been public and barebones since mid September 2026. Next goal: a real domain, and one thing on the board you can actually touch.
 
 - Pay phone: phone book with numbers, leaving and hearing voicemails.
 - Bulletin board: post notes that weather over time and eventually fall off.
@@ -63,11 +63,39 @@ Forecast data says how cloudy it is; a camera says where the clouds are. Seeing 
 - Concept art comes first as a guide; the procedural scene gets retuned to match it.
 - Possibly hand-drawn props (bench, board, pay phone) as PNG sprites, and possibly painted backgrounds in places with procedural overlays (snow, fog, light) on top.
 
-## Next time (notes from 2026-09-05)
+## Backlog (2026-09-23)
 
-- **The tan hill right of the trees.** The Sentinel painting (`art/mount_sentinel_alone_transparent_sky.jpg`) carries its tan slope all the way across the frame, so in the layered scene Dean Stone's base sits behind a flat tan ridge instead of running down into the trees. It bothers us. Fix is in the art, not the code: a version of the Sentinel file with that far tan hill left transparent (checkerboard is fine), so Dean Stone shows through down to the tree line. Everything else in the layering stays as is.
+Three quiet weeks, and the season moved without us. Smoke is done for the year. The valley trees are turning now, the larches on Dean Stone go gold in early October, and first snow on the mountain arrives when it arrives.
+
+### Denver punch list — Monday Sept 28 and Tuesday Sept 29
+
+Two days off work, on a laptop in a coffee shop, four states from the actual weather. Nothing on this list needs to look out a window or sit through a full art build, so it is the code-and-plumbing list. Roughly in order.
+
+- [ ] **Settle whether the painting distinguishes larch from fir** (see the fall section below). Needs only the painting we already have and a `--debug` overlay, so a coffee shop is a fine place to do it, and the answer decides whether the larch are a code change or a repaint. Larch start turning about a week after Denver, so this is the last comfortable moment to find out.
+- [ ] **Kill the calendar first snow.** `SEASON_SNOW` in `src/state.js` jumps November to 0.5, so on Nov 1 the peaks go white whether or not a flake has fallen. Take the *arrival* out of the table and drive it from data: a second Open-Meteo query at the ridge's latitude, longitude and elevation (the API takes an `elevation` parameter, and the valley station is useless for a summit), plus a latch, so that once snow has accumulated up there the peaks stay snowed through the winter instead of flickering with each forecast refresh. The table keeps its job for depth and spring melt. Until this lands, October's 0.04 is correct and should not be nudged upward out of impatience.
+- [ ] **Bulletin board, step one, no backend.** Make notes postable and persistent in `localStorage`: a compose field on the cork zoom, writes to `state.notes`, `state.notesVersion++` to force the prop redraw, and notes that age — paper yellowing, a corner curling, gone after a couple of weeks. That is the entire interaction loop, single-player, and it works on bad coffee-shop wifi. The shared version later is the same UI pointed at a server instead of a browser.
+- [ ] **Stand up the backend: Cloudflare Workers + D1.** Decided 2026-09-23 — already familiar, and the DNS is going there anyway. Free tier, one `wrangler deploy`, SQLite semantics. Deliverable for the day is `GET /notes` and `POST /notes` against a real table, with a rate limit from the first commit, because an anonymous public board will eventually be found.
+- [ ] **Move the site to Cloudflare Pages.** Decided 2026-09-23. DNS, the Worker and now the host all in one account, which puts the API on the same origin under `/api/*` so CORS never becomes a problem to debug. Pages builds on a push to `master` exactly the way GitHub Pages does — no build command, output directory is the repo root — so `master` stays production and the workflow does not change. Keep the GitHub Pages deployment alive until the new one is verified, then retire it and leave a redirect.
+- [ ] **Get the domain.** `liminalbench.net`, unless the "reads like an AI benchmark" thing starts to grate; a DNS check on 2026-09-23 found no delegation, but confirm at the registrar. Register through Cloudflare at cost, attach it to the Pages project in the dashboard, and the certificate and apex records handle themselves — none of the GitHub `CNAME`-file and A-record dance is needed. Watch for anything assuming the `/liminal_bench/` path prefix: the site moves to the root of its own host. Runner-up name if it comes to that: `nothingtowin.net`.
+- [ ] **Mobile touch and landscape**, if there is time left. Phones already get the half-size scene, but hotspots and panels still assume a mouse: tap targets, a way out of a zoom without an Esc key, and a landscape layout.
+
+### Seasonal, and only buildable while it is happening
+
+**Which trees turn is the whole problem.** Everything that changes color in this valley is scattered inside something that does not. Larch on Dean Stone are individual trees sprinkled through a matrix of pine and fir — a small fraction of the dome, not a band across it. The foreground valley trees are a mix of deciduous and evergreen, and so are the shrubs on Sentinel. The mask does not know the difference: it has one `FOLIAGE` code and one `SHRUB` code, so any tint keyed to material turns every tree on the mountain at once, which is worse than leaving it green. Three items below, but one question underneath all of them, and it should be answered first.
+
+- **Does the painting already know which trees are which?** Larch and cottonwood read a different green than fir, and if that difference survived into the painting then the build can classify it — hue and value histograms over the forest region, a `--debug` overlay tinting the candidates, and a look. This is squarely what the build is for: it masks, classifies and cleans what is painted, and invents nothing. If the answer is yes, the rest is cheap. If it is no, the scatter has to come from the art, because code choosing *which* trees are larch is code drawing the picture. Ten minutes of work and it decides the next three weeks, so do it before anything else in the fall list.
+- **If classification works: new material codes, and the packing has to change.** `LARCH` and `DECIDUOUS` want to be materials 8 and 9, but codes are stored `32 *` in the mask's G channel (`tools/build_backdrop.py:362`) and 8 would overflow the byte. Re-space to 16 apart: sixteen codes, snap becomes `(v + 8) >> 4` in `src/assets.js:26`, and the drift tolerance drops from ±16 to ±8 — still far more than the unit or two of color management this defends against. Three places to touch and a rebuild.
+- **If it does not: the art supplies the scatter.** An overlay painting over the existing framing, gold dabs where the larch actually are and checkerboard everywhere else, keyed in the way `front` already is. Registration is the risk, so it wants to be derived from the current painting rather than generated fresh.
+- **Then the tint, and it should be saturated.** Only a tenth of those pixels change, so a gentle wash across them reads as nothing at all. Real larch season is gold flecked through dark green and it *pops*; the pixels that turn should go most of the way to gold while their neighbors stay fir-dark. Ramp in over about ten days, hold, then drop to bare gray-brown. A channel-ratio tint like `grassTint` may not survive a green-to-gold swing that big — mapping luminance through a gold ramp is the fallback.
+- **Timing.** Valley trees are turning now and hold through late October. Larch go around Oct 5 into early November. Sentinel's shrubs come along with the valley. Dean Stone is the favorite mountain; check it first and check it again last.
+- **First snow on the mountain top: wait for first snow on the mountain top.** No calendar snow, no getting ahead of it. See the punch list item above. It will happen overnight and the payoff is the morning after — a white crest over a still-green valley — so the code should be exercised through the debug panel *before* the event, not written during it.
+- **Smoke season is over.** The PM2.5 haze idea keeps its notes above and comes back in August 2027. Tuning haze with no haze to look at is how it ends up gray.
+
+### Still open from September 5
+
+- **The tan hill right of the trees.** The Sentinel painting (`art/mount_sentinel_alone_transparent_sky.jpg`) carries its tan slope all the way across the frame, so in the layered scene Dean Stone's base sits behind a flat tan ridge instead of running down into the trees. It bothers us. Fix is in the art, not the code: a version of the Sentinel file with that far tan hill left transparent (checkerboard is fine), so Dean Stone shows through down to the tree line. Everything else in the layering stays as is. Worth doing before the larches, since it is the same mountain.
 - An open-topped trash can prop is coming (user's art), so sprite critters can pop out of it later; the build copies new props from the props-only file, and the can's rim needs a small mask so critters draw behind it.
-- Smoke season, wind-swayed foliage. Mobile: phones now get a half-size scene; touch targets and a landscape layout are still to do.
+- Wind-swayed foliage.
 
 ## Layout
 
