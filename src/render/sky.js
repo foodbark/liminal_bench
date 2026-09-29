@@ -92,12 +92,15 @@ export function drawStars(ctx, env, t) {
       const st = CATALOG[i];
       if (st[2] > limit) break;   // sorted by magnitude
       const pos = starAltAz(st[0], st[1], env.lst, LAT);
-      if (pos.azimuth < 92 || pos.azimuth > 268 || pos.altitude < 4) continue;   // the scene faces south
+      // the scene faces south; the terrain mask hides what is behind the ridges, and the painted
+      // ridges run well below the nominal 8 degree line, so stars go down to -8 degrees
+      if (pos.azimuth < 92 || pos.azimuth > 268 || pos.altitude < -8) continue;
       const p = skyXY(pos.azimuth, pos.altitude);
       if (p.y < 0 || p.y >= HORIZON || p.x < 0 || p.x >= W) continue;
       if (terrainMask && terrainMask[(p.y * W + p.x) * 4] !== 0) continue;
       const tw = 0.75 + 0.25 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
-      const b = (0.22 + 0.78 * clamp((5.2 - st[2]) / 6.2, 0, 1)) * nf * tw;   // magnitude 5 faint .. Sirius bright
+      const ext = pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1;   // haze dims them near the ridge
+      const b = (0.22 + 0.78 * clamp((5.2 - st[2]) / 6.2, 0, 1)) * nf * tw * ext;   // magnitude 5 faint .. Sirius bright
       if (b < 0.1) continue;
       const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2]);
