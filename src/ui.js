@@ -5,6 +5,8 @@ import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
+// screens where a panel over a close-up would cover what it describes: touch, or a short window
+const COMPACT = typeof matchMedia === 'function' ? matchMedia('(pointer: coarse), (max-height: 520px)') : { matches: false };
 
 export function setupUI(state, canvas) {
   const $ = (id) => document.getElementById(id);
@@ -67,10 +69,14 @@ export function setupUI(state, canvas) {
       const b = document.createElement('button'); b.textContent = label; b.onclick = fn; pActions.appendChild(b);
     }
     panel.className = 'dock-' + (VIEWS[view].dock || 'center');
+    // Over a close-up the panel sits on the prop itself. A phone has no room for the words:
+    // there the panel folds to its buttons, a strip over the top rail, and the cork stays clear.
+    if (CLOSEUPS[view] && COMPACT.matches) panel.classList.add('compact');
     panel.hidden = false;
   }
   // Pinning a note: a scrap of paper, a pencil, one line. Enter or "pin it" posts it.
   function compose() {
+    panel.classList.remove('compact');   // the form needs its words and its field
     pTitle.textContent = 'bulletin board';
     pBody.innerHTML = '';
     const lead = document.createElement('div');
