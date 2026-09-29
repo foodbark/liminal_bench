@@ -75,6 +75,16 @@ Contrails overhead, and once in a while a plane letting down into Missoula off t
 - **They are clouds, so light them like clouds.** A contrail at sunset is orange from below and the last thing in the sky still lit after the valley goes blue; `cloudTones` already knows how to do that. At night, an arrival is a blinking strobe and nothing else.
 - **Restraint.** Missoula is not busy, and the appeal is that a plane is an event rather than traffic. If the live feed is ever empty or rate-limited, an empty sky is the correct fallback and needs no handling.
 
+### Satellites (idea, 2026-09-28)
+
+The night sky is already real (catalog stars by sidereal time, the Milky Way, showers from their radiants), and satellites are the one thing a person actually sees moving up there. Public data, no key.
+
+- **Source.** CelesTrak publishes orbital elements (TLEs) for everything, free: the "visual" group is the hundred or so bright enough to see by eye, plus the ISS and the Starlink groups. Elements go stale over days, so fetch them once a day, cached the same way the notes function caches (a Pages Function fetching upstream once and serving every visitor is the shape that already exists).
+- **Propagation in the browser.** SGP4 from the elements gives a position for any time; `satellite.js` is the standard library and small, or the handful of formulas can live in `src/util/`. Then the same alt-az to screen mapping the stars use (`skyXY`).
+- **Visibility is the interesting rule.** A satellite shows only when it is in sunlight and the ground is dark: the first couple of hours after sunset and before sunrise, and all night in June. That is a shadow-cylinder test against the sun's position, which `solar.js` already has. Deep in a winter night the sky is empty of them, which is correct.
+- **What to draw.** A steady dot crossing the frame over two to five minutes, no blinking (blinking is a plane), brightness from the object's standard magnitude and range; the ISS is the bright one and worth a caption on hover. A Starlink train in the weeks after a launch is a line of dots in a row, and people would come to see it. Fading into the Earth's shadow mid-sky is real and looks good.
+- **Restraint, again.** A few visible passes a night is the true rate; the sky should not crawl.
+
 ## Backlog (2026-09-23)
 
 Three quiet weeks, and the season moved without us. Smoke is done for the year. The valley trees are turning now, the larches on Dean Stone go gold in early October, and first snow on the mountain arrives when it arrives.
@@ -117,6 +127,7 @@ Telling those apart buys the whole year, not three weeks of October. The same sp
 - **The tan hill right of the trees.** The Sentinel painting (`art/mount_sentinel_alone_transparent_sky.jpg`) carries its tan slope all the way across the frame, so in the layered scene Dean Stone's base sits behind a flat tan ridge instead of running down into the trees. It bothers us. Fix is in the art, not the code: a version of the Sentinel file with that far tan hill left transparent (checkerboard is fine), so Dean Stone shows through down to the tree line. Everything else in the layering stays as is. Worth doing before the larches, since it is the same mountain.
 - An open-topped trash can prop is coming (user's art), so sprite critters can pop out of it later; the build copies new props from the props-only file, and the can's rim needs a small mask so critters draw behind it.
 - Wind-swayed foliage.
+- **Lolo Peak, right of Dean Stone (2026-09-28).** It sits south-southwest of town, so in the scene's east-to-west sweep it belongs in the empty sky right of Dean Stone's shoulder: higher, twice as far, paler, snow into July. The mask's `peak` layer is unused and already has its lighting row (most aerial perspective, sun horizon -4°, longest dusting melt), so it slots in with no new code. Needs: a painting from the user of the upper part of the massif alone on checkerboard at scene size; a `back` option in the build to composite a painting behind Dean Stone where its sky is; the `peak` trace re-measured and a summit snow cap; and its own snow lapse (summit 2772 m, versus Dean Stone's 2050 m) or a bias in the season table, or it melts off months early.
 
 ## Layout
 
