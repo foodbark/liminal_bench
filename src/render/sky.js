@@ -24,7 +24,6 @@ export function renderSkyGradient(img, env) {
   const nightK = clamp((-env.sun.altitude - 6) / 8, 0, 1) * (1 - env.cond.cover);
   const moonWash = env.moon.altitude > 0 ? (1 - Math.abs(env.moon.phase - 0.5) * 2) * 0.8 : 0;
   const mw = nightK * (1 - moonWash);
-  const mwBottom = RIDGE_Y + 20 * SCALE;
   let mwCell = 0;
   const sun = skyXY(env.sun.azimuth, env.sun.altitude);
   const alt = env.sun.altitude;
@@ -44,7 +43,7 @@ export function renderSkyGradient(img, env) {
       }
       const d = bayer(x, y);
       const i = (y * W + x) * 4;
-      if (mw > 0 && y < mwBottom && (x & 1) === 0) {
+      if (mw > 0 && (x & 1) === 0) {
         // the Milky Way: galactic latitude of this bit of sky, sampled every 2 px; a soft band
         // about 12 degrees wide with gentle brightness variation along it
         const azP = 90 + 180 * x / W, altP = RIDGE_DEG + (RIDGE_Y - y) / PX_PER_DEG;
@@ -52,7 +51,10 @@ export function renderSkyGradient(img, env) {
         const b = galacticLat(eq.ra, eq.dec);
         // mottled along its length, with dark rifts, like the real thing
         const m1 = mwNoise(eq.ra * 0.06, eq.dec * 0.09), m2 = mwNoise(eq.ra * 0.2 + 7, eq.dec * 0.3 + 3);
-        mwCell = Math.exp(-(b * b) / 110) * (0.35 + 0.65 * m1) * (0.6 + 0.4 * m2) * mw * 1.3;
+        // and thinning toward the ridge, the way haze eats it near the horizon; no hard cut,
+        // since the painted ridges sit well below the nominal ridge line in places
+        const ext = smooth(clamp((altP + 6) / 20, 0, 1));
+        mwCell = Math.exp(-(b * b) / 110) * (0.35 + 0.65 * m1) * (0.6 + 0.4 * m2) * mw * 1.3 * ext;
       }
       if (mwCell > 0.02 && d < mwCell * 0.45) c = lerpRGB(c, [188, 198, 228], 0.22 + 0.2 * mwCell);
       data[i] = quant(c[0], 9, d); data[i + 1] = quant(c[1], 9, d); data[i + 2] = quant(c[2], 9, d); data[i + 3] = 255;
