@@ -1,6 +1,7 @@
 import { W, H, META, formatTime } from './state.js';
 import { HOTSPOTS } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
+import { peakSnowLatched, peakSnowSince } from './season.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
 
@@ -48,6 +49,7 @@ export function setupUI(state, canvas) {
     if (e.key === 'Escape') leave();
     if (e.key === 'd' || e.key === 'D') { const d = $('debug'); d.hidden = !d.hidden; }
   });
+  if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
   function enter(view) { state.view = view; state.hover = null; canvas.classList.remove('hot'); }
   function leave() { state.view = 'scene'; hidePanel(); }
@@ -66,10 +68,10 @@ export function setupUI(state, canvas) {
   }
 
   // debug controls
-  const dbg = { enabled: $('dbg-enabled'), hour: $('dbg-hour'), month: $('dbg-month'), weather: $('dbg-weather'), cover: $('dbg-cover'), moon: $('dbg-moon'), info: $('dbg-info') };
+  const dbg = { enabled: $('dbg-enabled'), hour: $('dbg-hour'), month: $('dbg-month'), weather: $('dbg-weather'), cover: $('dbg-cover'), moon: $('dbg-moon'), peaks: $('dbg-peaks'), info: $('dbg-info') };
   const sync = () => {
     const o = state.override;
-    o.enabled = dbg.enabled.checked; o.hour = +dbg.hour.value; o.month = +dbg.month.value; o.weather = dbg.weather.value; o.cover = +dbg.cover.value; o.moon = dbg.moon.value;
+    o.enabled = dbg.enabled.checked; o.hour = +dbg.hour.value; o.month = +dbg.month.value; o.weather = dbg.weather.value; o.cover = +dbg.cover.value; o.moon = dbg.moon.value; o.peaks = dbg.peaks.value;
     const hh = Math.floor(o.hour), mm = Math.round((o.hour - hh) * 60);
     $('dbg-hour-val').textContent = `${String(hh % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     $('dbg-cover-val').textContent = o.cover < 0 ? 'auto' : o.cover + '%';
@@ -101,7 +103,12 @@ export function setupUI(state, canvas) {
         const r = window.__liminal && window.__liminal.renderer;
         if (r && !r.terrainKey) bits.push(r.diag && r.diag.errors.length ? 'scene failed to load, add ?diag to the address for details' : 'lighting the scene…');
         status.textContent = (state.override.enabled ? 'preview · ' : '') + bits.join(' · ');
-        if (!$('debug').hidden) dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\nwind ${env.wind.speed} mph from ${env.wind.dir}°`;
+        if (!$('debug').hidden) {
+          const rg = state.weather.ridge, since = peakSnowSince();
+          const peaks = rg ? `summit ${Math.round(rg.temp)}°f, ${Math.round(rg.snowDepth * 100)} cm` : 'summit n/a';
+          const latch = peakSnowLatched(state.now) ? `snowed in since ${since.getMonth() + 1}/${since.getDate()}` : 'no first snow yet';
+          dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\npeaks: ${peaks}, ${latch}\nwind ${env.wind.speed} mph from ${env.wind.dir}°`;
+        }
       }
     },
   };

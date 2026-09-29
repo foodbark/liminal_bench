@@ -6,6 +6,7 @@ import { Renderer } from './render/renderer.js';
 import { makeNote } from './render/props.js';
 import { setupUI } from './ui.js';
 import { loadBackdrop } from './assets.js';
+import { peakSnowAmount, updatePeakSnowLatch, PEAK_BARE, PEAK_FIRST } from './season.js';
 
 const state = createState();
 const NOTE_TEXTS = ['lost: orange cat, answers to "biscuit"', 'free piano. you haul.', 'open mic thursdays', 'room for rent, quiet house', 'the river is low this year', 'call me'];
@@ -92,10 +93,14 @@ function computeEnv() {
   let moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
   if (o.enabled && o.moon !== 'live') moon = { ...moon, ...{ full: { phase: 0.5, altitude: 40, azimuth: 160 }, half: { phase: 0.25, altitude: 30, azimuth: 200 }, low: { phase: 0.5, altitude: 11, azimuth: 140 }, none: { altitude: -20 } }[o.moon] };
   const pal = skyPalette(sun.altitude, cond);
-  let snowAmount = SEASON_SNOW[month];
+  const liveData = w.ok && !(o.enabled && o.weather !== 'live');
+  // Snow on the peaks: the summit weather and its latch decide when it arrives, the month table
+  // how deep it gets (src/season.js); the debug panel can force any state of it.
+  const peaks = o.enabled ? o.peaks : 'live';
+  let snowAmount = peaks === 'bare' ? PEAK_BARE : peaks === 'first' ? PEAK_FIRST : peaks === 'winter' ? Math.max(SEASON_SNOW[month], 0.5)
+    : peakSnowAmount(month, now, preset ? null : w.ridge);
   if (w.snowDepth > 0.05) snowAmount = Math.max(snowAmount, 0.65);
   if (cond.precip.type === 'snow') snowAmount = Math.max(snowAmount, 0.5);
-  const liveData = w.ok && !(o.enabled && o.weather !== 'live');
   const groundSnow = w.snowDepth > 0.02
     || (cond.precip.type === 'snow' && (w.temp == null || w.temp <= 33))
     || (!liveData && SEASON_SNOW[month] >= 0.95); // no real data: assume a white valley floor in deep winter
@@ -114,7 +119,12 @@ function computeEnv() {
 }
 
 async function refreshWeather() {
-  try { state.weather = await fetchWeather(); renderer.diag.weather = 'ok ' + new Date().toLocaleTimeString(); }
+  try {
+    state.weather = await fetchWeather();
+    updatePeakSnowLatch(state.weather.ridge, new Date());
+    const rg = state.weather.ridge;
+    renderer.diag.weather = 'ok ' + new Date().toLocaleTimeString() + (rg ? ` · summit ${Math.round(rg.temp)}°f, ${Math.round(rg.snowDepth * 100)} cm snow` : ' · summit unavailable');
+  }
   catch (err) { console.warn('weather fetch failed', err); state.weather.ok = false; renderer.diag.weather = 'failed: ' + (err && err.message || err); }
 }
 refreshWeather();

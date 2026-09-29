@@ -1,13 +1,32 @@
-import { LAT, LON } from './state.js';
+import { LAT, LON, RIDGE, localHourKey } from './state.js';
 
 const URL = 'https://api.open-meteo.com/v1/forecast'
   + `?latitude=${LAT}&longitude=${LON}`
   + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
   + '&hourly=snow_depth,snowfall,temperature_2m&past_days=1&forecast_days=1&timezone=America%2FDenver'
   + '&temperature_unit=fahrenheit&wind_speed_unit=mph';
+// The same model lapsed to Dean Stone's summit (Open-Meteo takes an elevation): snow on the
+// ridges is decided up there, where the valley station is useless. Three days back, so an
+// overnight fall that the current hour has already melted still counts.
+const RIDGE_URL = 'https://api.open-meteo.com/v1/forecast'
+  + `?latitude=${RIDGE.lat}&longitude=${RIDGE.lon}&elevation=${RIDGE.elevation}`
+  + '&hourly=snow_depth,snowfall,temperature_2m&past_days=3&forecast_days=1&timezone=America%2FDenver&temperature_unit=fahrenheit';
+
+export async function fetchRidge() {
+  const r = await fetch(RIDGE_URL);
+  if (!r.ok) throw new Error('ridge http ' + r.status);
+  const h = (await r.json()).hourly;
+  const key = localHourKey(new Date());
+  let at = h.time.findIndex((t) => t.slice(0, 13) === key);
+  if (at < 0) at = h.time.length - 1;
+  let freshSnow = 0, maxDepth = 0;
+  for (let k = Math.max(0, at - 72); k <= at; k++) { freshSnow += h.snowfall[k] || 0; maxDepth = Math.max(maxDepth, h.snow_depth[k] || 0); }
+  // snowDepth: metres on the ground at the summit now; freshSnow: cm fallen in the last three days
+  return { ok: true, snowDepth: h.snow_depth[at] || 0, maxDepth, freshSnow, temp: h.temperature_2m[at] };
+}
 
 export async function fetchWeather() {
-  const r = await fetch(URL);
+  const [r, ridge] = await Promise.all([fetch(URL), fetchRidge().catch((e) => { console.warn('ridge fetch failed', e); return null; })]);
   if (!r.ok) throw new Error('weather http ' + r.status);
   const j = await r.json();
   const c = j.current;
@@ -31,6 +50,7 @@ export async function fetchWeather() {
     temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100, coverMid: (c.cloud_cover_mid ?? 0) / 100, coverHigh: (c.cloud_cover_high ?? 0) / 100,
     wind: c.wind_speed_10m, windDir: c.wind_direction_10m,
     precip: c.precipitation, snowfall: c.snowfall, snowDepth, freshSnow, thawHours,
+    ridge,
   };
 }
 
