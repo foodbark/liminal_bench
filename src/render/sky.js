@@ -10,7 +10,8 @@ const SKY_BOTTOM = HORIZON + 24;
 // 90..270 runs left to right. Vertically, the ridge line (about half the horizon height) stands
 // for RIDGE_DEG of altitude, the way Missoula's hills sit about 8 degrees up from the valley,
 // and the top of the frame is about 58 degrees; anything lower than the ridge is behind it.
-const RIDGE_Y = Math.round(HORIZON * 0.5), RIDGE_DEG = 8, PX_PER_DEG = RIDGE_Y / 50;
+const RIDGE_Y = Math.round(HORIZON * 0.5), RIDGE_DEG = 8;
+export const PX_PER_DEG = RIDGE_Y / 50;   // scene pixels per degree of altitude, for anything sized in sky degrees
 export function skyXY(az, alt) {
   return { x: Math.round(W * ((az - 90) / 180)), y: Math.round(RIDGE_Y - (alt - RIDGE_DEG) * PX_PER_DEG) };
 }

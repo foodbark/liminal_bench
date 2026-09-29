@@ -3,7 +3,7 @@ import { fillCircle, ditherPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotL
 import { mulberry32 } from '../util/noise.js';
 import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
 import { starAltAz } from '../util/solar.js';
-import { skyXY } from './sky.js';
+import { skyXY, PX_PER_DEG } from './sky.js';
 import { LAT } from '../state.js';
 
 const RAD = Math.PI / 180;
@@ -117,7 +117,11 @@ export class WeatherFX {
       dx = Math.cos(a); dy = Math.abs(Math.sin(a));
     }
     const n = Math.hypot(dx, dy) || 1;
-    this.meteors.push({ x: x0, y: y0, dx: dx / n, dy: dy / n, v: (700 + Math.random() * 600) * SCALE, len: (90 + Math.random() * 160) * SCALE, t: 0, life: 0.45 + Math.random() * 0.35, bright: Math.random() < 0.15 });
+    // Real meteors are short: a few degrees of sky in a fraction of a second, a fireball maybe
+    // twice that. The path is set in degrees so it stays a small streak, not a line across the frame.
+    const bright = Math.random() < 0.15;
+    const travel = (7 + Math.random() * 9) * PX_PER_DEG * (bright ? 1.7 : 1), life = 0.3 + Math.random() * 0.25;
+    this.meteors.push({ x: x0, y: y0, dx: dx / n, dy: dy / n, v: travel / life, len: travel * (0.5 + Math.random() * 0.3), t: 0, life, bright });
   }
 
   // A lightning strike: the whole-frame flash plus a jagged bolt with a couple of branches
@@ -216,6 +220,23 @@ export class WeatherFX {
     return { T, tiles };
   }
 
+  // Meteors are drawn between the stars and the terrain, so a streak that reaches the ridge goes
+  // behind the mountain instead of across the field.
+  drawMeteors(ctx) {
+    for (const m of this.meteors) {
+      const fade = 1 - m.t / m.life;
+      const hx = m.x + m.dx * m.v * m.t, hy = m.y + m.dy * m.v * m.t;
+      const L = m.len * Math.min(1, m.t * 7) * (0.5 + 0.5 * fade);
+      const segs = [[0.0, 0.25, m.bright ? '#ffffff' : '#f4f6ff', 16], [0.25, 0.6, '#dfe6ff', 8], [0.6, 1.0, '#b8c4ee', 3]];
+      for (const [a, b, color, level] of segs) {
+        ctx.fillStyle = level < 16 ? ditherPattern(ctx, color, Math.max(1, Math.round(level * fade))) : color;
+        plotLine(ctx, hx - m.dx * L * a, hy - m.dy * L * a, hx - m.dx * L * b, hy - m.dy * L * b);
+        if (m.bright && a === 0) plotLine(ctx, hx - m.dx * L * a + 1, hy - m.dy * L * a, hx - m.dx * L * b + 1, hy - m.dy * L * b);
+      }
+      const u = Math.max(1, Math.round(SCALE * 0.6));
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(hx) - (u >> 1), Math.round(hy) - (u >> 1), u + (m.bright ? 1 : 0), u + (m.bright ? 1 : 0));
+    }
+  }
   drawPrecip(ctx, env) {
     // stamp a tile across the frame at the scroll offset
     const tileOver = (c, cv, T, ox, oy) => {
@@ -250,19 +271,6 @@ export class WeatherFX {
         const ox = ((this.snow.t * drift * kk + Math.sin(this.snow.t * (layer ? 0.9 : 1.3)) * 14 * SCALE) % T + T) % T;
         tileOver(ctx, tiles[layer].cv, T, ox, oy);
       }
-    }
-    for (const m of this.meteors) {
-      const fade = 1 - m.t / m.life;
-      const hx = m.x + m.dx * m.v * m.t, hy = m.y + m.dy * m.v * m.t;
-      const L = m.len * Math.min(1, m.t * 4) * (0.5 + 0.5 * fade);
-      const segs = [[0.0, 0.25, m.bright ? '#ffffff' : '#f4f6ff', 16], [0.25, 0.6, '#dfe6ff', 8], [0.6, 1.0, '#b8c4ee', 3]];
-      for (const [a, b, color, level] of segs) {
-        ctx.fillStyle = level < 16 ? ditherPattern(ctx, color, Math.max(1, Math.round(level * fade))) : color;
-        plotLine(ctx, hx - m.dx * L * a, hy - m.dy * L * a, hx - m.dx * L * b, hy - m.dy * L * b);
-        if (m.bright && a === 0) plotLine(ctx, hx - m.dx * L * a + 1, hy - m.dy * L * a, hx - m.dx * L * b + 1, hy - m.dy * L * b);
-      }
-      const u = Math.max(1, Math.round(SCALE * 0.6));
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(hx) - (u >> 1), Math.round(hy) - (u >> 1), u + (m.bright ? 1 : 0), u + (m.bright ? 1 : 0));
     }
     if (this.flash > 0) {
       ctx.fillStyle = ditherPattern(ctx, '#e8ecff', this.flash > 0.1 ? 3 : 1); ctx.fillRect(0, 0, W, H);

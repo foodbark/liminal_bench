@@ -137,8 +137,11 @@ function fillEllipse(ctx, cx, cy, rx, ry) {
 }
 // After dark the lantern lights up: a halo around the glass and a warm pool on the ground below.
 // Both are dithered additive sprites, rebuilt only when the night factor changes.
+// Switched off for now (2026-09-28): the glow did not look right; revisit when the lamp gets a proper pass.
+export const LAMP_GLOW = false;
 let glowKey = '', halo = null, pool = null;
 export function drawLampGlow(ctx, env) {
+  if (!LAMP_GLOW) return;
   const nf = Math.round(clamp((-env.sun.altitude + 1) / 8, 0, 1) * (env.cond.fog ? 1.4 : 1) * 50) / 50;
   if (nf < 0.05) return;
   const r = (v) => Math.round(v * SCALE), gy = META.lampPoolY;

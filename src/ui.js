@@ -12,7 +12,10 @@ export function setupUI(state, canvas) {
   const $ = (id) => document.getElementById(id);
   const caption = $('caption-text'), status = $('status'), panel = $('panel');
   const pTitle = $('panel-title'), pBody = $('panel-body'), pActions = $('panel-actions');
-  let panelShown = false, panelFor = null;
+  let panelShown = false, panelFor = null, settled = false;
+  // A view with a close-up painting shows the prop itself readable, so its panel waits for a
+  // second click: the board zooms in on the first, and the next click opens the note form.
+  const twoStep = (view) => !!CLOSEUPS[view];
 
   function fitStage() {
     const s = Math.min(window.innerWidth / W, window.innerHeight / H);
@@ -44,9 +47,10 @@ export function setupUI(state, canvas) {
   });
   canvas.addEventListener('mouseleave', () => { state.hover = null; canvas.classList.remove('hot'); });
   canvas.addEventListener('click', (e) => {
-    if (state.view !== 'scene') { leave(); return; }
-    const h = hitTest(toWorld(e));
-    if (h) enter(h.id);
+    if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h) enter(h.id); return; }
+    if (!twoStep(state.view)) { leave(); return; }         // a panel view: any click steps back
+    if (panelShown) { hidePanel(); return; }               // a click off the form puts it away
+    if (settled) (state.view === 'board' ? compose : showPanel)(state.view);
   });
   window.addEventListener('keydown', (e) => {
     // typing into the board's note field must not drive the scene
@@ -56,7 +60,7 @@ export function setupUI(state, canvas) {
   });
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
-  function enter(view) { state.view = view; state.hover = null; canvas.classList.remove('hot'); }
+  function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); }
   function leave() { state.view = 'scene'; state.closeup = null; hidePanel(); }
   function hidePanel() { panel.hidden = true; panelShown = false; panelFor = null; }
   function showPanel(view) {
@@ -76,7 +80,9 @@ export function setupUI(state, canvas) {
   }
   // Pinning a note: a scrap of paper, a pencil, one line. Enter or "pin it" posts it.
   function compose() {
-    panel.classList.remove('compact');   // the form needs its words and its field
+    panelShown = true; panelFor = 'board';
+    panel.className = 'dock-' + (VIEWS.board.dock || 'center');   // no compact: the form needs its words and its field
+    panel.hidden = false;
     pTitle.textContent = 'bulletin board';
     pBody.innerHTML = '';
     const lead = document.createElement('div');
@@ -87,12 +93,15 @@ export function setupUI(state, canvas) {
     pBody.append(lead, input, err);
     pActions.innerHTML = '';
     const pin = document.createElement('button'); pin.textContent = 'pin it';
-    const never = document.createElement('button'); never.textContent = 'never mind'; never.onclick = () => showPanel('board');
+    // with the board's close-up the form simply goes away and the cork is there to read
+    const done = () => twoStep('board') ? hidePanel() : showPanel('board');
+    const never = document.createElement('button'); never.textContent = 'never mind'; never.onclick = done;
     pActions.append(pin, never);
+    if (twoStep('board')) { const back = document.createElement('button'); back.textContent = 'step back'; back.onclick = leave; pActions.append(back); }
     const submit = async () => {
       if (pin.disabled) return;
       pin.disabled = true; err.textContent = '';
-      try { await postNote(input.value); state.notes = buildNotes(); state.notesVersion++; showPanel('board'); }
+      try { await postNote(input.value); state.notes = buildNotes(); state.notesVersion++; done(); }
       catch (e) { err.textContent = e.message || 'the pin would not go in'; pin.disabled = false; }
     };
     pin.onclick = submit;
@@ -121,14 +130,17 @@ export function setupUI(state, canvas) {
       const target = VIEWS[state.view];
       const cam = state.camera, k = 1 - Math.exp(-dt * 6);
       cam.cx = lerp(cam.cx, target.cx, k); cam.cy = lerp(cam.cy, target.cy, k); cam.s = lerp(cam.s, target.s, k);
-      if (state.view !== 'scene' && !panelShown && Math.abs(cam.s - target.s) < 0.08) {
+      if (state.view !== 'scene' && !settled && Math.abs(cam.s - target.s) < 0.08) {
+        settled = true;
         if (CLOSEUPS[state.view]) state.closeup = state.view;   // the close-up painting lands as the zoom settles
-        showPanel(state.view);
+        if (!twoStep(state.view)) showPanel(state.view);
       }
       if (state.view === 'scene' && cam.s < 1.02) { cam.s = 1; cam.cx = W / 2; cam.cy = H / 2; }
 
       const hot = HOTSPOTS.find((h) => h.id === state.hover);
-      caption.textContent = state.view === 'scene' ? (hot ? hot.label : '') : (HOTSPOTS.find((h) => h.id === state.view)?.label ?? '');
+      const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
+      const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
+      caption.textContent = state.view === 'scene' ? (hot ? hot.label : '') : viewLabel + hint;
 
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;

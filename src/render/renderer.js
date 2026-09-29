@@ -133,7 +133,7 @@ export class Renderer {
     // Two static layers, rebuilt only when a cache key changes: `base` (sky, moon, sun, terrain,
     // fog bands, shadows, props) and `fg` (the same without the sky, so it can go back over the
     // clouds). Each frame draws straight to the visible canvas under the camera transform:
-    // base, stars (clipped to sky), clouds, fg if there are clouds, lamp glow, precipitation.
+    // base, stars (clipped to sky), meteors, clouds, fg if there are clouds or a meteor, lamp glow, precipitation.
     // On a big painting every full-frame draw counts, and idle daytime frames skip everything.
     const cam = state.camera;
     const camKey = `${cam.cx.toFixed(1)}|${cam.cy.toFixed(1)}|${cam.s.toFixed(3)}`;
@@ -196,11 +196,14 @@ export class Renderer {
     c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s));
     c.drawImage(this.base, 0, 0); lap('base');
     drawStars(c, env, t); lap('stars');
+    const meteors = this.fx.meteors.length > 0;
+    if (meteors) { this.fx.drawMeteors(c); lap('meteors'); }
     if (clouds) {
       if (sheets) { const ox = Math.round(this.sheetX); c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0); lap('sheets'); }
       this.fx.drawClouds(c, env); lap('clouds');
-      c.drawImage(this.fg, 0, 0); lap('fg');
     }
+    // the terrain goes back over the clouds, and over a meteor so it passes behind the ridges
+    if (clouds || meteors) { c.drawImage(this.fg, 0, 0); lap('fg'); }
     drawLampGlow(c, env); lap('lamp');
     if (cuId) { c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0); c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup'); }
     this.fx.drawPrecip(c, env); lap('precip');
