@@ -10,7 +10,7 @@ Three rules that override everything else:
 
 - **Beauty over realism.** Everything should pop: blue sky through cloud gaps, sparkle on wet grass, bright stars, bold sunset color. Live data tells the scene *what is happening* (ceiling, snowline, fog, rain) and never what color things are. Do not let overcast or rain flatten the image to gray. "Is it more beautiful?" comes before "is it accurate?".
 - **The user's paintings are the look. Never draw or synthesize art.** No code-drawn props, no tiled-texture fills, no invented ridgelines, no "smart" upscaling. The build script only masks, classifies, and cleans what is painted; code only adds light, weather, and what changes. If a silhouette or a mountain is wrong, the user repaints it (their art comes from Gemini) and the config's traces get re-measured. Dean Stone is the user's favorite mountain: check it first after any mask or lighting change.
-- **`master` is production.** GitHub Pages redeploys https://foodbark.github.io/liminal_bench/ on every push, so master should always be a state you would show.
+- **`master` is production.** Cloudflare Pages redeploys https://liminalbench.net/ on every push (and GitHub Pages still redeploys the older https://foodbark.github.io/liminal_bench/ until it is retired), so master should always be a state you would show. The board at liminalbench.net is shared and public: never post test notes there.
 
 ## Commands
 
@@ -60,7 +60,7 @@ Three rules that override everything else:
 
 ## Open items
 
-The Denver punch list and backlog in README.md. Still open: the Cloudflare Pages move and the domain (account work, `docs/deploy.md`), the tan ridge right of the trees (needs a re-export of the Sentinel painting, not code), the open-topped trash can with critters, a real mobile landscape layout, and the seasonal tree work (the valley trees can be classified deciduous from the painting; larch on Dean Stone need a repaint).
+The Denver punch list and backlog in README.md. Still open: the second domain's redirect and retiring GitHub Pages (`docs/deploy.md` sections 4 and 5), the tan ridge right of the trees (needs a re-export of the Sentinel painting, not code), the open-topped trash can with critters, a real mobile landscape layout, and the seasonal tree work (the valley trees can be classified deciduous from the painting; larch on Dean Stone need a repaint).
 
 ## Roadmap (not built yet)
 

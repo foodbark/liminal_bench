@@ -18,9 +18,13 @@ What is in the repo already (2026-09-28):
 Done on 2026-09-28 (evening): logged in (account `Foodbark@gmail.com's Account`), D1 database
 `liminal-bench` created (id in `wrangler.toml`) and the schema loaded remotely, `SALT` secret set,
 Pages project `liminal-bench` connected to git and building `master`, `liminalbench.net` registered
-and attached with `www`. Still to do: push the board work so the function ships (until then
-`/api/notes` returns the page, so the board stays local), then register `aplacesortof.net` and set
-its redirect (section 4, step 2), then section 5.
+and attached with `www`. Later that evening the board work was pushed and verified live:
+`https://liminalbench.net/api/notes` answers `[]`, the board panel shows shared mode, http
+redirects to https, `www` resolves. Still to do: register `aplacesortof.net` and set its
+redirect (section 4, step 2; it did not resolve on Sept 28), then section 5.
+
+A note on stray paths: Pages serves `index.html` for anything that is not a file or a function
+(`/api/notes/nope` returns the page with a 200), which is harmless here.
 
 ## 1. The database (once)
 
@@ -65,7 +69,7 @@ and open http://127.0.0.1:8788/. The local D1 lives under `.wrangler/` (gitignor
 
 Two names, decided 2026-09-28: `liminalbench.net` is what the site is called, and
 `aplacesortof.net` is Missoula's unofficial slogan ("Missoula: a place, sort of"), which is the
-whole mood of the thing. Both unregistered on Sept 28 (RDAP 404), and so were `aplacesortof.com`,
+whole mood of the thing. Both were unregistered on the morning of Sept 28 (RDAP 404), and so were `aplacesortof.com`,
 `aplacesortof.org`, `liminalbench.com` and `placesortof.net`. Both are bought as `.net` on
 purpose: it has the retro feel the site is after. The `.com`s are optional insurance against a
 lookalike, not part of the plan.
@@ -76,7 +80,7 @@ two URLs for one board, two sets of localStorage notes, and split search results
 `aplacesortof.net/?debug` lands on `liminalbench.net/?debug`.
 
 Register both at Cloudflare (Domain Registration, Register Domains; registration is at
-cost and each one becomes a zone in the account automatically). Then:
+cost and each one becomes a zone in the account automatically). Step 1 is done; step 2 is not. Then:
 
 1. Canonical: in the Pages project, Custom domains, Set up a custom domain, `liminalbench.net`.
    Add `www.liminalbench.net` there too; Cloudflare writes the records and the certificate.
