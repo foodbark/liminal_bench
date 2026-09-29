@@ -23,6 +23,12 @@ and attached with `www`. Later that evening the board work was pushed and verifi
 redirects to https, `www` resolves. Still to do: register `aplacesortof.net` and set its
 redirect (section 4, step 2; it did not resolve on Sept 28), then section 5.
 
+`_headers` at the repo root sets the cache policy: Pages otherwise caches every static file
+for four hours in the browser while the HTML and JSON are revalidated on each load, and a phone
+that visited before a push then mixes old modules with new ones and breaks on the first changed
+import (seen 2026-09-28, the evening the board work shipped). Modules, assets and the stylesheet
+now revalidate on every load (ETags make that a 304), and `/api/*` is never stored.
+
 A note on stray paths: Pages serves `index.html` for anything that is not a file or a function
 (`/api/notes/nope` returns the page with a 200), which is harmless here.
 

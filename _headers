@@ -1,0 +1,12 @@
+# Cloudflare Pages response headers. The site is native ES modules with no build step and no
+# hashed file names, so a stale module next to a fresh one breaks an import and the page dies.
+# Everything is revalidated on every load (ETags make that a 304, not a download); Pages purges
+# its edge on deploy, so this is about the browser's cache.
+/src/*
+  Cache-Control: public, max-age=0, must-revalidate
+/assets/*
+  Cache-Control: public, max-age=0, must-revalidate
+/style.css
+  Cache-Control: public, max-age=0, must-revalidate
+/api/*
+  Cache-Control: no-store
