@@ -13,6 +13,7 @@ painting that is an exact multiple of that size scales them automatically. Write
                                  G = 32 * material (0 none, 1 grass, 2 foliage, 3 rock, 4 snow, 5 dirt, 6 shrub, 7 prop)
                                  B = height within the layer's column (0 bottom .. 255 top)
   assets/backdrop.json      size, horizon and all scene geometry for the site (scaled)
+  assets/ID_closeup.png     each close-up painting from the config's "closeups" (black keyed to alpha)
 
 --debug writes overlay PNGs (sky magenta, layers tinted, props cyan, polylines) into DIR.
 --scale N upsamples the painting N times (nearest) to test a bigger scene.
@@ -381,6 +382,21 @@ def main():
         'snowCaps': [[S(v) for v in c] for c in cfg['snow_caps']],
         'notes': [[S(n[0]), S(n[1]), S(n[2]), S(n[3]), n[4], n[5]] for n in cfg['notes']],
     }
+    # --- close-ups: a prop painted large for its zoomed view (art/NAME on black). The black is
+    # keyed out so the zoomed scene shows around it; the cork is where the notes go at that size.
+    # Like the backdrop this is only masked, never redrawn.
+    meta['closeups'] = {}
+    closeup_px = {}
+    for cid, cc in cfg.get('closeups', {}).items():
+        im = Image.open(os.path.join(ROOT, 'art', cc['file'])).convert('RGB')
+        if im.size != (W, H): im = im.resize((W, H), Image.NEAREST if abs(im.size[0] - W) <= 4 and abs(im.size[1] - H) <= 4 else Image.LANCZOS)
+        a = np.asarray(im).astype(int)
+        keep = a.max(axis=2) >= 40
+        rgba = np.dstack([a.astype(np.uint8), np.where(keep, 255, 0).astype(np.uint8)])
+        Image.fromarray(rgba, 'RGBA').save(os.path.join(ROOT, 'assets', cid + '_closeup.png'), optimize=True)
+        cx0, cy0, cx1, cy1 = (S(v) for v in cc['cork'])
+        meta['closeups'][cid] = { 'file': cid + '_closeup.png', 'cork': { 'x': cx0, 'y': cy0, 'w': cx1 - cx0, 'h': cy1 - cy0 } }
+        closeup_px[cid] = rgba
     with open(os.path.join(ROOT, 'assets/backdrop.json'), 'w') as f: json.dump(meta, f)
 
     # A half-size copy for phones and small screens: a quarter of the pixels to light and hold.
@@ -404,6 +420,12 @@ def main():
         return v
     meta2 = halve(meta); meta2['w'] = W2; meta2['h'] = H2; meta2['small'] = True
     meta2['notes'] = [[n[0] // 2, n[1] // 2, n[2] // 2, n[3] // 2, n[4], n[5]] for n in meta['notes']]
+    for cid, rgba in closeup_px.items():   # average each 2x2 block of kept pixels, as for the backdrop
+        cf = rgba[:H2 * 2, :W2 * 2].astype(np.float64).reshape(H2, 2, W2, 2, 4)
+        op = (cf[..., 3:] > 0)
+        num = (cf[..., :3] * op).sum(axis=(1, 3)); den = op.sum(axis=(1, 3))
+        c2 = np.dstack([np.where(den > 0, num / np.maximum(den, 1), 0).astype(np.uint8), np.where(den[..., 0] >= 2, 255, 0).astype(np.uint8)])
+        Image.fromarray(np.ascontiguousarray(c2), 'RGBA').save(os.path.join(small, cid + '_closeup.png'), optimize=True)
     with open(os.path.join(small, 'backdrop.json'), 'w') as f: json.dump(meta2, f)
     print(name, W, 'x', H, 'sky px', int(sky.sum()), 'layers', {i: int((layer == i).sum()) for i in range(7)},
           'materials', {i: int((mat == i).sum()) for i in range(8)})

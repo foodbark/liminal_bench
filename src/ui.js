@@ -1,5 +1,5 @@
 import { W, H, META, formatTime } from './state.js';
-import { HOTSPOTS } from './render/props.js';
+import { HOTSPOTS, CLOSEUPS } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
 import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
@@ -55,7 +55,7 @@ export function setupUI(state, canvas) {
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
   function enter(view) { state.view = view; state.hover = null; canvas.classList.remove('hot'); }
-  function leave() { state.view = 'scene'; hidePanel(); }
+  function leave() { state.view = 'scene'; state.closeup = null; hidePanel(); }
   function hidePanel() { panel.hidden = true; panelShown = false; panelFor = null; }
   function showPanel(view) {
     panelShown = true; panelFor = view;
@@ -115,7 +115,10 @@ export function setupUI(state, canvas) {
       const target = VIEWS[state.view];
       const cam = state.camera, k = 1 - Math.exp(-dt * 6);
       cam.cx = lerp(cam.cx, target.cx, k); cam.cy = lerp(cam.cy, target.cy, k); cam.s = lerp(cam.s, target.s, k);
-      if (state.view !== 'scene' && !panelShown && Math.abs(cam.s - target.s) < 0.08) showPanel(state.view);
+      if (state.view !== 'scene' && !panelShown && Math.abs(cam.s - target.s) < 0.08) {
+        if (CLOSEUPS[state.view]) state.closeup = state.view;   // the close-up painting lands as the zoom settles
+        showPanel(state.view);
+      }
       if (state.view === 'scene' && cam.s < 1.02) { cam.s = 1; cam.cx = W / 2; cam.cy = H / 2; }
 
       const hot = HOTSPOTS.find((h) => h.id === state.hover);
@@ -155,7 +158,8 @@ const PANELS = {
   board: (state, api) => ({
     title: 'bulletin board',
     body: 'Paper, pins, sun-bleached corners. Some of these have been here a long time.'
-      + '<ul class="list">' + state.notes.map((n) => `<li>${escapeHtml(n.text)} <span>${n.mine ? 'yours · ' : ''}${ageLabel(n.age)}</span></li>`).join('') + '</ul>'
+      // with a close-up painting the notes are readable on the cork itself; otherwise list them
+      + (CLOSEUPS.board ? '' : '<ul class="list">' + state.notes.map((n) => `<li>${escapeHtml(n.text)} <span>${n.mine ? 'yours · ' : ''}${ageLabel(n.age)}</span></li>`).join('') + '</ul>')
       + '\n<span class="dim">' + (notesMode() === 'api' ? 'Anyone who stops here can read these.' : 'Whatever you pin stays in this browser, for a couple of weeks.') + '</span>',
     actions: [
       ['pin a note', api.compose],

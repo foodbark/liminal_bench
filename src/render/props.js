@@ -10,6 +10,9 @@ export const PROPS = META.props;
 export const HOTSPOTS = Object.entries(PROPS).filter(([, p]) => p.hot).map(([id, p]) => ({ id, ...p }));
 export const CORK = META.cork;
 export const LAMP = META.lamp;
+// Close-up paintings for the zoomed views (assets/ID_closeup.png, from the config's "closeups"):
+// the same prop painted large, black keyed out, with its own cork rectangle for the notes.
+export const CLOSEUPS = META.closeups || {};
 
 function px(ctx, c, x, y, w = 1, h = 1) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
 const SNOW = '#eef2fb', SNOW_SHADE = '#c4cfe6';
@@ -25,24 +28,80 @@ const PAPER = ['#e8dcc0', '#f2d27a', '#cfd6df', '#f0c9c9', '#c8d8b0', '#f4f1ea']
 export function makeNote(text, opts = {}) {
   return { text, x: opts.x ?? CORK.x + 8, y: opts.y ?? CORK.y + 8, w: opts.w ?? 30, h: opts.h ?? 38, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b' };
 }
-function drawNote(ctx, n) {
+// A note is a scrap of paper at unit `u` (1 on the scene; the close-up's scale, where the text is
+// set for real). Aging yellows and curls it.
+function drawNote(ctx, n, u = 1, legible = false) {
   const fade = clamp(n.age, 0, 1);
   const paper = lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], fade * 0.75);
   const ink = lerpRGB([80, 82, 96], [150, 130, 105], fade);
-  const x = n.x, y = n.y, w = n.w, h = n.h;
-  px(ctx, '#5a4030', x + 1, y + 1, w, h);            // shadow on the cork
+  const x = n.x, y = n.y, w = n.w, h = n.h, s = Math.max(1, Math.round(u));
+  const edge = rgb(lerpRGB(paper, [0, 0, 0], 0.18));
+  px(ctx, '#5a4030', x + s, y + s, w, h);            // shadow on the cork
   px(ctx, rgb(paper), x, y, w, h);
-  px(ctx, rgb(lerpRGB(paper, [0, 0, 0], 0.18)), x + w - 1, y, 1, h);
-  px(ctx, rgb(lerpRGB(paper, [0, 0, 0], 0.18)), x, y + h - 1, w, 1);
-  // a heading and scribbled lines of "text"
-  ctx.fillStyle = rgb(ink); ctx.fillRect(x + 4, y + 5, Math.max(4, (w >> 1) - (hash2(x, y, 6) * 6 | 0)), 2);
-  ctx.fillStyle = ditherPattern(ctx, rgb(ink), fade > 0.6 ? 6 : 12);
-  for (let ly = y + 10; ly < y + h - 4; ly += 3) ctx.fillRect(x + 4, ly, w - 8 - (hash2(ly, x, 5) * 10 | 0), 1);
-  // weathering: curled and torn corners
-  if (fade > 0.35) { px(ctx, '#8b6a4a', x, y + h - 1, 3, 1); px(ctx, '#8b6a4a', x, y + h - 2, 2, 1); px(ctx, '#8b6a4a', x, y + h - 3, 1, 1); px(ctx, rgb(lerpRGB(paper, [0, 0, 0], 0.3)), x + 1, y + h - 3, 2, 1); }
-  if (fade > 0.7) { px(ctx, '#8b6a4a', x + w - 3, y, 3, 1); px(ctx, '#8b6a4a', x + w - 2, y + 1, 2, 1); px(ctx, '#8b6a4a', x + w - 1, y + 2, 1, 1); }
+  px(ctx, edge, x + w - s, y, s, h);
+  px(ctx, edge, x, y + h - s, w, s);
+  if (legible) {
+    drawNoteText(ctx, n.text, x + 4 * s, y + 4 * s, w - 8 * s, h - 8 * s, rgb(ink), u);
+  } else {
+    // a heading and scribbled lines of "text"
+    ctx.fillStyle = rgb(ink); ctx.fillRect(x + 4, y + 5, Math.max(4, (w >> 1) - (hash2(x, y, 6) * 6 | 0)), 2);
+    ctx.fillStyle = ditherPattern(ctx, rgb(ink), fade > 0.6 ? 6 : 12);
+    for (let ly = y + 10; ly < y + h - 4; ly += 3) ctx.fillRect(x + 4, ly, w - 8 - (hash2(ly, x, 5) * 10 | 0), 1);
+  }
+  // weathering: curled and torn corners, cork showing through
+  const c = 3 * s, curl = rgb(lerpRGB(paper, [0, 0, 0], 0.3));
+  if (fade > 0.35) { for (let i = 0; i < c; i++) px(ctx, '#8b6a4a', x, y + h - 1 - i, c - i, 1); px(ctx, curl, x + s, y + h - c, 2 * s, s); }
+  if (fade > 0.7) { for (let i = 0; i < c; i++) px(ctx, '#8b6a4a', x + w - (c - i), y + i, c - i, 1); }
   // pin
-  px(ctx, n.pin, x + (w >> 1) - 1, y + 1, 3, 3); px(ctx, '#ffd0c0', x + (w >> 1) - 1, y + 1, 1, 1);
+  px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
+}
+
+// Text in the page's font, wrapped to the paper and snapped to hard pixels: the glyphs are set on
+// a scratch canvas and their coverage thresholded, so nothing anti-aliases on the cork.
+const NOTE_FONT = 'VT323';
+let fontAsked = false;
+export function noteFontReady() {
+  if (typeof document === 'undefined' || !document.fonts) return true;
+  if (!fontAsked) { fontAsked = true; document.fonts.load(`24px "${NOTE_FONT}"`).catch(() => {}); }
+  return document.fonts.check(`24px "${NOTE_FONT}"`);
+}
+function drawNoteText(ctx, text, x, y, w, h, color, u) {
+  const size = Math.round(clamp(w / 6.5, 6 * u, 14 * u)), lineH = Math.round(size * 0.92);
+  if (size < 6 || w < 8 || h < lineH) return;
+  const [c, g] = makeCanvas(w, h);
+  g.font = `${size}px "${NOTE_FONT}", "Courier New", monospace`;
+  g.textBaseline = 'top'; g.fillStyle = color;
+  const fits = (t) => g.measureText(t).width <= w;
+  const lines = [];
+  let line = '';
+  for (const word of String(text).split(' ')) {
+    if (!word) continue;
+    if (fits(line ? line + ' ' + word : word)) { line = line ? line + ' ' + word : word; continue; }
+    if (line) lines.push(line);
+    line = word;
+    while (!fits(line) && line.length > 1) {   // a word wider than the paper breaks where it must
+      let k = line.length - 1;
+      while (k > 1 && !fits(line.slice(0, k))) k--;
+      lines.push(line.slice(0, k)); line = line.slice(k);
+    }
+  }
+  if (line) lines.push(line);
+  const max = Math.floor(h / lineH);
+  lines.slice(0, max).forEach((t, i) => g.fillText(t, 0, i * lineH));
+  const img = g.getImageData(0, 0, w, h), d = img.data;
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i] > 110 ? 255 : 0;
+  g.putImageData(img, 0, 0);
+  ctx.drawImage(c, x, y);
+}
+
+// The notes on a close-up's cork: the scene's slots stretched onto the bigger cork, the paper
+// scaled uniformly, the text legible.
+export function drawCloseupNotes(ctx, state, cu) {
+  const kx = cu.cork.w / CORK.w, ky = cu.cork.h / CORK.h, u = Math.min(kx, ky);
+  for (const n of state.notes) {
+    const big = { ...n, x: Math.round(cu.cork.x + (n.x - CORK.x) * kx), y: Math.round(cu.cork.y + (n.y - CORK.y) * ky), w: Math.round(n.w * u), h: Math.round(n.h * u) };
+    drawNote(ctx, big, u, true);
+  }
 }
 
 // Sun shadows on the ground, drawn as crisp dithered scanlines.

@@ -214,6 +214,17 @@
   1634,
   1219
  ],
+ "closeups": {
+  "board": {
+   "file": "blank_board.jpg",
+   "cork": [
+    245,
+    261,
+    2485,
+    1297
+   ]
+  }
+ },
  "props": {
   "bench": {
    "rect": [
@@ -295,7 +306,7 @@
    "cx": 1720,
    "cy": 1085,
    "s": 1.7,
-   "dock": "right"
+   "dock": "top"
   },
   "bench": {
    "cx": 968,

@@ -1,4 +1,4 @@
-import { W, H, SMALL, SCALE } from '../state.js';
+import { W, H, SMALL, SCALE, ASSET_DIR } from '../state.js';
 import { makeCanvas, rgb, clamp } from '../util/pixel.js';
 import { drawStars, drawMoon, drawSun, setStarMask, renderSkyGradient } from './sky.js';
 import { renderTerrain } from './terrain.js';
@@ -11,7 +11,7 @@ function envForWorker(env) {
     groundSnow: env.groundSnow, inversion: env.inversion, mountainFog: env.mountainFog, dusting: env.dusting,
   };
 }
-import { drawProps, drawShadows, drawLampGlow } from './props.js';
+import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS } from './props.js';
 import { WeatherFX } from './weatherfx.js';
 
 export class Renderer {
@@ -76,6 +76,13 @@ export class Renderer {
       this.terrainCtx.putImageData(img, 0, 0);
     }
     this.skyKey = ''; this.terrainKey = ''; this.propsKey = ''; this.tintKey = '';
+    // close-up paintings for the zoomed views, loaded on the page; the canvas is made on first use
+    this.closeupImgs = {}; this.closeupKey = ''; this.closeup = null; this.closeupCtx = null;
+    if (typeof Image !== 'undefined') for (const [id, cu] of Object.entries(CLOSEUPS)) {
+      const im = new Image();
+      im.onload = () => { this.closeupImgs[id] = im; this.dirty = true; };
+      im.src = new URL('../../' + ASSET_DIR + '/' + cu.file, import.meta.url).href;
+    }
     this.fx = new WeatherFX();
   }
 
@@ -145,6 +152,29 @@ export class Renderer {
       b.drawImage(this.fg, 0, 0);
       this.baseKey = baseKey; this.dirty = true;
     }
+    // Standing at a prop: its close-up painting over the zoomed scene, notes set legibly on its
+    // cork, lit by the same ambient as the props. Rebuilt only when something on it changes.
+    const cuId = state.closeup && CLOSEUPS[state.closeup] && this.closeupImgs[state.closeup] ? state.closeup : null;
+    const cuKey = cuId ? `${cuId}|${this.tintKey}|${state.notesVersion}|${noteFontReady()}` : '';
+    if (cuKey !== this.closeupKey) {
+      this.closeupKey = cuKey; this.dirty = true;
+      if (cuId) {
+        if (!this.closeup) [this.closeup, this.closeupCtx] = makeCanvas(W, H);
+        const g = this.closeupCtx, im = this.closeupImgs[cuId];
+        g.globalCompositeOperation = 'source-over';
+        g.clearRect(0, 0, W, H);
+        g.drawImage(im, 0, 0, W, H);
+        drawCloseupNotes(g, state, CLOSEUPS[cuId]);
+        // lit by the props' ambient, lifted almost halfway to full: up close the paper has to
+        // stay readable at night (the lantern is right there), and by day this changes nothing
+        g.globalCompositeOperation = 'multiply';
+        g.fillStyle = rgb(env.pal.ambient.map((v) => (v + (1 - v) * 0.45) * 255));
+        g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'destination-in';
+        g.drawImage(im, 0, 0, W, H);
+        g.globalCompositeOperation = 'source-over';
+      }
+    }
     const night = env.sun.altitude < -3;
     const sk = env.sky;
     const sheets = !!sk && (sk.cirrus + sk.veilHigh + sk.alto + sk.veilMid + sk.strato + sk.stratus + sk.nimbo) > 0.01;
@@ -172,6 +202,7 @@ export class Renderer {
       c.drawImage(this.fg, 0, 0); lap('fg');
     }
     drawLampGlow(c, env); lap('lamp');
+    if (cuId) { c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0); c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup'); }
     this.fx.drawPrecip(c, env); lap('precip');
     c.setTransform(1, 0, 0, 1, 0, 0);
   }

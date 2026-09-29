@@ -36,6 +36,7 @@ export function createState() {
     weather: { ok: false, fetchedAt: 0, temp: null, code: 0, cover: 0.1, wind: 3, windDir: 270, precip: 0, snowfall: 0, snowDepth: 0, ridge: null },
     env: null,        // derived per-frame environment (sun, palette, conditions)
     view: 'scene',    // scene | phone | board | bench
+    closeup: null,    // which view's close-up painting is up, once its zoom has settled
     camera: { cx: W / 2, cy: H / 2, s: 1 },
     hover: null,
     notes: [],
