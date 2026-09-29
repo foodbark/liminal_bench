@@ -29,6 +29,14 @@ that visited before a push then mixes old modules with new ones and breaks on th
 import (seen 2026-09-28, the evening the board work shipped). Modules, assets and the stylesheet
 now revalidate on every load (ETags make that a 304), and `/api/*` is never stored.
 
+**The zone overrides that until one setting changes.** `_headers` is honored on
+`liminal-bench.pages.dev`, but the `liminalbench.net` zone has Cloudflare's default Browser Cache
+TTL of four hours, which rewrites any lower `max-age` on cached files (verified 2026-09-28: a
+fresh, never-requested URL on the domain came back `max-age=14400`, the same file on pages.dev
+`max-age=0`). Dashboard, the `liminalbench.net` zone, Caching, Configuration, Browser Cache TTL:
+set it to **Respect Existing Headers**. Until then a phone can hold old modules for up to four
+hours after a push; a private tab or clearing site data gets the new ones at once.
+
 A note on stray paths: Pages serves `index.html` for anything that is not a file or a function
 (`/api/notes/nope` returns the page with a 200), which is harmless here.
 
