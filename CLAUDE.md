@@ -58,8 +58,8 @@ Three rules that override everything else:
 
 ## Open items
 
-The "Next time" list in README.md: the tan ridge right of the trees (needs a re-export of the Sentinel painting, not code), the open-topped trash can with critters, mobile touch and layout.
+The Denver punch list and backlog in README.md. Still open: the Cloudflare Pages move and the domain (account work, `docs/deploy.md`), the tan ridge right of the trees (needs a re-export of the Sentinel painting, not code), the open-topped trash can with critters, a real mobile landscape layout, and the seasonal tree work (the valley trees can be classified deciduous from the painting; larch on Dean Stone need a repaint).
 
 ## Roadmap (not built yet)
 
-Pay phone book with numbers and shared voicemails, posting notes to the board that weather over time and eventually disappear, and a rare visitor on the bench (including AI chatbot characters). Both shared features need a small backend; the front end has no persistence.
+Pay phone book with numbers and shared voicemails, and a rare visitor on the bench (including AI chatbot characters). The board's notes already post, weather and disappear; they go shared the moment the site is served from Cloudflare Pages with its function and database attached.

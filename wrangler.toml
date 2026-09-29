@@ -1,0 +1,12 @@
+# Cloudflare Pages project for the site, with the bulletin board's function (functions/api/notes.js)
+# bound to its D1 database. Pages reads this on every git-integrated build; `npx wrangler pages
+# dev .` reads it for local runs. See docs/deploy.md.
+name = "liminal-bench"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "DB"
+database_name = "liminal-bench"
+# the id printed by `npx wrangler d1 create liminal-bench` (2026-09-28)
+database_id = "ee6c8c44-a5af-4bcc-b20e-998d37aa745c"
