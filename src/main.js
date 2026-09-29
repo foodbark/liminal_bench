@@ -3,15 +3,18 @@ import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js'
 import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { skyPalette } from './palette.js';
 import { Renderer } from './render/renderer.js';
-import { makeNote } from './render/props.js';
 import { setupUI } from './ui.js';
 import { loadBackdrop } from './assets.js';
 import { peakSnowAmount, updatePeakSnowLatch, PEAK_BARE, PEAK_FIRST } from './season.js';
+import { loadPosted, buildNotes } from './notes.js';
 
 const state = createState();
-const NOTE_TEXTS = ['lost: orange cat, answers to "biscuit"', 'free piano. you haul.', 'open mic thursdays', 'room for rent, quiet house', 'the river is low this year', 'call me'];
-state.notes = META.notes.map(([x, y, w, h, paper, age], i) => makeNote(NOTE_TEXTS[i % NOTE_TEXTS.length], { x, y, w, h, paper, age }));
+// the painting's default notes at once; whatever has been pinned lands when the store answers
+state.notes = buildNotes();
 state.notesVersion = 1;
+const refreshNotes = () => { state.notes = buildNotes(); state.notesVersion++; };
+loadPosted().then(refreshNotes, refreshNotes);
+setInterval(refreshNotes, 10 * 60 * 1000);   // paper ages
 
 const T0 = performance.now();
 const bootErrors = [];

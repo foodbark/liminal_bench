@@ -39,6 +39,14 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 #panel-body .list { margin: calc(8px * var(--u)) 0 0; padding: 0; list-style: none; }
 #panel-body .list li { padding: calc(2px * var(--u)) 0; color: #d0cab6; }
 #panel-body .list li span { color: #7d8595; float: right; }
+#panel-body .dim { color: #7d8595; font-size: calc(16px * var(--u)); }
+#panel-body #note-text {
+  display: block; width: 100%; box-sizing: border-box; margin-top: calc(8px * var(--u));
+  font-family: var(--font); font-size: calc(19px * var(--u)); background: #1a1e28; color: #f0e6c8;
+  border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(3px * var(--u)) calc(8px * var(--u)); outline: none;
+}
+#panel-body #note-text:focus { border-color: #7d8595; }
+#panel-body .note-err { color: #c98a6a; min-height: 1.25em; margin-top: calc(4px * var(--u)); }
 #panel-actions { margin-top: calc(10px * var(--u)); display: flex; gap: calc(8px * var(--u)); flex-wrap: wrap; }
 #panel-actions button {
   font-family: var(--font); font-size: calc(18px * var(--u)); text-transform: lowercase;
@@ -46,6 +54,7 @@ body { display: flex; align-items: center; justify-content: center; font-family:
   touch-action: manipulation;
 }
 #panel-actions button:hover { background: #2a3040; }
+#panel-actions button:disabled { color: #7d8595; cursor: default; }
 /* a phone held upright shows a letterboxed strip; the scene wants the width */
 #rotate { display: none; position: fixed; left: 0; right: 0; bottom: 12px; text-align: center; color: #7d8595; font-size: 18px; pointer-events: none; }
 @media (pointer: coarse) and (orientation: portrait) and (max-width: 700px) { #rotate { display: block; } }

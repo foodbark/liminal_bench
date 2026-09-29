@@ -1,6 +1,7 @@
 import { W, H, META, formatTime } from './state.js';
 import { HOTSPOTS } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
@@ -46,6 +47,8 @@ export function setupUI(state, canvas) {
     if (h) enter(h.id);
   });
   window.addEventListener('keydown', (e) => {
+    // typing into the board's note field must not drive the scene
+    if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.key === 'Escape') leave();
     if (e.key === 'd' || e.key === 'D') { const d = $('debug'); d.hidden = !d.hidden; }
   });
@@ -56,7 +59,7 @@ export function setupUI(state, canvas) {
   function hidePanel() { panel.hidden = true; panelShown = false; panelFor = null; }
   function showPanel(view) {
     panelShown = true; panelFor = view;
-    const content = PANELS[view](state, { leave, showPanel });
+    const content = PANELS[view](state, { leave, showPanel, compose });
     pTitle.textContent = content.title;
     pBody.innerHTML = content.body;
     pActions.innerHTML = '';
@@ -65,6 +68,30 @@ export function setupUI(state, canvas) {
     }
     panel.className = 'dock-' + (VIEWS[view].dock || 'center');
     panel.hidden = false;
+  }
+  // Pinning a note: a scrap of paper, a pencil, one line. Enter or "pin it" posts it.
+  function compose() {
+    pTitle.textContent = 'bulletin board';
+    pBody.innerHTML = '';
+    const lead = document.createElement('div');
+    lead.textContent = 'A pencil stub hangs on a string. You find a blank scrap under the others.';
+    const input = document.createElement('input');
+    input.id = 'note-text'; input.maxLength = NOTE_MAX; input.placeholder = 'write something'; input.autocomplete = 'off'; input.spellcheck = false;
+    const err = document.createElement('div'); err.className = 'note-err';
+    pBody.append(lead, input, err);
+    pActions.innerHTML = '';
+    const pin = document.createElement('button'); pin.textContent = 'pin it';
+    const never = document.createElement('button'); never.textContent = 'never mind'; never.onclick = () => showPanel('board');
+    pActions.append(pin, never);
+    const submit = async () => {
+      if (pin.disabled) return;
+      pin.disabled = true; err.textContent = '';
+      try { await postNote(input.value); state.notes = buildNotes(); state.notesVersion++; showPanel('board'); }
+      catch (e) { err.textContent = e.message || 'the pin would not go in'; pin.disabled = false; }
+    };
+    pin.onclick = submit;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    setTimeout(() => input.focus(), 0);
   }
 
   // debug controls
@@ -125,13 +152,14 @@ const PANELS = {
       ['hang up', api.leave],
     ],
   }),
-  board: (state) => ({
+  board: (state, api) => ({
     title: 'bulletin board',
     body: 'Paper, pins, sun-bleached corners. Some of these have been here a long time.'
-      + '<ul class="list">' + state.notes.map((n) => `<li>${escapeHtml(n.text)} <span>${ageLabel(n.age)}</span></li>`).join('') + '</ul>',
+      + '<ul class="list">' + state.notes.map((n) => `<li>${escapeHtml(n.text)} <span>${n.mine ? 'yours · ' : ''}${ageLabel(n.age)}</span></li>`).join('') + '</ul>'
+      + '\n<span class="dim">' + (notesMode() === 'api' ? 'Anyone who stops here can read these.' : 'Whatever you pin stays in this browser, for a couple of weeks.') + '</span>',
     actions: [
-      ['pin a note', () => { document.getElementById('panel-body').innerHTML = 'You pat your pockets. No pen. (posting is coming)'; }],
-      ['step back', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))],
+      ['pin a note', api.compose],
+      ['step back', api.leave],
     ],
   }),
   bench: (state, api) => {
