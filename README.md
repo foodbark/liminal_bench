@@ -127,6 +127,15 @@ Telling those apart buys the whole year, not three weeks of October. The same sp
 The paintings came from Gemini, and a lot of the people this is for will not want generated art. The plan is the user's own photographs, turned into shaded pixel art by `tools/pixelate.py` (no model: box-average, edge-keeping flatten, hue ramps taken from the photo, ink, Bayer dither), with a preset each for mountains, trees and props. Tried on one street photo of Sentinel and Dean Stone and one pay phone; nothing is in the scene yet. The look is less cartoony than the paintings, which is accepted.
 
 - [ ] **Photos.** Flat overcast light (hard sun bakes in black shadows the engine cannot re-light), September grass. A zoomed shot of Dean Stone on its own: in a wide shot it is too small and hazy and comes out as one navy mass. Trees in flat light: sun-dappled foliage turns to speckle. Each subject pixelated from its own crop, so each gets its own palette.
+  Shot list for the mountains (a DSLR and a long lens, to get the scale):
+  - **Framing:** each mountain filling most of the frame on its own. Dean Stone alone, Sentinel alone, and one wider shot of both for placing them relative to each other.
+  - **Lens:** 70 to 200mm from the valley floor. A long lens also flattens the perspective, which suits the scene's stacked planes.
+  - **Light:** bright overcast or thin high cloud, mid-day. No hard sun, no golden hour; the engine adds that.
+  - **Air:** a clear day after rain or wind. Haze and smoke are what flatten Dean Stone.
+  - **Viewpoint:** facing south, from the same spot for every mountain shot, on a tripod if possible, so the layers line up.
+  - **Settings:** RAW, around f/8, lowest ISO, no polarizer (it makes the sky uneven, and the sky is masked out anyway).
+  - **Season:** soon. The scene's baseline is September grass, and the first snow changes the summit.
+  - **Size:** 3000 pixels or more across the mountain is plenty; at `--pixel 4` the whole scene is only 688 art pixels wide.
 - [ ] **Cut-outs** for the props, by hand; the tool keeps a hard alpha and inks the silhouette.
 - [ ] **Pixel size for props.** The phone holds its lettering at `--pixel 2` and loses it at 4, but the user likes both; mountains are at 4. Undecided.
 - [ ] **Clouds restyled to match.** The cumulus and sheets were drawn after cartoon reference clouds and will sit wrong over photo-derived terrain.
