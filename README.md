@@ -122,6 +122,16 @@ Telling those apart buys the whole year, not three weeks of October. The same sp
 - **First snow on the mountain top: wait for first snow on the mountain top.** No calendar snow, no getting ahead of it. See the punch list item above. It will happen overnight and the payoff is the morning after — a white crest over a still-green valley — so the code should be exercised through the debug panel *before* the event, not written during it.
 - **Smoke season is over.** The PM2.5 haze idea keeps its notes above and comes back in August 2027. Tuning haze with no haze to look at is how it ends up gray.
 
+### Photo art, replacing the generated paintings (work in progress, 2026-10-03)
+
+The paintings came from Gemini, and a lot of the people this is for will not want generated art. The plan is the user's own photographs, turned into shaded pixel art by `tools/pixelate.py` (no model: box-average, edge-keeping flatten, hue ramps taken from the photo, ink, Bayer dither), with a preset each for mountains, trees and props. Tried on one street photo of Sentinel and Dean Stone and one pay phone; nothing is in the scene yet. The look is less cartoony than the paintings, which is accepted.
+
+- [ ] **Photos.** Flat overcast light (hard sun bakes in black shadows the engine cannot re-light), September grass. A zoomed shot of Dean Stone on its own: in a wide shot it is too small and hazy and comes out as one navy mass. Trees in flat light: sun-dappled foliage turns to speckle. Each subject pixelated from its own crop, so each gets its own palette.
+- [ ] **Cut-outs** for the props, by hand; the tool keeps a hard alpha and inks the silhouette.
+- [ ] **Pixel size for props.** The phone holds its lettering at `--pixel 2` and loses it at 4, but the user likes both; mountains are at 4. Undecided.
+- [ ] **Clouds restyled to match.** The cumulus and sheets were drawn after cartoon reference clouds and will sit wrong over photo-derived terrain.
+- [ ] Then: configs and traces re-measured for the new art (Dean Stone first), and CLAUDE.md's "the user's paintings are the look" rule reworded.
+
 ### Still open from September 5
 
 - **The tan hill right of the trees.** The Sentinel painting (`art/mount_sentinel_alone_transparent_sky.jpg`) carries its tan slope all the way across the frame, so in the layered scene Dean Stone's base sits behind a flat tan ridge instead of running down into the trees. It bothers us. Fix is in the art, not the code: a version of the Sentinel file with that far tan hill left transparent (checkerboard is fine), so Dean Stone shows through down to the tree line. Everything else in the layering stays as is. Worth doing before the larches, since it is the same mountain.
@@ -151,5 +161,6 @@ art/                      paintings + a JSON config each (silhouettes, prop boxe
 assets/                   generated backdrop.png, backdrop_mask.png, backdrop.json, board_closeup.png (tools/build_backdrop.py)
 functions/api/notes.js    the board's server side (Cloudflare Pages Function over D1); db/schema.sql, wrangler.toml
 tools/forest_study.py     does the painting tell larch and deciduous from fir? histograms and overlays
+tools/pixelate.py         a photograph to shaded pixel art (edge-keeping flatten, hue ramps from the photo, ink, Bayer dither), with presets for mountains, trees and props; no model
 docs/deploy.md            Cloudflare Pages, D1, the domains, retiring GitHub Pages (what is done and what is left)
 ```
