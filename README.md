@@ -92,6 +92,14 @@ Seen from the bench today: a paraglider working the face of Mount Sentinel under
 - **Where.** Sentinel is the left edge of the frame and its launch faces the valley, so the wing lives in the air just off that flank and above the ridge, in front of the sky and behind nothing. It is the first daytime thing that moves in the sky; planes and satellites below are data-driven and mostly night, and this one fills the hours they do not.
 - **Hover caption,** since a visitor who has not been to Missoula will not know what it is.
 
+### Planets, twinkle and the moving sky (2026-10-08)
+
+Watching the real dusk against the site's:
+
+- **Planets are missing.** The star catalog is stars only, so Jupiter, Saturn, Venus and Mars, the brightest points anyone names, never appear; Saturn is the bright "star" low in the southeast all evening this month. A small ephemeris (mean orbital elements per planet, a Kepler solve, the same alt-az projection as the stars) puts them in with no feed; steady, untwinkling, Venus and Jupiter as a bright cross, Mars tinted. Do this.
+- **The star field crawls, the Milky Way jumps.** Stars redraw about once a minute (a quarter degree of sidereal time, about 4 px a minute near the meridian), the Milky Way about every six (it is in the sky-gradient pass, keyed coarser), so it moves in lumps while the stars creep. Key the band finer, or draw it on the star clock.
+- **Too many stars twinkling at once.** Down to magnitude 5.2 on a clear dark night is a lot of points, and every one twinkles by a quarter. Real twinkling is strong near the horizon and faint overhead; scale the twinkle by air mass (low stars flicker, high ones barely) and consider a shallower limit when the sky is not fully dark. Two blink artifacts were fixed today (the faintness cutoff saw the twinkle; cirrus dither scrolled over stars), but the user still sees something blink and suspects the cloud and sky movement; sit with it on a real display, at native scale, before changing more.
+
 ### Satellites (idea, 2026-09-28)
 
 The night sky is already real (catalog stars by sidereal time, the Milky Way, showers from their radiants), and satellites are the one thing a person actually sees moving up there. Public data, no key.
