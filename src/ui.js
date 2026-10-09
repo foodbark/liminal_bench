@@ -3,6 +3,7 @@ import { HOTSPOTS, CLOSEUPS } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
 import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
+import { gliderChance } from './render/gliders.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
 // screens where a panel over a close-up would cover what it describes: touch, or a short window
@@ -37,17 +38,20 @@ export function setupUI(state, canvas) {
   }
   function hitTest(p) {
     for (const h of HOTSPOTS) if (p.x >= h.x && p.x < h.x + h.w && p.y >= h.y && p.y < h.y + h.h) return h;
+    // a wing over Sentinel gets a caption but is nowhere to go
+    const fx = window.__liminal && window.__liminal.renderer && window.__liminal.renderer.fx;
+    if (fx && fx.gliders.list.length && fx.gliders.hit(p)) return { id: 'glider', label: fx.gliders.label };
     return null;
   }
   canvas.addEventListener('mousemove', (e) => {
     if (state.view !== 'scene') { state.hover = null; canvas.classList.remove('hot'); return; }
     const h = hitTest(toWorld(e));
-    state.hover = h ? h.id : null;
-    canvas.classList.toggle('hot', !!h);
+    state.hover = h ? h.id : null; state.hoverLabel = h ? h.label : '';
+    canvas.classList.toggle('hot', !!h && !!VIEWS[h.id]);
   });
   canvas.addEventListener('mouseleave', () => { state.hover = null; canvas.classList.remove('hot'); });
   canvas.addEventListener('click', (e) => {
-    if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h) enter(h.id); return; }
+    if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h && VIEWS[h.id]) enter(h.id); return; }
     if (!twoStep(state.view)) { leave(); return; }         // a panel view: any click steps back
     if (panelShown) { hidePanel(); return; }               // a click off the form puts it away
     if (settled) (state.view === 'board' ? compose : showPanel)(state.view);
@@ -110,10 +114,10 @@ export function setupUI(state, canvas) {
   }
 
   // debug controls
-  const dbg = { enabled: $('dbg-enabled'), hour: $('dbg-hour'), month: $('dbg-month'), weather: $('dbg-weather'), cover: $('dbg-cover'), moon: $('dbg-moon'), peaks: $('dbg-peaks'), info: $('dbg-info') };
+  const dbg = { enabled: $('dbg-enabled'), hour: $('dbg-hour'), month: $('dbg-month'), weather: $('dbg-weather'), cover: $('dbg-cover'), moon: $('dbg-moon'), peaks: $('dbg-peaks'), gliders: $('dbg-gliders'), info: $('dbg-info') };
   const sync = () => {
     const o = state.override;
-    o.enabled = dbg.enabled.checked; o.hour = +dbg.hour.value; o.month = +dbg.month.value; o.weather = dbg.weather.value; o.cover = +dbg.cover.value; o.moon = dbg.moon.value; o.peaks = dbg.peaks.value;
+    o.enabled = dbg.enabled.checked; o.hour = +dbg.hour.value; o.month = +dbg.month.value; o.weather = dbg.weather.value; o.cover = +dbg.cover.value; o.moon = dbg.moon.value; o.peaks = dbg.peaks.value; o.gliders = dbg.gliders.value;
     const hh = Math.floor(o.hour), mm = Math.round((o.hour - hh) * 60);
     $('dbg-hour-val').textContent = `${String(hh % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     $('dbg-cover-val').textContent = o.cover < 0 ? 'auto' : o.cover + '%';
@@ -137,10 +141,9 @@ export function setupUI(state, canvas) {
       }
       if (state.view === 'scene' && cam.s < 1.02) { cam.s = 1; cam.cx = W / 2; cam.cy = H / 2; }
 
-      const hot = HOTSPOTS.find((h) => h.id === state.hover);
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      caption.textContent = state.view === 'scene' ? (hot ? hot.label : '') : viewLabel + hint;
+      caption.textContent = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : viewLabel + hint;
 
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;
@@ -155,7 +158,7 @@ export function setupUI(state, canvas) {
           const rg = state.weather.ridge, since = peakSnowSince();
           const peaks = rg ? `summit ${Math.round(rg.temp)}°f, ${Math.round(rg.snowDepth * 100)} cm` : 'summit n/a';
           const latch = peakSnowLatched(state.now) ? `snowed in since ${since.getMonth() + 1}/${since.getDate()}` : 'no first snow yet';
-          dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\npeaks: ${peaks}, ${latch}\nwind ${env.wind.speed} mph from ${env.wind.dir}°`;
+          dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\npeaks: ${peaks}, ${latch}\nwind ${env.wind.speed} mph from ${env.wind.dir}°  gliders ${r && r.fx ? r.fx.gliders.list.length : 0} up, chance ${gliderChance(env).toFixed(2)}`;
         }
       }
     },

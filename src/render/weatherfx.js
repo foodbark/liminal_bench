@@ -5,6 +5,7 @@ import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
 import { starAltAz } from '../util/solar.js';
 import { skyXY, PX_PER_DEG } from './sky.js';
 import { LAT } from '../state.js';
+import { Gliders } from './gliders.js';
 
 const RAD = Math.PI / 180;
 
@@ -43,11 +44,13 @@ export class WeatherFX {
     this.rain = { t: 0, tiles: null, key: '' }; this.snow = { t: 0, tiles: null, key: '' };
     this.flash = 0; this.nextFlash = 4;
     this.meteors = []; this.nextMeteor = 20 + Math.random() * 60;
+    this.gliders = new Gliders();
     this.t = 0;
   }
 
-  update(env, dt) {
+  update(env, dt, gliders = 'live') {
     this.t += dt;
+    this.gliders.update(env, dt, gliders);
     const cover = env.sky ? env.sky.cumulus : env.cond.cover;
     const target = Math.round(cover * 18 + (cover > 0.02 ? 1 : 0));
     while (this.clouds.length < target) this.clouds.push(this.makeCloud(true));

@@ -12,6 +12,7 @@ function envForWorker(env) {
   };
 }
 import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS } from './props.js';
+import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
 
 export class Renderer {
@@ -58,6 +59,16 @@ export class Renderer {
     this.ctx.imageSmoothingEnabled = false;
     [this.base, this.baseCtx] = makeCanvas(W, H);
     [this.fg, this.fgCtx] = makeCanvas(W, H);
+    // The near planes alone (Sentinel's face, the trees, the meadow, the props): what a paraglider
+    // flies behind. The far ranges stay behind the wings, so one can glide out over the valley
+    // in front of Dean Stone's forest and still sink behind the trees to land.
+    [this.near, this.nearCtx] = makeCanvas(W, H);
+    [this.nearMask, this.nearMaskCtx] = makeCanvas(W, H);
+    if (assets) {
+      const img = this.nearMaskCtx.createImageData(W, H), d = img.data, m = assets.mask;
+      for (let i = 0; i < d.length; i += 4) if (m[i] >= LAYER.FLANK || m[i + 1] === MAT.PROP) d[i + 3] = 255;
+      this.nearMaskCtx.putImageData(img, 0, 0);
+    }
     this.baseKey = ''; this.camKey = '';
     [this.sky, this.skyCtx] = makeCanvas(W, H);
     [this.terrain, this.terrainCtx] = makeCanvas(W, H);
@@ -129,11 +140,12 @@ export class Renderer {
   render(state, t, dt) {
     const env = state.env;
     this.refreshCaches(state);
-    this.fx.update(env, dt);
+    this.fx.update(env, dt, state.override.enabled ? state.override.gliders : 'live');
     // Two static layers, rebuilt only when a cache key changes: `base` (sky, moon, sun, terrain,
     // fog bands, shadows, props) and `fg` (the same without the sky, so it can go back over the
     // clouds). Each frame draws straight to the visible canvas under the camera transform:
-    // base, stars (clipped to sky), meteors, clouds, fg if there are clouds or a meteor, lamp glow, precipitation.
+    // base, stars (clipped to sky), meteors, clouds, fg if there are clouds or a meteor, paragliders
+    // and then the near planes back over them, lamp glow, precipitation.
     // On a big painting every full-frame draw counts, and idle daytime frames skip everything.
     const cam = state.camera;
     const camKey = `${cam.cx.toFixed(1)}|${cam.cy.toFixed(1)}|${cam.s.toFixed(3)}`;
@@ -150,6 +162,10 @@ export class Renderer {
       drawMoon(b, env);
       drawSun(b, env);
       b.drawImage(this.fg, 0, 0);
+      const n = this.nearCtx;
+      n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, W, H); n.drawImage(this.fg, 0, 0);
+      n.globalCompositeOperation = 'destination-in'; n.drawImage(this.nearMask, 0, 0);
+      n.globalCompositeOperation = 'source-over';
       this.baseKey = baseKey; this.dirty = true;
     }
     // Standing at a prop: its close-up painting over the zoomed scene, notes set legibly on its
@@ -182,7 +198,8 @@ export class Renderer {
     // sheets drift with the wind, high and slow
     const sgn = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
     this.sheetX = ((this.sheetX + (0.4 + env.wind.speed * 0.12) * SCALE * sgn * dt) % W + W) % W;
-    const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0;
+    const gliders = this.fx.gliders.list.length > 0;
+    const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0 || gliders;
     if (!this.dirty && !animated && camKey === this.camKey) return;
     this.dirty = false; this.camKey = camKey;
 
@@ -204,6 +221,8 @@ export class Renderer {
     }
     // the terrain goes back over the clouds, and over a meteor so it passes behind the ridges
     if (clouds || meteors) { c.drawImage(this.fg, 0, 0); lap('fg'); }
+    // wings fly in front of the clouds and the far ranges, behind Sentinel, the trees and the props
+    if (gliders) { this.fx.gliders.draw(c, env); c.drawImage(this.near, 0, 0); lap('gliders'); }
     drawLampGlow(c, env); lap('lamp');
     if (cuId) { c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0); c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup'); }
     this.fx.drawPrecip(c, env); lap('precip');

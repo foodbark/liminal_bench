@@ -14,6 +14,7 @@ painting that is an exact multiple of that size scales them automatically. Write
                                  B = height within the layer's column (0 bottom .. 255 top)
   assets/backdrop.json      size, horizon and all scene geometry for the site (scaled)
   assets/ID_closeup.png     each close-up painting from the config's "closeups" (black keyed to alpha)
+  assets/glider.png         the paraglider frames cut from the config's "gliders" photo (sky keyed to alpha)
 
 --debug writes overlay PNGs (sky magenta, layers tinted, props cyan, polylines) into DIR.
 --scale N upsamples the painting N times (nearest) to test a bigger scene.
@@ -397,6 +398,40 @@ def main():
         cx0, cy0, cx1, cy1 = (S(v) for v in cc['cork'])
         meta['closeups'][cid] = { 'file': cid + '_closeup.png', 'cork': { 'x': cx0, 'y': cy0, 'w': cx1 - cx0, 'h': cy1 - cy0 } }
         closeup_px[cid] = rgba
+    # --- paragliders: wings cut from the user's photo (art/NAME, the wings boxed in photo pixels),
+    # the sky keyed out by its difference from the smooth blue around it, the few colors snapped.
+    # They are used at the photo's own size: a wing over Sentinel is a dozen or two pixels wide.
+    # "crest" is the ridge they soar along (scene coordinates) and "air" how far above it they fly.
+    glider_px = None
+    gl = cfg.get('gliders')
+    if gl:
+        from PIL import ImageFilter
+        photo = Image.open(os.path.join(ROOT, 'art', gl['file'])).convert('RGB')
+        sky = np.asarray(photo.filter(ImageFilter.MedianFilter(31))).astype(int)
+        pa = np.asarray(photo).astype(int)
+        frames = []
+        for x0, y0, x1, y1 in gl['wings']:
+            bx0, by0, bx1, by1 = x0 - 1, y0 - 1, x1 + 2, y1 + 15   # a pixel around the wing, and the pilot hangs a dozen rows below
+            crop = pa[by0:by1, bx0:bx1]; bgc = sky[by0:by1, bx0:bx1]
+            dev = np.abs(crop - bgc).sum(axis=2)
+            keep = dev > 45
+            # drop lone specks of noise: a kept pixel needs a kept neighbor
+            pad = np.pad(keep, 1)
+            nb = pad[:-2, 1:-1] | pad[2:, 1:-1] | pad[1:-1, :-2] | pad[1:-1, 2:]
+            keep &= nb
+            # the photo's haze flattened the wing: push its colors back out from the sky (the pop)
+            col = np.clip(bgc + (crop - bgc) * 1.6, 0, 255).astype(np.uint8)
+            fr = Image.fromarray(col, 'RGB').quantize(colors=6, dither=Image.Dither.NONE).convert('RGB')
+            rgba = np.dstack([np.asarray(fr), np.where(keep, 255, 0).astype(np.uint8)])
+            frames.append(rgba)
+        fw = max(f.shape[1] for f in frames); fh = max(f.shape[0] for f in frames)
+        strip = np.zeros((fh, fw * len(frames), 4), np.uint8)
+        for i, f in enumerate(frames): strip[:f.shape[0], i * fw:i * fw + f.shape[1]] = f
+        Image.fromarray(strip, 'RGBA').save(os.path.join(ROOT, 'assets/glider.png'), optimize=True)
+        glider_px = strip
+        meta['glider'] = { 'file': 'glider.png', 'frames': len(frames), 'w': fw, 'h': fh,
+                           'crest': [[S(x), S(y)] for x, y in gl['crest']],
+                           'air': { 'x0': S(gl['air'][0]), 'x1': S(gl['air'][1]), 'hMin': S(gl['air'][2]), 'hMax': S(gl['air'][3]), 'outX': S(gl.get('out_x', gl['air'][1])) } }
     with open(os.path.join(ROOT, 'assets/backdrop.json'), 'w') as f: json.dump(meta, f)
 
     # A half-size copy for phones and small screens: a quarter of the pixels to light and hold.
@@ -416,7 +451,7 @@ def main():
         if isinstance(v, int): return v // 2
         if isinstance(v, float): return v
         if isinstance(v, list): return [halve(x) for x in v]
-        if isinstance(v, dict): return {k: (halve(x) if k not in ('s', 'dock', 'label', 'hot', 'art', 'hazeScale', 'paper', 'age') else x) for k, x in v.items()}
+        if isinstance(v, dict): return {k: (halve(x) if k not in ('s', 'dock', 'label', 'hot', 'art', 'hazeScale', 'paper', 'age', 'frames', 'file') else x) for k, x in v.items()}
         return v
     meta2 = halve(meta); meta2['w'] = W2; meta2['h'] = H2; meta2['small'] = True
     meta2['notes'] = [[n[0] // 2, n[1] // 2, n[2] // 2, n[3] // 2, n[4], n[5]] for n in meta['notes']]
@@ -427,6 +462,16 @@ def main():
         c2 = np.dstack([np.where(den > 0, num / np.maximum(den, 1), 0).astype(np.uint8), np.where(den[..., 0] >= 2, 255, 0).astype(np.uint8)])
         Image.fromarray(np.ascontiguousarray(c2), 'RGBA').save(os.path.join(small, cid + '_closeup.png'), optimize=True)
     with open(os.path.join(small, 'backdrop.json'), 'w') as f: json.dump(meta2, f)
+    if glider_px is not None:   # the wings at half size, alpha kept where most of each block was wing
+        g = glider_px.astype(int)
+        g = np.pad(g, ((0, g.shape[0] % 2), (0, g.shape[1] % 2), (0, 0)))   # even edges for the 2x2 blocks
+        a = g[0::2, 0::2, 3] + g[1::2, 0::2, 3] + g[0::2, 1::2, 3] + g[1::2, 1::2, 3]
+        wsum = np.maximum(a, 1)[..., None]
+        c = (g[0::2, 0::2, :3] * g[0::2, 0::2, 3:4] + g[1::2, 0::2, :3] * g[1::2, 0::2, 3:4] + g[0::2, 1::2, :3] * g[0::2, 1::2, 3:4] + g[1::2, 1::2, :3] * g[1::2, 1::2, 3:4]) // wsum
+        g2 = np.dstack([c.astype(np.uint8), np.where(a >= 2 * 255, 255, 0).astype(np.uint8)])
+        Image.fromarray(np.ascontiguousarray(g2), 'RGBA').save(os.path.join(small, 'glider.png'), optimize=True)
+        meta2['glider']['w'] = g2.shape[1] // meta['glider']['frames']; meta2['glider']['h'] = g2.shape[0]
+        with open(os.path.join(small, 'backdrop.json'), 'w') as f: json.dump(meta2, f)
     print(name, W, 'x', H, 'sky px', int(sky.sum()), 'layers', {i: int((layer == i).sum()) for i in range(7)},
           'materials', {i: int((mat == i).sum()) for i in range(8)})
 
