@@ -99,7 +99,9 @@ if (typeof window !== 'undefined') {
 export let starSpots = [];
 // by spectral class O B A F G K M: the brightest channel stays full, the others drop, so the
 // color deepens without the star losing light
-const STAR_TINT = [[155, 190, 255], [180, 205, 255], [222, 234, 255], [255, 248, 222], [255, 232, 178], [255, 198, 132], [255, 160, 108]];
+const STAR_TINT = [[155, 190, 255], [180, 205, 255], [222, 234, 255], [255, 248, 222], [255, 232, 178], [255, 198, 132], [255, 160, 108],
+  [255, 118, 96], [118, 168, 255]];   // and the red and blue of a low star's chromatic flash
+let spread = null, glint = null;   // per catalog star: how smeared its light is right now, and a glint in progress
 let terrainMask = null;
 export function setStarMask(mask) { terrainMask = mask; }
 let starLayer = null, starCtx = null, starStamp = -1, starKey = '';
@@ -119,6 +121,7 @@ export function drawStars(ctx, env, t) {
     const moonUp = env.moon.altitude > 0 ? 1 - Math.abs(env.moon.phase - 0.5) * 2 : 0;
     const limit = 5.2 - moonUp * 1.6;
     const buckets = [], named = [];
+    if (!spread || spread.length !== CATALOG.length) { spread = new Float32Array(CATALOG.length).fill(0.5); glint = new Float32Array(CATALOG.length); }
     for (let i = 0; i < CATALOG.length; i++) {
       const st = CATALOG[i];
       if (st[2] > limit) break;   // sorted by magnitude
@@ -135,22 +138,22 @@ export function drawStars(ctx, env, t) {
       // the cutoff, and a twinkle that could carry them across it blinked them on and off ten
       // times a second. Twinkle is brightness, never existence.
       if (b0 < 0.1) continue;
-      // Scintillation: fast and random (a new throw every redraw, ten a second) over a slow
-      // swell, strong near the ridge where the air is thick and faint overhead, the way it
-      // looks outside. A bright star also flicks between its cross and a plain point.
+      // Scintillation, by one model (README, "How a star should twinkle"): each star carries a
+      // spread, smoothed in time, that smears its light over a bigger or smaller patch. Spread
+      // is larger and dimmer per pixel, sharp is small and bright, the total light held; the
+      // wander is mostly calm, with a rare brief glint, which low down flashes red or blue.
       const low = clamp(1 - (pos.altitude - 5) / 40, 0.25, 1);
-      const amp = 0.12 + 0.25 * low;                // swing: an eighth overhead, over a third near the ridge
-      const slow = 0.5 + 0.5 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
-      // a new throw ten times a second, leaning bright: the floor
-      // keeps a star from ever dropping to its dimmest, so it sits bright most of the time
-      const raw = slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7;   // the throw itself, five a second, for the size flicker
-      const f = 0.25 + 0.75 * raw;
-      const b = b0 * (1 - amp * (1 - f));
-      // a bright star may twinkle two steps down, a faint one only one: a faint star that
-      // dropped two steps went to the sky's own tone and blinked out
+      let sp = spread[i], gl = glint[i];
+      sp = clamp(sp + (0.5 - sp) * 0.12 + (hash2(i, stamp, 3) - 0.5) * 0.22 * (0.5 + low), 0, 1);   // livelier near the ridge
+      if (gl > 0) gl = gl > 0.3 ? gl * 0.5 : 0; else if (hash2(i, stamp, 4) < 0.012 * (0.6 + low)) gl = 1;   // a glint every ten seconds or so
+      spread[i] = sp; glint[i] = gl;
+      const amp = 0.18 + 0.3 * low;
+      const b = b0 * (1 - amp * sp) * (1 + 0.6 * gl);
       const lvl0 = Math.min(7, (b0 * 8) | 0);
-      const lvl = Math.max(Math.min(7, (b * 8) | 0), lvl0 - (lvl0 >= 4 ? 2 : lvl0 >= 3 ? 1 : 0)), tint = st[3];   // the faintest never dim, they only grow
-      (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], raw);
+      const lvl = Math.max(Math.min(7, (b * 8) | 0), lvl0 - (lvl0 >= 4 ? 2 : lvl0 >= 3 ? 1 : 0));   // the faintest never dim
+      let tint = st[3];
+      if (gl > 0.5 && pos.altitude < 15) tint = hash2(i, stamp, 5) < 0.5 ? 7 : 8;   // the chromatic flash of a low star
+      (buckets[lvl * 16 + tint] ||= []).push(p.x, p.y, st[2], sp, gl, ((t * 0.7 + i * 0.37) | 0) & 1);
       if (NAMES && NAMES.has(i)) named.push({ x: p.x, y: p.y, label: NAMES.get(i) });
     }
     // The planets: steady (they do not twinkle, which is how people tell them apart), sized by
@@ -178,20 +181,24 @@ export function drawStars(ctx, env, t) {
     planetSpots = spots; starSpots = named;
     for (let k = 0; k < buckets.length; k++) {
       const list = buckets[k]; if (!list) continue;
-      const lvl = (k / 8) | 0, tint = STAR_TINT[k % 8] || STAR_TINT[3];
+      const lvl = (k / 16) | 0, tint = STAR_TINT[k % 16] || STAR_TINT[3];
       const v = (lvl + 0.5) / 8;
       g.fillStyle = `rgb(${(tint[0] * (0.55 + 0.45 * v)) | 0},${(tint[1] * (0.55 + 0.45 * v)) | 0},${(tint[2] * (0.55 + 0.45 * v)) | 0})`;   // the floor stays well above the sky
       // sizes in scene pixels so the stars survive being shown at half size
       const u = Math.max(1, Math.round(SCALE * 0.6));
-      for (let i = 0; i < list.length; i += 4) {
-        const x = list[i], y = list[i + 1], mag = list[i + 2], f = list[i + 3];
-        // size is what the eye reads as twinkle. The bright crosses only shorten their arms (losing
-        // them was too much); the small stars grow from their floor and never shrink below it, so
-        // they flick without ever blinking out.
-        if (mag < 1.5) { const a = f > 0.12 ? u + (u >> 1) : u; g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // a dot with short points, not a spike
-        else if (mag < 3.0) { if (f > 0.12) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
-        else if (mag < 4.3) { if (f > 0.88) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
-        else g.fillRect(x, y, 1, 1);   // the faintest are steady: a pixel that is below visibility at window scale cannot twinkle, it can only appear
+      // the points of a bright star, upright or diagonal; they swing between the two slowly
+      const points = (x, y, a, diag) => {
+        if (!diag) { g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); return; }
+        for (let k = u; k <= a; k += u) { g.fillRect(x + k, y - k, u, u); g.fillRect(x - k, y - k, u, u); g.fillRect(x + k, y + k, u, u); g.fillRect(x - k, y + k, u, u); }
+      };
+      for (let i = 0; i < list.length; i += 6) {
+        const x = list[i], y = list[i + 1], mag = list[i + 2], sp = list[i + 3], gl = list[i + 4], diag = list[i + 5];
+        // sharp (low spread) is small and bright, spread is bigger and dimmer, a glint is bigger
+        // and brighter for a moment; nothing ever shrinks below its resting size
+        if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, gl > 0.5 ? 2 * u : sp > 0.5 ? u + (u >> 1) : u, diag); }   // a dot with points
+        else if (mag < 3.0) { if (gl > 0.5) { g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); points(x, y, u, diag); } else if (sp > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else if (mag < 4.3) { if (gl > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else g.fillRect(x, y, 1, 1);   // the faintest are steady: a pixel below visibility at window scale cannot twinkle, only appear
       }
     }
   }

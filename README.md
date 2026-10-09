@@ -100,6 +100,19 @@ Watching the real dusk against the site's:
 - **The star field crawls, the Milky Way jumps.** Stars redraw about once a minute (a quarter degree of sidereal time, about 4 px a minute near the meridian), the Milky Way about every six (it is in the sky-gradient pass, keyed coarser), so it moves in lumps while the stars creep. Key the band finer, or draw it on the star clock.
 - **Too many stars twinkling at once.** Down to magnitude 5.2 on a clear dark night is a lot of points, and every one twinkles by a quarter. Real twinkling is strong near the horizon and faint overhead; scale the twinkle by air mass (low stars flicker, high ones barely) and consider a shallower limit when the sky is not fully dark. Two blink artifacts were fixed today (the faintness cutoff saw the twinkle; cirrus dither scrolled over stars), but the user still sees something blink and suspects the cloud and sky movement; sit with it on a real display, at native scale, before changing more.
 
+### How a star should twinkle (2026-10-09)
+
+An evening of tuning the twinkle by hand (bigger swings, smaller swings, faster, slower, size flicks on, size flicks off) never got it right: every version either did nothing or blinked stars out. The user's ideas (stages, size against tone, points that move) and a night sky's actual behavior point at one model:
+
+- **Conserve the light.** The atmosphere smears a star's light over a bigger or smaller patch; it does not switch the light off. So a spread star is larger and dimmer per pixel, a sharp one is small and bright, and the total barely changes. Size and tone must move together through one "spread" value, inversely. Every version that moved them independently changed the total light and read as blinking.
+- **The points cycle, they do not blink.** The spikes on a bright star are made by the eye, and they shimmer because the light entering it is churning. Points that swing between upright and diagonal, or lengthen and shorten, keep the light constant and read as sparkle. Arms switching on and off read as a wink.
+- **Position wander is real but arcseconds,** far under a pixel here. Skip it; shape is the points' job.
+- **Time structure is the whole difference between twinkle and noise.** Real scintillation is mostly calm with occasional sharp glints (a lognormal flicker), not a fresh coin toss ten times a second. A slow smooth wander per star plus a rare brief glint, one every few seconds on a given star, leaves the sky quiet except for the glints the eye catches. The question of the right rate goes away, because most of the time nothing moves.
+- **Color, low down.** Near the horizon the atmosphere splits the colors and a star flashes red and blue (Sirius and Fomalhaut seem to change color over the ridge). A glint on a star under about fifteen degrees takes a brief red or blue tint.
+- **Planets steady, the faintest stars steady.** A planet is a disc and barely twinkles, which is how people tell them apart. A single-pixel star is below visibility at window scale, so a flick can only make it appear; leave it alone.
+
+Built the same night in the star pass of `sky.js`: one spread state per catalog star, smoothed in time, with glints; size, points and tone derived from it.
+
 ### Satellites (idea, 2026-09-28)
 
 The night sky is already real (catalog stars by sidereal time, the Milky Way, showers from their radiants), and satellites are the one thing a person actually sees moving up there. Public data, no key.
