@@ -97,7 +97,9 @@ if (typeof window !== 'undefined') {
 }
 // the named stars on screen right now, for the hover caption: { x, y, label }
 export let starSpots = [];
-const STAR_TINT = [[190, 210, 255], [205, 220, 255], [235, 240, 255], [255, 250, 235], [255, 240, 205], [255, 215, 170], [255, 190, 150]];
+// by spectral class O B A F G K M: the brightest channel stays full, the others drop, so the
+// color deepens without the star losing light
+const STAR_TINT = [[155, 190, 255], [180, 205, 255], [222, 234, 255], [255, 248, 222], [255, 232, 178], [255, 198, 132], [255, 160, 108]];
 let terrainMask = null;
 export function setStarMask(mask) { terrainMask = mask; }
 let starLayer = null, starCtx = null, starStamp = -1, starKey = '';
