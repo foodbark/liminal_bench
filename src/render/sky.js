@@ -137,9 +137,11 @@ export function drawStars(ctx, env, t) {
       // swell, strong near the ridge where the air is thick and faint overhead, the way it
       // looks outside. A bright star also flicks between its cross and a plain point.
       const low = clamp(1 - (pos.altitude - 5) / 40, 0.25, 1);
-      const amp = 0.35 + 0.5 * low;                 // swing: half overhead, most of the light near the ridge
+      const amp = 0.3 + 0.4 * low;                  // swing: under half overhead, more near the ridge
       const slow = 0.5 + 0.5 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
-      const f = slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7;   // a new throw five times a second: long enough to register
+      // a new throw five times a second (long enough to register), leaning bright: the floor
+      // keeps a star from ever dropping to its dimmest, so it sits bright most of the time
+      const f = 0.25 + 0.75 * (slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7);
       const b = b0 * (1 - amp * (1 - f));
       const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], f);
