@@ -200,15 +200,15 @@ export function drawStars(ctx, env, t) {
       const arm = (x, y, k, L) => {
         const [dx, dy] = DIRS[k], s = u + 1;
         if (k < 4) {
-          if (dx) g.fillRect(dx > 0 ? x + s : x - s - L + 1, y - (u >> 1), L, u);
-          else g.fillRect(x - (u >> 1), dy > 0 ? y + s : y - s - L + 1, u, L);
-        } else for (let j = 0; j < L; j++) g.fillRect(x + dx * (s + j) - (dx < 0 ? u - 1 : 0), y + dy * (s + j) - (dy < 0 ? u - 1 : 0), u, u);
+          if (dx) g.fillRect(dx > 0 ? x + s : x - s - L + 1, y, L, 1);
+          else g.fillRect(x, dy > 0 ? y + s : y - s - L + 1, 1, L);
+        } else for (let j = 0; j < L; j++) g.fillRect(x + dx * (s + j), y + dy * (s + j), 1, 1);
       };
       const points = (x, y, a, sp, clock, star) => {
         const diag = clock & 1;
         for (let k = 0; k < 8; k++) {
           const primary = (k >= 4) === !!diag;
-          const L = primary ? a + (hash2(star * 8 + k, clock, 6) < 0.35 ? 1 : 0) : (sp > 0.6 ? u - 1 : 0);
+          const L = primary ? a + (hash2(star * 8 + k, clock, 6) < 0.25 ? 1 : 0) : 0;   // thin, short, no stubs in the other orientation
           if (L > 0) arm(x, y, k, L);
         }
       };
@@ -216,7 +216,7 @@ export function drawStars(ctx, env, t) {
         const x = list[i], y = list[i + 1], mag = list[i + 2], sp = list[i + 3], gl = list[i + 4], clock = list[i + 5], star = list[i + 6];
         // sharp (low spread) is small and bright, spread is bigger and dimmer, a glint is bigger
         // and brighter for a moment; nothing ever shrinks below its resting size
-        if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, sp > 0.5 ? u + (u >> 1) : u, sp, clock, star); }   // a dot with points; a glint sharpens it, so the points shorten
+        if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, sp > 0.5 ? u : u - 1, sp, clock, star); }   // a dot with points; a glint sharpens it, so the points shorten
         else if (mag < 3.0) { if (sp > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
         else if (mag < 4.3) g.fillRect(x, y, u, u);   // tone only
         else g.fillRect(x, y, 1, 1);   // the faintest are steady: a pixel below visibility at window scale cannot twinkle, only appear
