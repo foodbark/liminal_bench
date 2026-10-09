@@ -4,7 +4,7 @@ import { lerp, clamp } from './util/pixel.js';
 import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 import { gliderChance } from './render/gliders.js';
-import { planetSpots } from './render/sky.js';
+import { planetSpots, starSpots } from './render/sky.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
 // screens where a panel over a close-up would cover what it describes: touch, or a short window
@@ -44,6 +44,7 @@ export function setupUI(state, canvas) {
     if (fx && fx.gliders.list.length && fx.gliders.hit(p)) return { id: 'glider', label: fx.gliders.label };
     const r = 10 * (W / 1024);
     for (const s of planetSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) return { id: 'planet', label: s.label };
+    for (const s of starSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) return { id: 'star', label: s.label };
     return null;
   }
   canvas.addEventListener('mousemove', (e) => {

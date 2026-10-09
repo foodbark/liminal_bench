@@ -68,9 +68,35 @@ export function renderSkyGradient(img, env) {
 // winter evening and the summer Milky Way core sits over the ridge. Loaded on the page; the
 // worker never needs it. Stars are drawn into their own layer about ten times a second.
 let CATALOG = null;
+// The named stars, for the hover caption: J2000 ra and dec in degrees, matched to the catalog
+// by position when it loads. Some never rise at Missoula (Canopus, Alpha Centauri, Achernar,
+// Hadar, Acrux) and Polaris is behind a viewer facing south; they are listed all the same.
+const NAMED = [
+  ['Sirius', 101.287, -16.716], ['Canopus', 95.988, -52.696], ['Alpha Centauri', 219.902, -60.834], ['Arcturus', 213.915, 19.182],
+  ['Vega', 279.235, 38.784], ['Capella', 79.172, 45.998], ['Rigel', 78.634, -8.202], ['Procyon', 114.825, 5.225],
+  ['Achernar', 24.429, -57.237], ['Betelgeuse', 88.793, 7.407], ['Hadar', 210.956, -60.373], ['Altair', 297.696, 8.868],
+  ['Acrux', 186.650, -63.099], ['Aldebaran', 68.980, 16.509], ['Antares', 247.352, -26.432], ['Spica', 201.298, -11.161],
+  ['Pollux', 116.329, 28.026], ['Fomalhaut', 344.413, -29.622], ['Deneb', 310.358, 45.280], ['Regulus', 152.093, 11.967],
+  ['Polaris', 37.955, 89.264], ['Castor', 113.650, 31.888], ['Bellatrix', 81.283, 6.350], ['Alnilam', 84.053, -1.202],
+  ['Alnitak', 85.190, -1.943], ['Mintaka', 83.002, -0.299], ['Saiph', 86.939, -9.670],
+];
+let NAMES = null;   // catalog index -> name
 if (typeof window !== 'undefined') {
-  fetch(new URL('../../assets/stars.json', import.meta.url)).then((r) => r.json()).then((j) => { CATALOG = j; }).catch(() => {});
+  fetch(new URL('../../assets/stars.json', import.meta.url)).then((r) => r.json()).then((j) => {
+    CATALOG = j; NAMES = new Map();
+    for (const [name, ra, dec] of NAMED) {
+      let best = -1, bd = 0.5;
+      for (let i = 0; i < j.length; i++) {
+        const dra = Math.abs(((j[i][0] - ra) % 360 + 540) % 360 - 180) * Math.cos(dec * Math.PI / 180), ddec = j[i][1] - dec;
+        const d = Math.hypot(dra, ddec);
+        if (d < bd) { bd = d; best = i; }
+      }
+      if (best >= 0) NAMES.set(best, name);
+    }
+  }).catch(() => {});
 }
+// the named stars on screen right now, for the hover caption: { x, y, label }
+export let starSpots = [];
 const STAR_TINT = [[190, 210, 255], [205, 220, 255], [235, 240, 255], [255, 250, 235], [255, 240, 205], [255, 215, 170], [255, 190, 150]];
 let terrainMask = null;
 export function setStarMask(mask) { terrainMask = mask; }
@@ -90,7 +116,7 @@ export function drawStars(ctx, env, t) {
     // moonlight washes the faint ones out
     const moonUp = env.moon.altitude > 0 ? 1 - Math.abs(env.moon.phase - 0.5) * 2 : 0;
     const limit = 5.2 - moonUp * 1.6;
-    const buckets = [];
+    const buckets = [], named = [];
     for (let i = 0; i < CATALOG.length; i++) {
       const st = CATALOG[i];
       if (st[2] > limit) break;   // sorted by magnitude
@@ -117,6 +143,7 @@ export function drawStars(ctx, env, t) {
       const b = b0 * (1 - amp * (1 - f));
       const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], f);
+      if (NAMES && NAMES.has(i)) named.push({ x: p.x, y: p.y, label: NAMES.get(i) });
     }
     // The planets: steady (they do not twinkle, which is how people tell them apart), sized by
     // brightness, Venus and Jupiter bigger than any star. Hidden by the ridges and the sheets
@@ -140,7 +167,7 @@ export function drawStars(ctx, env, t) {
       else g.fillRect(x, y, u, u);
       spots.push({ x, y, label: pl.label, mag: pl.mag, altitude: pos.altitude, azimuth: pos.azimuth });
     }
-    planetSpots = spots;
+    planetSpots = spots; starSpots = named;
     for (let k = 0; k < buckets.length; k++) {
       const list = buckets[k]; if (!list) continue;
       const lvl = (k / 8) | 0, tint = STAR_TINT[k % 8] || STAR_TINT[3];
