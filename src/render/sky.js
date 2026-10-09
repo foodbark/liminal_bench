@@ -158,7 +158,12 @@ export function drawStars(ctx, env, t) {
       const lvl = Math.max(Math.min(7, (b * 8) | 0), Math.max(0, lvl0 - (lvl0 >= 4 ? 2 : 1)));
       let tint = st[3];
       if (gl > 0.5 && pos.altitude < 15) tint = hash2(i, stamp, 5) < 0.5 ? 7 : 8;   // the chromatic flash of a low star
-      (buckets[lvl * 16 + tint] ||= []).push(p.x, p.y, st[2], sp, gl, (t * 0.7 + i * 0.37) | 0, i);   // the slow clock the points swing on, and the star, for its own arm lengths
+      // the clock the points swing on: two flips in every two-second slot, one at the slot's
+      // start and one at a random moment inside it, so the dwells run from a blink to two
+      // seconds and no star keeps a beat
+      const slot = (t * 0.5 + i * 0.37) | 0, frac = (t * 0.5 + i * 0.37) - slot;
+      const clock = 2 * slot + (frac > hash2(i, slot, 7) ? 1 : 0);
+      (buckets[lvl * 16 + tint] ||= []).push(p.x, p.y, st[2], sp, gl, clock, i);
       if (NAMES && NAMES.has(i)) named.push({ x: p.x, y: p.y, label: NAMES.get(i) });
     }
     // The planets: steady (they do not twinkle, which is how people tell them apart), sized by
@@ -217,7 +222,7 @@ export function drawStars(ctx, env, t) {
         // sharp (low spread) is small and bright, spread is bigger and dimmer, a glint is bigger
         // and brighter for a moment; nothing ever shrinks below its resting size
         if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, sp > 0.5 ? u : u - 1, sp, clock, star); }   // a dot with points; a glint sharpens it, so the points shorten
-        else if (mag < 3.0) { if (sp > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else if (mag < 3.0) { if (sp > 0.68) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }   // the bigger size only when well smeared: at the midpoint it flicked constantly, and Orion's belt looked like a string of lights
         else if (mag < 4.3) g.fillRect(x, y, u, u);   // tone only
         else g.fillRect(x, y, 1, 1);   // the faintest are steady: a pixel below visibility at window scale cannot twinkle, only appear
       }
