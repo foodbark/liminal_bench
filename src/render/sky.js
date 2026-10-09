@@ -169,8 +169,8 @@ export function drawStars(ctx, env, t) {
       const v = clamp(b, 0, 1);
       g.fillStyle = `rgb(${(pl.tint[0] * (0.62 + 0.38 * v)) | 0},${(pl.tint[1] * (0.62 + 0.38 * v)) | 0},${(pl.tint[2] * (0.62 + 0.38 * v)) | 0})`;
       const u = Math.max(1, Math.round(SCALE * 0.6)), x = p.x, y = p.y;
-      if (pl.mag < -1.8) { g.fillRect(x - 3 * u, y, 6 * u + 1, u); g.fillRect(x, y - 3 * u, u, 6 * u + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); }
-      else if (pl.mag < 0.9) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }
+      if (pl.mag < -1.8) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // Venus, Jupiter: a dot with points a little longer than any star's
+      else if (pl.mag < 0.9) { const a = u + (u >> 1); g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }
       else if (pl.mag < 2.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1);
       else g.fillRect(x, y, u, u);
       spots.push({ x, y, label: pl.label, mag: pl.mag, altitude: pos.altitude, azimuth: pos.azimuth });
@@ -188,7 +188,7 @@ export function drawStars(ctx, env, t) {
         // size is what the eye reads as twinkle. The bright crosses only shorten their arms (losing
         // them was too much); the small stars grow from their floor and never shrink below it, so
         // they flick without ever blinking out.
-        if (mag < 1.5) { const a = f > 0.2 ? 2 * u : u; g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }
+        if (mag < 1.5) { const a = f > 0.2 ? u + (u >> 1) : u; g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // a dot with short points, not a spike
         else if (mag < 3.0) { if (f > 0.3) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
         else if (mag < 4.3) { if (f > 0.55) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
         else { if (f > 0.6) g.fillRect(x, y, u, u); else g.fillRect(x, y, 1, 1); }
