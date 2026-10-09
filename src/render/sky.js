@@ -136,10 +136,10 @@ export function drawStars(ctx, env, t) {
       // Scintillation: fast and random (a new throw every redraw, ten a second) over a slow
       // swell, strong near the ridge where the air is thick and faint overhead, the way it
       // looks outside. A bright star also flicks between its cross and a plain point.
-      const low = clamp(1 - (pos.altitude - 5) / 40, 0.15, 1);
-      const amp = 0.2 + 0.5 * low;
+      const low = clamp(1 - (pos.altitude - 5) / 40, 0.25, 1);
+      const amp = 0.35 + 0.5 * low;                 // swing: half overhead, most of the light near the ridge
       const slow = 0.5 + 0.5 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
-      const f = slow * 0.4 + hash2(i, stamp, 3) * 0.6;
+      const f = slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7;   // a new throw five times a second: long enough to register
       const b = b0 * (1 - amp * (1 - f));
       const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], f);
@@ -172,14 +172,15 @@ export function drawStars(ctx, env, t) {
       const list = buckets[k]; if (!list) continue;
       const lvl = (k / 8) | 0, tint = STAR_TINT[k % 8] || STAR_TINT[3];
       const v = (lvl + 0.5) / 8;
-      g.fillStyle = `rgb(${(tint[0] * (0.45 + 0.55 * v)) | 0},${(tint[1] * (0.45 + 0.55 * v)) | 0},${(tint[2] * (0.45 + 0.55 * v)) | 0})`;
+      g.fillStyle = `rgb(${(tint[0] * (0.3 + 0.7 * v)) | 0},${(tint[1] * (0.3 + 0.7 * v)) | 0},${(tint[2] * (0.3 + 0.7 * v)) | 0})`;
       // sizes in scene pixels so the stars survive being shown at half size
       const u = Math.max(1, Math.round(SCALE * 0.6));
       for (let i = 0; i < list.length; i += 4) {
         const x = list[i], y = list[i + 1], mag = list[i + 2], f = list[i + 3];
-        if (mag < 1.5) { if (f > 0.3) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); } g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // the brightest: a cross, its arms flickering
-        else if (mag < 3.0) { if (f > 0.25) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
-        else if (mag < 4.3) g.fillRect(x, y, u, u);
+        // every star changes size as well as tone: the eye reads a twinkle from the size
+        if (mag < 1.5) { if (f > 0.4) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); } g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // the brightest: a cross, its arms flickering
+        else if (mag < 3.0) { if (f > 0.35) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else if (mag < 4.3) { if (f > 0.3) g.fillRect(x, y, u, u); else g.fillRect(x, y, 1, 1); }
         else g.fillRect(x, y, 1, 1);
       }
     }
