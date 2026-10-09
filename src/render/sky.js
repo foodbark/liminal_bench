@@ -139,7 +139,7 @@ export function drawStars(ctx, env, t) {
       // swell, strong near the ridge where the air is thick and faint overhead, the way it
       // looks outside. A bright star also flicks between its cross and a plain point.
       const low = clamp(1 - (pos.altitude - 5) / 40, 0.25, 1);
-      const amp = 0.3 + 0.4 * low;                  // swing: under half overhead, more near the ridge
+      const amp = 0.2 + 0.3 * low;                  // swing: a fifth overhead, half near the ridge
       const slow = 0.5 + 0.5 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
       // a new throw ten times a second, leaning bright: the floor
       // keeps a star from ever dropping to its dimmest, so it sits bright most of the time
@@ -149,7 +149,7 @@ export function drawStars(ctx, env, t) {
       // a bright star may twinkle two steps down, a faint one only one: a faint star that
       // dropped two steps went to the sky's own tone and blinked out
       const lvl0 = Math.min(7, (b0 * 8) | 0);
-      const lvl = Math.max(Math.min(7, (b * 8) | 0), lvl0 - (lvl0 >= 4 ? 2 : 1)), tint = st[3];
+      const lvl = Math.max(Math.min(7, (b * 8) | 0), lvl0 - (lvl0 >= 4 ? 2 : lvl0 >= 3 ? 1 : 0)), tint = st[3];   // the faintest never dim, they only grow
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], raw);
       if (NAMES && NAMES.has(i)) named.push({ x: p.x, y: p.y, label: NAMES.get(i) });
     }
@@ -180,7 +180,7 @@ export function drawStars(ctx, env, t) {
       const list = buckets[k]; if (!list) continue;
       const lvl = (k / 8) | 0, tint = STAR_TINT[k % 8] || STAR_TINT[3];
       const v = (lvl + 0.5) / 8;
-      g.fillStyle = `rgb(${(tint[0] * (0.3 + 0.7 * v)) | 0},${(tint[1] * (0.3 + 0.7 * v)) | 0},${(tint[2] * (0.3 + 0.7 * v)) | 0})`;
+      g.fillStyle = `rgb(${(tint[0] * (0.55 + 0.45 * v)) | 0},${(tint[1] * (0.55 + 0.45 * v)) | 0},${(tint[2] * (0.55 + 0.45 * v)) | 0})`;   // the floor stays well above the sky
       // sizes in scene pixels so the stars survive being shown at half size
       const u = Math.max(1, Math.round(SCALE * 0.6));
       for (let i = 0; i < list.length; i += 4) {
