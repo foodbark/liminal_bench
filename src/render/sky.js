@@ -29,7 +29,7 @@ export function renderSkyGradient(img, env) {
   const alt = env.sun.altitude;
   const glowOn = alt > -9;
   const glowStrength = alt < 0 ? clamp((alt + 9) / 9, 0, 1) : 1 - clamp(alt / 40, 0, 0.55);
-  const glowK = (1 - env.cond.cover * 0.85) * glowStrength;
+  const glowK = (1 - (env.cond.shade ?? env.cond.cover) * 0.85) * glowStrength;
   const glowW = alt < 4 ? 0.5 : 0.32;
   for (let y = 0; y < SKY_BOTTOM; y++) {
     const t = Math.pow(y / SKY_BOTTOM, 1.45);
@@ -194,7 +194,7 @@ export function drawSun(ctx, env) {
   const alt = env.sun.altitude;
   if (alt < -1.5) return;
   const p = skyXY(env.sun.azimuth, alt);
-  const cover = env.cond.cover;
+  const cover = env.cond.shade ?? env.cond.cover;   // the sheets in front do the hiding; a veil leaves a pale disc
   const col = rgb(env.pal.sunColor);
   const bright = rgb(lerpRGB(env.pal.sunColor, [255, 255, 245], clamp(alt / 12, 0, 0.8)));
   const dim = clamp(1 - cover * 1.1, 0, 1);

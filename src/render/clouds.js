@@ -126,7 +126,7 @@ export function cloudTones(env, depth, moonNear = 0) {
   const alt = env.sun.altitude;
   // cream tops through a warm mid to lavender and purple shadow, like the concept clouds
   const base = [[255, 250, 242], [240, 226, 220], [196, 182, 216], [158, 146, 200], [118, 110, 168]];
-  const cover = env.cond.cover;
+  const cover = env.cond.shade ?? env.cond.cover;   // a veil does not put out the sunset glow, it carries it
   // Low sun: tops take the sun color, undersides blaze when the sun is at or just below the horizon.
   const glow = clamp(1 - Math.abs(alt - 1) / 7, 0, 1) * (1 - cover * 0.5);
   const under = clamp(1 - Math.abs(alt + 1) / 5, 0, 1) * (1 - cover * 0.5);

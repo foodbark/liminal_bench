@@ -39,16 +39,24 @@ export function renderSheets(img, env) {
   const haze = (c, d) => lerpRGB(c, horizon, clamp((1 - 1 / d) * 0.55, 0, 0.55));
   const windSign = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
 
-  // --- cirrostratus / altostratus: milky dithered veils the sun still shows through
-  const veils = [[sky.veilHigh, 1, 0.30, 0.22], [sky.veilMid, 2, 0.55, 0.30]];
+  // --- cirrostratus / altostratus: milky veils the sun still shows through. The density has
+  // to move over tens of pixels (fibrous bands, thin patches, thicker ones), because a dither
+  // at one constant density is a lattice across the whole sky, not a cloud; and the threshold
+  // is mostly a hash with a little of the Bayer cell, so no lattice locks in where it is even.
+  // The veil's milkiness is in the sky palette (skyPalette); this is only its fibrous texture.
+  const veils = [[sky.veilHigh, 1, 0.10, 0.22], [sky.veilMid, 2, 0.26, 0.30]];   // sparse: the milk itself is in the palette
   for (const [k, tone, base, spread] of veils) {
     if (k <= 0) continue;
     for (let y = 0; y < VANISH; y++) {
       const d = depthAt(y);
       for (let x = 0; x < W; x++) {
-        const n = wrapNoise(nA, x, y, 0.0012 / SCALE, 0.006 / SCALE);
-        const dens = k * (base + spread * n) * (0.75 + 0.25 * clamp(1 - 1 / d, 0, 1));
-        if (bayer(x, y) < dens) put(data, x, y, haze(tones[tone], d));
+        // three octaves, combed along x the way a cirrostratus sheet streaks, and compressed with depth
+        const n = 0.5 * wrapNoise(nA, x, y, 0.0012 / SCALE, 0.006 / SCALE)
+          + 0.3 * wrapNoise(nB, x, y, 0.0045 / SCALE, 0.02 / SCALE, d)
+          + 0.2 * wrapNoise(nC, x, y, 0.014 / SCALE, 0.05 / SCALE, d);
+        const dens = k * (base + spread * (n * 2 - 1)) * (0.75 + 0.25 * clamp(1 - 1 / d, 0, 1));
+        const thr = bayer(x, y) * 0.45 + hash2(x, y, 5) * 0.55;
+        if (thr < dens) put(data, x, y, haze(tones[tone], d));
       }
     }
   }

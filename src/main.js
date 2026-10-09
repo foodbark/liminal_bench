@@ -62,6 +62,12 @@ function computeEnv() {
   let cover = w.cover;
   if (o.enabled && o.cover >= 0) cover = o.cover / 100;
   const cond = { ...conditionsFromCode(w.code), cover };
+  // How much the clouds actually take out of the light: a low deck shades the valley, a middle
+  // one most of the way, a high veil hardly at all (and at sunset it is the sky that goes pink
+  // end to end). `cover` stays the total for what a veil does hide: stars, the Milky Way, meteors.
+  cond.shade = w.coverLow != null ? Math.min(1, (w.coverLow ?? 0) + (w.coverMid ?? 0) * 0.7 + (w.coverHigh ?? 0) * 0.25) : cover;
+  if (o.enabled && o.cover >= 0) cond.shade = cover;
+  if (cond.label === 'overcast' && (w.coverLow ?? 1) < 0.4 && (w.coverMid ?? 1) < 0.4) cond.label = 'high overcast';
   // Inversion: fog in a cold month means the valley is a sea of fog with the ranges above it.
   // Mountain fog: low cloud hanging on the slopes.
   const preset = o.enabled && o.weather !== 'live' ? WEATHER_PRESETS[o.weather] : null;
@@ -95,7 +101,7 @@ function computeEnv() {
   const phase = moonPhase(now);
   let moon = { ...sunPosition(new Date(now.getTime() - phase * 86400000), LAT, LON), phase };
   if (o.enabled && o.moon !== 'live') moon = { ...moon, ...{ full: { phase: 0.5, altitude: 40, azimuth: 160 }, half: { phase: 0.25, altitude: 30, azimuth: 200 }, low: { phase: 0.5, altitude: 11, azimuth: 140 }, none: { altitude: -20 } }[o.moon] };
-  const pal = skyPalette(sun.altitude, cond);
+  const pal = skyPalette(sun.altitude, cond, sky);
   const liveData = w.ok && !(o.enabled && o.weather !== 'live');
   // Snow on the peaks: the summit weather and its latch decide when it arrives, the month table
   // how deep it gets (src/season.js); the debug panel can force any state of it.
@@ -108,7 +114,7 @@ function computeEnv() {
     || (cond.precip.type === 'snow' && (w.temp == null || w.temp <= 33))
     || (!liveData && SEASON_SNOW[month] >= 0.95); // no real data: assume a white valley floor in deep winter
   const sunSide = sun.azimuth < 180 ? 1 : -1;
-  const a2 = Math.round(sun.altitude * 2), c1 = cover.toFixed(1);
+  const a2 = Math.round(sun.altitude * 2), c1 = cover.toFixed(1) + '/' + cond.shade.toFixed(1);
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {

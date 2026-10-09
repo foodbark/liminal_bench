@@ -83,7 +83,7 @@ export function renderTerrain(img, env, assets) {
   // --- light for this moment
   // Alpenglow: strongest with the sun right at the horizon, deep pink-orange below it, gold above.
   // full strength within about two degrees of the horizon, fading out over the next seven
-  const glow = clamp(1 - (Math.abs(alt + 0.5) - 2) / 7, 0, 1) * (1 - env.cond.cover * 0.7);
+  const glow = clamp(1 - (Math.abs(alt + 0.5) - 2) / 7, 0, 1) * (1 - (env.cond.shade ?? env.cond.cover) * 0.7);
   const glowRGB = lerpRGB([255, 118, 88], [255, 205, 150], clamp((alt + 3) / 6, 0, 1));
   // the light's tint as a multiplier: deep orange at the horizon, gold a little higher
   const glowMul = lerpRGB([1.28, 0.86, 0.64], [1.16, 1.02, 0.84], clamp((alt + 3) / 6, 0, 1));
@@ -244,17 +244,21 @@ export function renderTerrain(img, env, assets) {
       }
 
       // --- rim light where a silhouette meets the sky, on top and on the sun's side: a short
-      // band that thins out through the dither instead of a hard outline
+      // band that thins out through the dither instead of a hard outline. Foliage takes a far
+      // shallower, weaker rim: a band of pine crowns along a crest would otherwise light up
+      // every crown top into a bright scallop, where a grass ridge takes a thin line.
+      const foliage = mat === MAT.FOLIAGE;
+      const reach = foliage ? Math.max(1, Math.round(SCALE)) : P.rimReach, rimMat = foliage ? 0.45 : 1;
       let dist = 0;
-      for (let k = 1; k <= P.rimReach && !dist; k++) {
+      for (let k = 1; k <= reach && !dist; k++) {
         const up = y >= k && mask[i - W * 4 * k] === LAYER.SKY;
         const side = sunLeft ? (x >= k && mask[i - 4 * k] === LAYER.SKY) : (x < W - k && mask[i + 4 * k] === LAYER.SKY);
         if (up || side) dist = k;
       }
       if (dist && d < 1.15 - (dist / SCALE) * (P.rimReach > 3 * SCALE ? 0.25 : 0.33)) {
         const fall = 1 - ((dist - 1) / SCALE) * (P.rimReach > 3 * SCALE ? 0.22 : 0.3);
-        if (glow > 0 && pixK > 0.2) c = lerpRGB(c, rimColor, clamp(glow * pixK * 0.7 * fall * P.rimK, 0, 1));
-        else if (moonK > 0.05) c = lerpRGB(c, [200, 215, 245], moonK * 0.5 * fall);
+        if (glow > 0 && pixK > 0.2) c = lerpRGB(c, rimColor, clamp(glow * pixK * 0.7 * fall * P.rimK * rimMat, 0, 1));
+        else if (moonK > 0.05) c = lerpRGB(c, [200, 215, 245], moonK * 0.5 * fall * rimMat);
       }
       putPx(data, i, [clamp(c[0], 0, 255), clamp(c[1], 0, 255), clamp(c[2], 0, 255)]);
     }
