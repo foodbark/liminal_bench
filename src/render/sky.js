@@ -154,11 +154,11 @@ export function drawStars(ctx, env, t) {
       const lvl0 = Math.min(7, (b0 * 8) | 0);
       // the faintest stars cannot change size, so their tone breathes both ways with the spread,
       // a step down and a couple up, gently; the rest dim with spread and brighten on a glint
-      const b = lvl0 <= 2 ? b0 * (1 + 0.7 * (0.5 - sp)) * (1 + 0.45 * gl) : b0 * (1 - amp * sp) * (1 + 0.45 * gl);
+      const b = lvl0 <= 2 ? b0 * (1 + 1.4 * (0.5 - sp)) * (1 + 0.45 * gl) : b0 * (1 - amp * sp) * (1 + 0.45 * gl);   // a single pixel needs a wide swing to be seen moving
       const lvl = Math.max(Math.min(7, (b * 8) | 0), Math.max(0, lvl0 - (lvl0 >= 4 ? 2 : 1)));
       let tint = st[3];
       if (gl > 0.5 && pos.altitude < 15) tint = hash2(i, stamp, 5) < 0.5 ? 7 : 8;   // the chromatic flash of a low star
-      (buckets[lvl * 16 + tint] ||= []).push(p.x, p.y, st[2], sp, gl, ((t * 0.7 + i * 0.37) | 0) & 1);
+      (buckets[lvl * 16 + tint] ||= []).push(p.x, p.y, st[2], sp, gl, (t * 0.7 + i * 0.37) | 0, i);   // the slow clock the points swing on, and the star, for its own arm lengths
       if (NAMES && NAMES.has(i)) named.push({ x: p.x, y: p.y, label: NAMES.get(i) });
     }
     // The planets: steady (they do not twinkle, which is how people tell them apart), sized by
@@ -191,16 +191,32 @@ export function drawStars(ctx, env, t) {
       g.fillStyle = `rgb(${(tint[0] * (0.55 + 0.45 * v)) | 0},${(tint[1] * (0.55 + 0.45 * v)) | 0},${(tint[2] * (0.55 + 0.45 * v)) | 0})`;   // the floor stays well above the sky
       // sizes in scene pixels so the stars survive being shown at half size
       const u = Math.max(1, Math.round(SCALE * 0.6));
-      // the points of a bright star, upright or diagonal; they swing between the two slowly
-      const points = (x, y, a, diag) => {
-        if (!diag) { g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); return; }
-        for (let k = u; k <= a; k += u) { g.fillRect(x + k, y - k, u, u); g.fillRect(x - k, y - k, u, u); g.fillRect(x + k, y + k, u, u); g.fillRect(x - k, y + k, u, u); }
+      // the points of a bright star: upright or diagonal, swinging between the two on a slow
+      // clock, and each arm with its own length that drifts on the same clock, so the spikes
+      // lean and shift a little every time rather than snapping between two identical shapes;
+      // a smeared star also shows short stubs in the other orientation
+      // an arm starts just outside the core square and runs L pixels out, u thick
+      const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+      const arm = (x, y, k, L) => {
+        const [dx, dy] = DIRS[k], s = u + 1;
+        if (k < 4) {
+          if (dx) g.fillRect(dx > 0 ? x + s : x - s - L + 1, y - (u >> 1), L, u);
+          else g.fillRect(x - (u >> 1), dy > 0 ? y + s : y - s - L + 1, u, L);
+        } else for (let j = 0; j < L; j++) g.fillRect(x + dx * (s + j) - (dx < 0 ? u - 1 : 0), y + dy * (s + j) - (dy < 0 ? u - 1 : 0), u, u);
       };
-      for (let i = 0; i < list.length; i += 6) {
-        const x = list[i], y = list[i + 1], mag = list[i + 2], sp = list[i + 3], gl = list[i + 4], diag = list[i + 5];
+      const points = (x, y, a, sp, clock, star) => {
+        const diag = clock & 1;
+        for (let k = 0; k < 8; k++) {
+          const primary = (k >= 4) === !!diag;
+          const L = primary ? a + (hash2(star * 8 + k, clock, 6) < 0.35 ? 1 : 0) : (sp > 0.6 ? u - 1 : 0);
+          if (L > 0) arm(x, y, k, L);
+        }
+      };
+      for (let i = 0; i < list.length; i += 7) {
+        const x = list[i], y = list[i + 1], mag = list[i + 2], sp = list[i + 3], gl = list[i + 4], clock = list[i + 5], star = list[i + 6];
         // sharp (low spread) is small and bright, spread is bigger and dimmer, a glint is bigger
         // and brighter for a moment; nothing ever shrinks below its resting size
-        if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, sp > 0.5 ? u + (u >> 1) : u, diag); }   // a dot with points; a glint sharpens it, so the points shorten
+        if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, sp > 0.5 ? u + (u >> 1) : u, sp, clock, star); }   // a dot with points; a glint sharpens it, so the points shorten
         else if (mag < 3.0) { if (sp > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
         else if (mag < 4.3) g.fillRect(x, y, u, u);   // tone only
         else g.fillRect(x, y, 1, 1);   // the faintest are steady: a pixel below visibility at window scale cannot twinkle, only appear
