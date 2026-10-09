@@ -182,8 +182,10 @@ export function drawStars(ctx, env, t) {
       const v = clamp(b, 0, 1);
       g.fillStyle = `rgb(${(pl.tint[0] * (0.62 + 0.38 * v)) | 0},${(pl.tint[1] * (0.62 + 0.38 * v)) | 0},${(pl.tint[2] * (0.62 + 0.38 * v)) | 0})`;
       const u = Math.max(1, Math.round(SCALE * 0.6)), x = p.x, y = p.y;
-      if (pl.mag < -1.8) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // Venus, Jupiter: a dot with points a little longer than any star's
-      else if (pl.mag < 0.9) { const a = u + (u >> 1); g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }
+      // a planet is a disc: no points, no twinkle. Venus and Jupiter a little bigger than any
+      // star's core, Saturn and a bright Mars the size of one, the dim ones smaller.
+      if (pl.mag < -1.8) fillCircle(g, x, y, u + 1);
+      else if (pl.mag < 0.9) fillCircle(g, x, y, u);
       else if (pl.mag < 2.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1);
       else g.fillRect(x, y, u, u);
       spots.push({ x, y, label: pl.label, mag: pl.mag, altitude: pos.altitude, azimuth: pos.azimuth });
