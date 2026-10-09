@@ -145,10 +145,13 @@ export function drawStars(ctx, env, t) {
       const low = clamp(1 - (pos.altitude - 5) / 40, 0.25, 1);
       let sp = spread[i], gl = glint[i];
       sp = clamp(sp + (0.5 - sp) * 0.12 + (hash2(i, stamp, 3) - 0.5) * 0.22 * (0.5 + low), 0, 1);   // livelier near the ridge
-      if (gl > 0) gl = gl > 0.3 ? gl * 0.5 : 0; else if (hash2(i, stamp, 4) < 0.012 * (0.6 + low)) gl = 1;   // a glint every ten seconds or so
+      // a glint is a moment of sharpening (smaller and brighter, the light focused), fading over
+      // half a second; a burst that was bigger and brighter for one frame read as a camera flash
+      if (gl > 0) gl = gl > 0.12 ? gl * 0.72 : 0; else if (hash2(i, stamp, 4) < 0.008 * (0.6 + low)) gl = 1;
+      if (gl > 0) sp = Math.min(sp, 0.3 * (1 - gl));
       spread[i] = sp; glint[i] = gl;
       const amp = 0.18 + 0.3 * low;
-      const b = b0 * (1 - amp * sp) * (1 + 0.6 * gl);
+      const b = b0 * (1 - amp * sp) * (1 + 0.45 * gl);
       const lvl0 = Math.min(7, (b0 * 8) | 0);
       const lvl = Math.max(Math.min(7, (b * 8) | 0), lvl0 - (lvl0 >= 4 ? 2 : lvl0 >= 3 ? 1 : 0));   // the faintest never dim
       let tint = st[3];
@@ -195,9 +198,9 @@ export function drawStars(ctx, env, t) {
         const x = list[i], y = list[i + 1], mag = list[i + 2], sp = list[i + 3], gl = list[i + 4], diag = list[i + 5];
         // sharp (low spread) is small and bright, spread is bigger and dimmer, a glint is bigger
         // and brighter for a moment; nothing ever shrinks below its resting size
-        if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, gl > 0.5 ? 2 * u : sp > 0.5 ? u + (u >> 1) : u, diag); }   // a dot with points
-        else if (mag < 3.0) { if (gl > 0.5) { g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); points(x, y, u, diag); } else if (sp > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
-        else if (mag < 4.3) { if (gl > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        if (mag < 1.5) { g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); points(x, y, sp > 0.5 ? u + (u >> 1) : u, diag); }   // a dot with points; a glint sharpens it, so the points shorten
+        else if (mag < 3.0) { if (sp > 0.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else if (mag < 4.3) g.fillRect(x, y, u, u);   // tone only
         else g.fillRect(x, y, 1, 1);   // the faintest are steady: a pixel below visibility at window scale cannot twinkle, only appear
       }
     }
