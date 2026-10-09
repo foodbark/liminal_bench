@@ -21,7 +21,7 @@ body { display: flex; align-items: center; justify-content: center; font-family:
   font-size: calc(18px * var(--u)); letter-spacing: 0.02em; text-transform: lowercase;
 }
 #caption-text { color: #e8e2cc; white-space: nowrap; }
-#status { color: #7d8595; font-size: calc(15px * var(--u)); text-align: right; }
+#status { color: #7d8595; font-size: calc(15px * var(--u)); text-align: left; white-space: pre; }
 #panel {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
 }

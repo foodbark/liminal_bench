@@ -151,7 +151,7 @@ export function setupUI(state, canvas) {
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;
         const w = state.weatherShown, env = state.env;
-        const bits = ['missoula, mt', 'a place, sort of...', formatTime(state.now).toLowerCase()];
+        const bits = ['a place sort of like. . .   missoula, mt', formatTime(state.now).toLowerCase()];
         if (w.temp != null) bits.push(Math.round(w.temp) + '°f');
         bits.push(w.ok ? env.cond.label : 'weather unavailable');
         const r = window.__liminal && window.__liminal.renderer;
