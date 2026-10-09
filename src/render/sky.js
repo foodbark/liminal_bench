@@ -1,4 +1,5 @@
 import { W, H, HORIZON, SCALE, LAT } from '../state.js';
+import { planetPositions } from '../util/planets.js';
 import { starAltAz, altAzToRaDec, galacticLat } from '../util/solar.js';
 import { bayer, lerpRGB, quant, clamp, rgb, fillCircle, ditherPattern, makeCanvas, lerp, smooth } from '../util/pixel.js';
 import { mulberry32, valueNoise2D as valueNoise2DSky } from '../util/noise.js';
@@ -74,6 +75,8 @@ const STAR_TINT = [[190, 210, 255], [205, 220, 255], [235, 240, 255], [255, 250,
 let terrainMask = null;
 export function setStarMask(mask) { terrainMask = mask; }
 let starLayer = null, starCtx = null, starStamp = -1, starKey = '';
+// the planets on screen right now, for the hover caption: { x, y, label }
+export let planetSpots = [];
 export function drawStars(ctx, env, t) {
   const nf = clamp((-env.sun.altitude - 3) / 9, 0, 1) * (1 - env.cond.cover) * (env.cond.fog ? 0.4 : 1);
   if (nf <= 0.02 || !CATALOG) return;
@@ -109,6 +112,29 @@ export function drawStars(ctx, env, t) {
       const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2]);
     }
+    // The planets: steady (they do not twinkle, which is how people tell them apart), sized by
+    // brightness, Venus and Jupiter bigger than any star. Hidden by the ridges and the sheets
+    // like the stars, dimmed by the twilight like them, never by the moon.
+    const spots = [];
+    for (const pl of planetPositions(env.now)) {
+      const pos = starAltAz(pl.ra, pl.dec, env.lst, LAT);
+      if (pos.azimuth < 92 || pos.azimuth > 268 || pos.altitude < -8) continue;
+      const p = skyXY(pos.azimuth, pos.altitude);
+      if (p.y < 0 || p.y >= HORIZON || p.x < 0 || p.x >= W) continue;
+      if (terrainMask && terrainMask[(p.y * W + p.x) * 4] !== 0) continue;
+      const ext = pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1;
+      const b = (0.22 + 0.78 * clamp((5.2 - pl.mag) / 6.2, 0, 1)) * nf * ext;
+      if (b < 0.1) continue;
+      const v = clamp(b, 0, 1);
+      g.fillStyle = `rgb(${(pl.tint[0] * (0.62 + 0.38 * v)) | 0},${(pl.tint[1] * (0.62 + 0.38 * v)) | 0},${(pl.tint[2] * (0.62 + 0.38 * v)) | 0})`;
+      const u = Math.max(1, Math.round(SCALE * 0.6)), x = p.x, y = p.y;
+      if (pl.mag < -1.8) { g.fillRect(x - 3 * u, y, 6 * u + 1, u); g.fillRect(x, y - 3 * u, u, 6 * u + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); }
+      else if (pl.mag < 0.9) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }
+      else if (pl.mag < 2.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1);
+      else g.fillRect(x, y, u, u);
+      spots.push({ x, y, label: pl.label, mag: pl.mag, altitude: pos.altitude, azimuth: pos.azimuth });
+    }
+    planetSpots = spots;
     for (let k = 0; k < buckets.length; k++) {
       const list = buckets[k]; if (!list) continue;
       const lvl = (k / 8) | 0, tint = STAR_TINT[k % 8] || STAR_TINT[3];

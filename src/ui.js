@@ -4,6 +4,7 @@ import { lerp, clamp } from './util/pixel.js';
 import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 import { gliderChance } from './render/gliders.js';
+import { planetSpots } from './render/sky.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
 // screens where a panel over a close-up would cover what it describes: touch, or a short window
@@ -41,6 +42,8 @@ export function setupUI(state, canvas) {
     // a wing over Sentinel gets a caption but is nowhere to go
     const fx = window.__liminal && window.__liminal.renderer && window.__liminal.renderer.fx;
     if (fx && fx.gliders.list.length && fx.gliders.hit(p)) return { id: 'glider', label: fx.gliders.label };
+    const r = 10 * (W / 1024);
+    for (const s of planetSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) return { id: 'planet', label: s.label };
     return null;
   }
   canvas.addEventListener('mousemove', (e) => {
@@ -158,7 +161,7 @@ export function setupUI(state, canvas) {
           const rg = state.weather.ridge, since = peakSnowSince();
           const peaks = rg ? `summit ${Math.round(rg.temp)}°f, ${Math.round(rg.snowDepth * 100)} cm` : 'summit n/a';
           const latch = peakSnowLatched(state.now) ? `snowed in since ${since.getMonth() + 1}/${since.getDate()}` : 'no first snow yet';
-          dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\npeaks: ${peaks}, ${latch}\nwind ${env.wind.speed} mph from ${env.wind.dir}°  gliders ${r && r.fx ? r.fx.gliders.list.length : 0} up, chance ${gliderChance(env).toFixed(2)}`;
+          dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\npeaks: ${peaks}, ${latch}\nwind ${env.wind.speed} mph from ${env.wind.dir}°  gliders ${r && r.fx ? r.fx.gliders.list.length : 0} up, chance ${gliderChance(env).toFixed(2)}\nplanets up: ${planetSpots.map((s) => `${s.label} ${s.mag.toFixed(1)} alt ${s.altitude.toFixed(0)}° az ${s.azimuth.toFixed(0)}°`).join(', ') || 'none in frame'}`;
         }
       }
     },
