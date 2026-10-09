@@ -98,10 +98,14 @@ export function drawStars(ctx, env, t) {
       const p = skyXY(pos.azimuth, pos.altitude);
       if (p.y < 0 || p.y >= HORIZON || p.x < 0 || p.x >= W) continue;
       if (terrainMask && terrainMask[(p.y * W + p.x) * 4] !== 0) continue;
-      const tw = 0.75 + 0.25 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
       const ext = pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1;   // haze dims them near the ridge
-      const b = (0.22 + 0.78 * clamp((5.2 - st[2]) / 6.2, 0, 1)) * nf * tw * ext;   // magnitude 5 faint .. Sirius bright
-      if (b < 0.1) continue;
+      const b0 = (0.22 + 0.78 * clamp((5.2 - st[2]) / 6.2, 0, 1)) * nf * ext;   // magnitude 5 faint .. Sirius bright
+      // whether a star shows is decided before the twinkle: at dusk the first stars sit right on
+      // the cutoff, and a twinkle that could carry them across it blinked them on and off ten
+      // times a second. Twinkle is brightness, never existence.
+      if (b0 < 0.1) continue;
+      const tw = 0.75 + 0.25 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
+      const b = b0 * tw;
       const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2]);
     }
