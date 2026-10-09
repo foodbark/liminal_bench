@@ -143,12 +143,14 @@ export function drawStars(ctx, env, t) {
       const slow = 0.5 + 0.5 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
       // a new throw five times a second (long enough to register), leaning bright: the floor
       // keeps a star from ever dropping to its dimmest, so it sits bright most of the time
-      const f = 0.25 + 0.75 * (slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7);
+      const raw = slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7;   // the throw itself, for the size flicker
+      const f = 0.25 + 0.75 * raw;
       const b = b0 * (1 - amp * (1 - f));
-      // never more than one step below the steady brightness: a faint star that dropped two
-      // steps went to the sky's own tone and blinked out
-      const lvl = Math.max(Math.min(7, (b * 8) | 0), Math.min(7, (b0 * 8) | 0) - 1), tint = st[3];
-      (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], f);
+      // a bright star may twinkle two steps down, a faint one only one: a faint star that
+      // dropped two steps went to the sky's own tone and blinked out
+      const lvl0 = Math.min(7, (b0 * 8) | 0);
+      const lvl = Math.max(Math.min(7, (b * 8) | 0), lvl0 - (lvl0 >= 4 ? 2 : 1)), tint = st[3];
+      (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], raw);
       if (NAMES && NAMES.has(i)) named.push({ x: p.x, y: p.y, label: NAMES.get(i) });
     }
     // The planets: steady (they do not twinkle, which is how people tell them apart), sized by
@@ -184,8 +186,8 @@ export function drawStars(ctx, env, t) {
       for (let i = 0; i < list.length; i += 4) {
         const x = list[i], y = list[i + 1], mag = list[i + 2], f = list[i + 3];
         // the bright stars change size as well as tone: the eye reads a twinkle from the size
-        if (mag < 1.5) { if (f > 0.4) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); } g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // the brightest: a cross, its arms flickering
-        else if (mag < 3.0) { if (f > 0.35) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        if (mag < 1.5) { if (f > 0.38) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); } g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // the brightest: a cross, its arms flickering
+        else if (mag < 3.0) { if (f > 0.33) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
         else if (mag < 4.3) g.fillRect(x, y, u, u);   // the faint ones keep their size: a single pixel vanishes at window scale
         else g.fillRect(x, y, 1, 1);
       }
