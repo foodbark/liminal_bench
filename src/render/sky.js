@@ -141,9 +141,9 @@ export function drawStars(ctx, env, t) {
       const low = clamp(1 - (pos.altitude - 5) / 40, 0.25, 1);
       const amp = 0.3 + 0.4 * low;                  // swing: under half overhead, more near the ridge
       const slow = 0.5 + 0.5 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
-      // a new throw five times a second (long enough to register), leaning bright: the floor
+      // a new throw ten times a second, leaning bright: the floor
       // keeps a star from ever dropping to its dimmest, so it sits bright most of the time
-      const raw = slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7;   // the throw itself, for the size flicker
+      const raw = slow * 0.3 + hash2(i, stamp, 3) * 0.7;   // the throw itself, a new one every redraw (ten a second), for the size flicker
       const f = 0.25 + 0.75 * raw;
       const b = b0 * (1 - amp * (1 - f));
       // a bright star may twinkle two steps down, a faint one only one: a faint star that
