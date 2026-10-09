@@ -151,9 +151,11 @@ export function drawStars(ctx, env, t) {
       if (gl > 0) sp = Math.min(sp, 0.3 * (1 - gl));
       spread[i] = sp; glint[i] = gl;
       const amp = 0.18 + 0.3 * low;
-      const b = b0 * (1 - amp * sp) * (1 + 0.45 * gl);
       const lvl0 = Math.min(7, (b0 * 8) | 0);
-      const lvl = Math.max(Math.min(7, (b * 8) | 0), lvl0 - (lvl0 >= 4 ? 2 : lvl0 >= 3 ? 1 : 0));   // the faintest never dim
+      // the faintest stars cannot change size, so their tone breathes both ways with the spread,
+      // a step down and a couple up, gently; the rest dim with spread and brighten on a glint
+      const b = lvl0 <= 2 ? b0 * (1 + 0.7 * (0.5 - sp)) * (1 + 0.45 * gl) : b0 * (1 - amp * sp) * (1 + 0.45 * gl);
+      const lvl = Math.max(Math.min(7, (b * 8) | 0), Math.max(0, lvl0 - (lvl0 >= 4 ? 2 : 1)));
       let tint = st[3];
       if (gl > 0.5 && pos.altitude < 15) tint = hash2(i, stamp, 5) < 0.5 ? 7 : 8;   // the chromatic flash of a low star
       (buckets[lvl * 16 + tint] ||= []).push(p.x, p.y, st[2], sp, gl, ((t * 0.7 + i * 0.37) | 0) & 1);
