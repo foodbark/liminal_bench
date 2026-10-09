@@ -143,7 +143,9 @@ export function drawStars(ctx, env, t) {
       // keeps a star from ever dropping to its dimmest, so it sits bright most of the time
       const f = 0.25 + 0.75 * (slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7);
       const b = b0 * (1 - amp * (1 - f));
-      const lvl = Math.min(7, (b * 8) | 0), tint = st[3];
+      // never more than one step below the steady brightness: a faint star that dropped two
+      // steps went to the sky's own tone and blinked out
+      const lvl = Math.max(Math.min(7, (b * 8) | 0), Math.min(7, (b0 * 8) | 0) - 1), tint = st[3];
       (buckets[lvl * 8 + tint] ||= []).push(p.x, p.y, st[2], f);
       if (NAMES && NAMES.has(i)) named.push({ x: p.x, y: p.y, label: NAMES.get(i) });
     }
@@ -179,10 +181,10 @@ export function drawStars(ctx, env, t) {
       const u = Math.max(1, Math.round(SCALE * 0.6));
       for (let i = 0; i < list.length; i += 4) {
         const x = list[i], y = list[i + 1], mag = list[i + 2], f = list[i + 3];
-        // every star changes size as well as tone: the eye reads a twinkle from the size
+        // the bright stars change size as well as tone: the eye reads a twinkle from the size
         if (mag < 1.5) { if (f > 0.4) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); } g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // the brightest: a cross, its arms flickering
         else if (mag < 3.0) { if (f > 0.35) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
-        else if (mag < 4.3) { if (f > 0.3) g.fillRect(x, y, u, u); else g.fillRect(x, y, 1, 1); }
+        else if (mag < 4.3) g.fillRect(x, y, u, u);   // the faint ones keep their size: a single pixel vanishes at window scale
         else g.fillRect(x, y, 1, 1);
       }
     }
