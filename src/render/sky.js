@@ -184,8 +184,11 @@ export function drawStars(ctx, env, t) {
       const u = Math.max(1, Math.round(SCALE * 0.6)), x = p.x, y = p.y;
       // a planet is a disc: no points, no twinkle. Venus and Jupiter a little bigger than any
       // star's core, Saturn and a bright Mars the size of one, the dim ones smaller.
-      if (pl.mag < -1.8) fillCircle(g, x, y, u + 1);
-      else if (pl.mag < 0.9) fillCircle(g, x, y, u);
+      // a rounded square, corners cut: an integer circle this small ends in single-pixel nubs
+      // on the axes and read as a cross
+      const disc = (r) => { for (let dy = -r; dy <= r; dy++) { const w = Math.abs(dy) === r ? r - 1 : r; g.fillRect(x - w, y + dy, 2 * w + 1, 1); } };
+      if (pl.mag < -1.8) disc(u + 1);
+      else if (pl.mag < 0.9) disc(u);
       else if (pl.mag < 2.5) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1);
       else g.fillRect(x, y, u, u);
       spots.push({ x, y, label: pl.label, mag: pl.mag, altitude: pos.altitude, azimuth: pos.azimuth });
