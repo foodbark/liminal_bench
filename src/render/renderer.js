@@ -144,7 +144,7 @@ export class Renderer {
     // Two static layers, rebuilt only when a cache key changes: `base` (sky, moon, sun, terrain,
     // fog bands, shadows, props) and `fg` (the same without the sky, so it can go back over the
     // clouds). Each frame draws straight to the visible canvas under the camera transform:
-    // base, stars (clipped to sky), meteors, clouds, fg if there are clouds or a meteor, paragliders
+    // base, sheets, stars (clipped to sky), meteors, cumulus, fg if there are clouds or a meteor, paragliders
     // and then the near planes back over them, lamp glow, precipitation.
     // On a big painting every full-frame draw counts, and idle daytime frames skip everything.
     const cam = state.camera;
@@ -212,13 +212,18 @@ export class Renderer {
     c.imageSmoothingEnabled = false;
     c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s));
     c.drawImage(this.base, 0, 0); lap('base');
+    // The thin sheets go under the stars: they are sparse scrolling dither, and a star behind a
+    // cirrus wisp was covered and uncovered by passing pixels, a strobe. Cover already dims the
+    // stars; cumulus, which are solid, still pass in front of them.
+    // A low deck (stratocumulus, stratus, nimbostratus) is solid enough that it stays in front.
+    const thin = sheets && (sk.strato + sk.stratus + sk.nimbo) < 0.05;
+    const drawSheets = () => { const ox = Math.round(this.sheetX); c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0); lap('sheets'); };
+    if (thin) drawSheets();
     drawStars(c, env, t); lap('stars');
     const meteors = this.fx.meteors.length > 0;
     if (meteors) { this.fx.drawMeteors(c); lap('meteors'); }
-    if (clouds) {
-      if (sheets) { const ox = Math.round(this.sheetX); c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0); lap('sheets'); }
-      this.fx.drawClouds(c, env); lap('clouds');
-    }
+    if (sheets && !thin) drawSheets();
+    if (clouds) { this.fx.drawClouds(c, env); lap('clouds'); }
     // the terrain goes back over the clouds, and over a meteor so it passes behind the ridges
     if (clouds || meteors) { c.drawImage(this.fg, 0, 0); lap('fg'); }
     // wings fly in front of the clouds and the far ranges, behind Sentinel, the trees and the props
