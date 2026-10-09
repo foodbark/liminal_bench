@@ -139,11 +139,11 @@ export function drawStars(ctx, env, t) {
       // swell, strong near the ridge where the air is thick and faint overhead, the way it
       // looks outside. A bright star also flicks between its cross and a plain point.
       const low = clamp(1 - (pos.altitude - 5) / 40, 0.25, 1);
-      const amp = 0.2 + 0.3 * low;                  // swing: a fifth overhead, half near the ridge
+      const amp = 0.12 + 0.25 * low;                // swing: an eighth overhead, over a third near the ridge
       const slow = 0.5 + 0.5 * Math.sin(t * (1.3 + (i % 7) * 0.2) + i);
       // a new throw ten times a second, leaning bright: the floor
       // keeps a star from ever dropping to its dimmest, so it sits bright most of the time
-      const raw = slow * 0.3 + hash2(i, stamp, 3) * 0.7;   // the throw itself, a new one every redraw (ten a second), for the size flicker
+      const raw = slow * 0.3 + hash2(i, stamp >> 1, 3) * 0.7;   // the throw itself, five a second, for the size flicker
       const f = 0.25 + 0.75 * raw;
       const b = b0 * (1 - amp * (1 - f));
       // a bright star may twinkle two steps down, a faint one only one: a faint star that
@@ -188,9 +188,9 @@ export function drawStars(ctx, env, t) {
         // size is what the eye reads as twinkle. The bright crosses only shorten their arms (losing
         // them was too much); the small stars grow from their floor and never shrink below it, so
         // they flick without ever blinking out.
-        if (mag < 1.5) { const a = f > 0.2 ? u + (u >> 1) : u; g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // a dot with short points, not a spike
-        else if (mag < 3.0) { if (f > 0.2) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
-        else if (mag < 4.3) { if (f > 0.8) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        if (mag < 1.5) { const a = f > 0.12 ? u + (u >> 1) : u; g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // a dot with short points, not a spike
+        else if (mag < 3.0) { if (f > 0.12) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else if (mag < 4.3) { if (f > 0.88) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
         else g.fillRect(x, y, 1, 1);   // the faintest are steady: a pixel that is below visibility at window scale cannot twinkle, it can only appear
       }
     }
