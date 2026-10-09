@@ -185,11 +185,13 @@ export function drawStars(ctx, env, t) {
       const u = Math.max(1, Math.round(SCALE * 0.6));
       for (let i = 0; i < list.length; i += 4) {
         const x = list[i], y = list[i + 1], mag = list[i + 2], f = list[i + 3];
-        // the bright stars change size as well as tone: the eye reads a twinkle from the size
-        if (mag < 1.5) { if (f > 0.38) { g.fillRect(x - 2 * u, y, 4 * u + 1, u); g.fillRect(x, y - 2 * u, u, 4 * u + 1); } g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }   // the brightest: a cross, its arms flickering
-        else if (mag < 3.0) { if (f > 0.33) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
-        else if (mag < 4.3) g.fillRect(x, y, u, u);   // the faint ones keep their size: a single pixel vanishes at window scale
-        else g.fillRect(x, y, 1, 1);
+        // size is what the eye reads as twinkle. The bright crosses only shorten their arms (losing
+        // them was too much); the small stars grow from their floor and never shrink below it, so
+        // they flick without ever blinking out.
+        if (mag < 1.5) { const a = f > 0.2 ? 2 * u : u; g.fillRect(x - a, y, 2 * a + 1, u); g.fillRect(x, y - a, u, 2 * a + 1); g.fillRect(x - u, y - u, 2 * u + 1, 2 * u + 1); }
+        else if (mag < 3.0) { if (f > 0.3) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else if (mag < 4.3) { if (f > 0.55) g.fillRect(x - (u >> 1), y - (u >> 1), u + 1, u + 1); else g.fillRect(x, y, u, u); }
+        else { if (f > 0.6) g.fillRect(x, y, u, u); else g.fillRect(x, y, 1, 1); }
       }
     }
   }
