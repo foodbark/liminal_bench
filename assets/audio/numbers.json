@@ -1,5 +1,5 @@
 {
-  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item the caller must have found (state.items) or the call gets its locked intercept; ring picks the ringback (us | eu | uk). area: the local area code, so seven digits dial a listed number. exchange: the listed exchange; an unlisted number in it is not in service, one in any other exchange cannot be completed as dialed. intercepts: the phone company's lines, Jane Barbe's when the files arrive (a file that is not there yet falls back to the transcript).",
+  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item (or a list, any of them) the caller must have found (src/items.js) or the call gets its locked intercept; opens gives an item's own sound and line when it opens the call; ring picks the ringback (us | eu | uk). area: the local area code, so seven digits dial a listed number. exchange: the listed exchange; an unlisted number in it is not in service, one in any other exchange cannot be completed as dialed. intercepts: the phone company's lines, Jane Barbe's when the files arrive (a file that is not there yet falls back to the transcript).",
   "area": "406",
   "exchange": "555",
   "book": [
@@ -41,9 +41,10 @@
       "kind": "recording",
       "name": "the phone company",
       "file": "barbe.mp3",
-      "note": "A voice you have heard before, from a long way back.",
+      "note": "Her takes, 1973 to 1985: the time, the intercepts, the coin prompts, and at the end her own voice, off the clock.",
       "missing": "The line crackles. Nobody has put the recording in yet.",
-      "rings": 2
+      "rings": 2,
+      "credit": "telephoneworld.org, the Jane Barbe collection"
     },
     "4065551212": {
       "kind": "intercept",
@@ -64,8 +65,17 @@
       "file": null,
       "ring": "eu",
       "rings": 4,
-      "requires": "bluebox",
-      "locked": "international"
+      "requires": [
+        "bluebox",
+        "whistle"
+      ],
+      "locked": "international",
+      "opens": {
+        "whistle": {
+          "file": "whistle.mp3",
+          "text": "The whistle, into the mouthpiece. Something far away clicks over."
+        }
+      }
     },
     "4067210000": {
       "kind": "intercept",
@@ -76,11 +86,11 @@
   },
   "intercepts": {
     "cannot": {
-      "text": "We're sorry, your call cannot be completed as dialed. Please check the number and dial again.",
+      "text": "I'm sorry, your call cannot be completed as dialed. Please hang up and check the number and dial again, or ask information operator for assistance. This is a recording.",
       "file": "barbe_cannot.mp3"
     },
     "service": {
-      "text": "The number you have reached is not in service. Please check the number and dial again.",
+      "text": "I'm sorry, the number you have reached is not in service at this time. If you need assistance, please hang up and dial your directory assistance operator. This is a recording.",
       "file": "barbe_service.mp3"
     },
     "directory": {
@@ -95,5 +105,8 @@
       "text": "We're sorry, international calls cannot be placed from this telephone without assistance.",
       "file": null
     }
+  },
+  "credits": {
+    "barbe": "The intercepts and the phone company's number are Jane Barbe, from Telephone World's collection (telephoneworld.org), cut from their compilation; the whistle is a Cap'n Crunch Bo'sun whistle recorded for a comparison video."
   }
 }

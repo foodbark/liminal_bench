@@ -138,12 +138,24 @@ export class Phone {
     const local = n.length === 11 && n[0] === '1' ? n.slice(1) : n;
     const exchange = local.length === 10 ? local.slice(3, 6) : local.length === 7 ? local.slice(0, 3) : '';
     let entry = this.lookup(n) || { kind: 'intercept', which: n.startsWith('011') ? 'international' : exchange === (manifest.exchange || '555') ? 'service' : 'cannot' };
-    if (entry.requires && !this.hasItem(entry.requires)) entry = { kind: 'intercept', which: entry.locked || 'international' };   // some numbers need something found first
+    // some numbers need something found first: `requires` is one item or a list, any of which opens the line
+    let key = null;
+    if (entry.requires) {
+      key = [].concat(entry.requires).find((it) => this.hasItem(it)) || null;
+      if (!key) entry = { kind: 'intercept', which: entry.locked || 'international' };
+    }
     this.set('connecting', { entry });
     const id = this.call;
     const go = (fn) => id === this.call && this.state !== 'hung' && fn();
     if (entry.kind === 'intercept') return this.intercept(entry.which || 'service');
     if (entry.kind === 'busy') { this.set('busy'); this.sounds.busy(20); return; }
+    // the key that opened the line may have a sound of its own (the whistle) before the far end rings
+    const opener = key && entry.opens && entry.opens[key];
+    if (opener) {
+      if (opener.text) this.say(opener.text);
+      if (opener.file) { try { await this.sounds.play(opener.file); } catch (e) { /* no sound: the line still opens */ } }
+      if (!(await this.wait(0.6))) return;
+    }
     // the rest ring first
     const rings = entry.kind === 'time' ? 1 : entry.rings || 2;
     this.set('ringing');
