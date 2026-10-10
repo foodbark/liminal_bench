@@ -113,6 +113,15 @@ An evening of tuning the twinkle by hand (bigger swings, smaller swings, faster,
 
 Built the same night in the star pass of `sky.js`: one spread state per catalog star, smoothed in time, with glints; size, points and tone derived from it.
 
+### The pay phone's voice: Jane Barbe (idea, 2026-10-10)
+
+The phone should speak in the voice every pay phone had: Jane Barbe, who recorded the Audichron and Electronic Tele-Communications announcements for thirty years. Wanted: the intercept set ("we're sorry, your call cannot be completed as dialed", "the number you have reached is not in service", the SIT tones before each), time ("at the tone, the time will be..."), weather and temperature, the coin prompts.
+
+- **Time and temperature were spliced, which is the opportunity.** The machines assembled her fragments (each hour, minute, degree, "exactly", "and ten seconds"), and collectors have digitized the drums, so the phone can say tonight's real time and temperature from the scene's own clock and feed the way the machines did, not a canned line.
+- **Sources.** Telephone World (phworld) and the Evan Doorbell tapes for clean intercepts and time; archive.org's Jane Barbe collections, including drum fragment sets.
+- **Rights.** Corporate recordings of Audichron and its successors, never released under any license. A hobby site playing them is common and low risk but not clean; a collector set with stated terms, or a voice actor reading new lines in her cadence, would be. Not a voice model: she was a real person, died 2003, and that is the wrong kind of resurrection for this place.
+- **In the scene.** Pick up the receiver: dial tone, then the phone book's numbers lead to an intercept, the time and temperature line, or a voicemail (the roadmap's shared voicemails). Audio is a new thing for the site; it should be off until the receiver is lifted, and quiet.
+
 ### Satellites (idea, 2026-09-28)
 
 The night sky is already real (catalog stars by sidereal time, the Milky Way, showers from their radiants), and satellites are the one thing a person actually sees moving up there. Public data, no key.
