@@ -51,6 +51,22 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 }
 #panel-body #note-text:focus { border-color: #7d8595; }
 #panel-body .note-err { color: #c98a6a; min-height: 1.25em; margin-top: calc(4px * var(--u)); }
+/* the pay phone's panel */
+#panel-body .phone-display { color: #f0e6c8; font-size: calc(22px * var(--u)); min-height: 1.3em; letter-spacing: 0.06em; }
+#panel-body .phone-lines { color: #d0cab6; min-height: 1.25em; margin: calc(4px * var(--u)) 0; white-space: pre-wrap; }
+#panel-body .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(4px * var(--u)); width: calc(150px * var(--u)); margin: calc(6px * var(--u)) 0; }
+#panel-body .keypad button {
+  font-family: var(--font); font-size: calc(20px * var(--u)); background: #1a1e28; color: #e8e2cc;
+  border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(2px * var(--u)) 0; cursor: pointer; touch-action: manipulation;
+}
+#panel-body .keypad button:hover { background: #2a3040; }
+#panel-body .book .list li.dial { cursor: pointer; }
+#panel-body .book .list li.dial:hover { color: #f0e6c8; }
+#panel-body .phone-form #message-text {
+  display: block; width: 100%; box-sizing: border-box; margin-top: calc(6px * var(--u));
+  font-family: var(--font); font-size: calc(19px * var(--u)); background: #1a1e28; color: #f0e6c8;
+  border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(3px * var(--u)) calc(8px * var(--u)); outline: none;
+}
 #panel-actions { margin-top: calc(10px * var(--u)); display: flex; gap: calc(8px * var(--u)); flex-wrap: wrap; }
 #panel-actions button {
   font-family: var(--font); font-size: calc(18px * var(--u)); text-transform: lowercase;

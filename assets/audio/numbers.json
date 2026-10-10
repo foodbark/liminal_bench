@@ -1,0 +1,86 @@
+{
+  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item the caller must have found (state.items) or the call gets its locked intercept; ring picks the ringback (us | eu | uk). intercepts: the phone company's lines, Jane Barbe's when the files arrive.",
+  "book": [
+    {
+      "name": "time and temperature",
+      "number": "406-555-0100"
+    },
+    {
+      "name": "the bench",
+      "number": "406-555-0199"
+    },
+    {
+      "name": "the phone company",
+      "number": "406-555-0123"
+    },
+    {
+      "name": "a number in budapest",
+      "number": "011-36-1-555-0160",
+      "note": "long distance"
+    }
+  ],
+  "numbers": {
+    "4065550100": {
+      "kind": "time"
+    },
+    "4065550199": {
+      "kind": "machine",
+      "name": "the bench",
+      "greeting": "You have reached the bench. Nobody is sitting here right now. Leave a message after the tone.",
+      "file": null,
+      "rings": 3
+    },
+    "4065550123": {
+      "kind": "recording",
+      "name": "the phone company",
+      "file": "barbe.mp3",
+      "note": "A voice you have heard before, from a long way back.",
+      "missing": "The line crackles. Nobody has put the recording in yet.",
+      "rings": 2
+    },
+    "4065551212": {
+      "kind": "intercept",
+      "which": "service"
+    },
+    "411": {
+      "kind": "intercept",
+      "which": "directory"
+    },
+    "0": {
+      "kind": "intercept",
+      "which": "operator"
+    },
+    "0113615550160": {
+      "kind": "machine",
+      "name": "budapest",
+      "greeting": "Halló? ... Tessék? ... (someone, somewhere far away, talking at length in Hungarian)",
+      "file": null,
+      "ring": "eu",
+      "rings": 4,
+      "requires": "bluebox",
+      "locked": "international"
+    }
+  },
+  "intercepts": {
+    "cannot": {
+      "text": "We're sorry, your call cannot be completed as dialed. Please check the number and dial again.",
+      "file": null
+    },
+    "service": {
+      "text": "The number you have reached is not in service. Please check the number and dial again.",
+      "file": null
+    },
+    "directory": {
+      "text": "Directory assistance is not available from this telephone.",
+      "file": null
+    },
+    "operator": {
+      "text": "There is no operator on this line.",
+      "file": null
+    },
+    "international": {
+      "text": "We're sorry, international calls cannot be placed from this telephone without assistance.",
+      "file": null
+    }
+  }
+}

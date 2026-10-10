@@ -5,6 +5,8 @@ import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
+import { Phone, loadPhoneBook, phoneBook, formatNumber, MESSAGE_MAX } from './phone.js';
+import { hasItem, give, inventory } from './items.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
 // screens where a panel over a close-up would cover what it describes: touch, or a short window
@@ -15,6 +17,10 @@ export function setupUI(state, canvas) {
   const caption = $('caption-text'), status = $('status'), panel = $('panel');
   const pTitle = $('panel-title'), pBody = $('panel-body'), pActions = $('panel-actions');
   let panelShown = false, panelFor = null, settled = false;
+  // the pay phone: lifted when its panel opens, hung up when the visitor steps back
+  const phone = new Phone({ now: () => state.now, temp: () => state.weatherShown.temp, hasItem, onChange: () => renderPhone() });
+  loadPhoneBook().then(() => { if (panelFor === 'phone') renderPhone(true); });
+  if (window.__liminal) window.__liminal.items = { give, inventory }; else window.addEventListener('load', () => { if (window.__liminal) window.__liminal.items = { give, inventory }; });
   // A view with a close-up painting shows the prop itself readable, so its panel waits for a
   // second click: the board zooms in on the first, and the next click opens the note form.
   const twoStep = (view) => !!CLOSEUPS[view];
@@ -69,9 +75,10 @@ export function setupUI(state, canvas) {
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
   function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); }
-  function leave() { state.view = 'scene'; state.closeup = null; hidePanel(); }
+  function leave() { state.view = 'scene'; state.closeup = null; phone.hangUp(); hidePanel(); }
   function hidePanel() { panel.hidden = true; panelShown = false; panelFor = null; }
   function showPanel(view) {
+    if (view === 'phone') return phonePanel();
     panelShown = true; panelFor = view;
     const content = PANELS[view](state, { leave, showPanel, compose });
     pTitle.textContent = content.title;
@@ -116,6 +123,78 @@ export function setupUI(state, canvas) {
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
     setTimeout(() => input.focus(), 0);
   }
+
+  // The pay phone's panel: the handset display, the keypad, the phone book, the transcript of
+  // what the line says, and the message form when a machine beeps. The keypad is HTML for now;
+  // it moves onto the phone's close-up painting when that art arrives.
+  let ph = null;   // the panel's live elements
+  function phonePanel() {
+    panelShown = true; panelFor = 'phone';
+    panel.className = 'dock-' + (VIEWS.phone.dock || 'center');
+    panel.hidden = false;
+    pTitle.textContent = 'pay phone';
+    pBody.innerHTML = '';
+    const display = document.createElement('div'); display.className = 'phone-display';
+    const lines = document.createElement('div'); lines.className = 'phone-lines';
+    const keypad = document.createElement('div'); keypad.className = 'keypad';
+    for (const d of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']) {
+      const b = document.createElement('button'); b.textContent = d; b.type = 'button';
+      b.onclick = () => { if (phone.state === 'hung') phone.lift(); phone.press(d); };
+      keypad.appendChild(b);
+    }
+    const book = document.createElement('div'); book.className = 'book';
+    const form = document.createElement('div'); form.className = 'phone-form'; form.hidden = true;
+    const input = document.createElement('input'); input.id = 'message-text'; input.maxLength = MESSAGE_MAX; input.placeholder = 'say something after the tone';
+    input.autocomplete = 'off'; input.spellcheck = false;
+    const err = document.createElement('div'); err.className = 'note-err';
+    form.append(input, err);
+    pBody.append(display, lines, keypad, book, form);
+    pActions.innerHTML = '';
+    const send = document.createElement('button'); send.textContent = 'leave it'; send.hidden = true;
+    const submit = async () => {
+      if (send.disabled) return;
+      send.disabled = true; err.textContent = '';
+      try { await phone.leaveMessage(input.value); input.value = ''; }
+      catch (e) { err.textContent = e.message || 'the message did not take'; }
+      send.disabled = false;
+    };
+    send.onclick = submit;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    const hang = document.createElement('button'); hang.textContent = 'hang up'; hang.onclick = leave;
+    pActions.append(send, hang);
+    ph = { display, lines, keypad, book, form, input, send };
+    phone.lift();
+    renderPhone(true);
+  }
+  const STATE_TEXT = { hung: '', dialtone: 'dial tone', dialing: '', connecting: 'connecting…', ringing: 'ringing…', intercept: '', reorder: 'the line is dead', busy: 'busy', time: '', machine: '', record: 'after the tone…', left: '', recording: '' };
+  function renderPhone(book = false) {
+    if (!ph || panelFor !== 'phone') return;
+    const n = formatNumber(phone.number);
+    ph.display.textContent = n ? n + (STATE_TEXT[phone.state] ? ' · ' + STATE_TEXT[phone.state] : '') : (STATE_TEXT[phone.state] || '\u00a0');
+    ph.lines.textContent = phone.lines.join('\n');
+    const recording = phone.state === 'record';
+    ph.form.hidden = !recording; ph.send.hidden = !recording;
+    if (recording) setTimeout(() => ph.input.focus(), 0);
+    if (book || !ph.book.childElementCount) {
+      ph.book.innerHTML = '';
+      const list = phoneBook();
+      if (list.length) {
+        const h = document.createElement('div'); h.className = 'dim'; h.textContent = 'phone book'; ph.book.appendChild(h);
+        const ul = document.createElement('ul'); ul.className = 'list';
+        for (const e of list) {
+          const li = document.createElement('li'); li.textContent = e.name; li.className = 'dial';
+          const span = document.createElement('span'); span.textContent = e.number; li.appendChild(span);
+          li.onclick = () => phone.dial(e.number);
+          ul.appendChild(li);
+        }
+        ph.book.appendChild(ul);
+      }
+    }
+  }
+  window.addEventListener('keydown', (e) => {
+    if (state.view !== 'phone' || (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName))) return;
+    if (/^[0-9*#]$/.test(e.key)) { if (phone.state === 'hung') phone.lift(); phone.press(e.key); }
+  });
 
   // debug controls
   const dbg = { enabled: $('dbg-enabled'), hour: $('dbg-hour'), month: $('dbg-month'), weather: $('dbg-weather'), cover: $('dbg-cover'), moon: $('dbg-moon'), peaks: $('dbg-peaks'), gliders: $('dbg-gliders'), info: $('dbg-info') };
@@ -170,16 +249,6 @@ export function setupUI(state, canvas) {
 }
 
 const PANELS = {
-  phone: (state, api) => ({
-    title: 'pay phone',
-    body: 'The receiver is cold in your hand. A dial tone hums, patient.\nA phone book hangs from a steel cord, its pages soft at the edges.',
-    actions: [
-      ['phone book', () => {
-        document.getElementById('panel-body').innerHTML = 'You flip through it. Most of the pages are blank.\n<ul class="list"><li>nobody yet <span>—</span></li></ul>\n(numbers and voicemail are coming)';
-      }],
-      ['hang up', api.leave],
-    ],
-  }),
   board: (state, api) => ({
     title: 'bulletin board',
     body: 'Paper, pins, sun-bleached corners. Some of these have been here a long time.'
