@@ -11,7 +11,7 @@ function envForWorker(env) {
     groundSnow: env.groundSnow, inversion: env.inversion, mountainFog: env.mountainFog, dusting: env.dusting,
   };
 }
-import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS } from './props.js';
+import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
 
@@ -199,6 +199,8 @@ export class Renderer {
     const sgn = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
     this.sheetX = ((this.sheetX + (0.4 + env.wind.speed * 0.12) * SCALE * sgn * dt) % W + W) % W;
     const gliders = this.fx.gliders.list.length > 0;
+    const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}` : '';
+    if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
     const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0 || gliders;
     if (!this.dirty && !animated && camKey === this.camKey) return;
     this.dirty = false; this.camKey = camKey;
@@ -232,5 +234,7 @@ export class Renderer {
     if (cuId) { c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0); c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup'); }
     this.fx.drawPrecip(c, env); lap('precip');
     c.setTransform(1, 0, 0, 1, 0, 0);
+    // a poster held up to look at, over everything, the scene dimmed behind it
+    if (state.poster && state.poster.poster) { drawPosterView(c, state.poster); lap('poster'); }
   }
 }

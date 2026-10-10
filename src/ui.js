@@ -1,11 +1,12 @@
 import { W, H, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
 import { Phone, loadPhoneBook, phoneBook, formatNumber, MESSAGE_MAX } from './phone.js';
+import { pixelate } from './pixelate.js';
 import { hasItem, give, inventory } from './items.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
@@ -64,8 +65,8 @@ export function setupUI(state, canvas) {
   }
   canvas.addEventListener('mousemove', (e) => {
     if (state.view !== 'scene') {
-      const n = state.view === 'board' && !panelShown ? noteAt(e) : null;
-      state.hover = n ? 'note' : null; state.hoverLabel = n ? `a note: “${n.text}”` : '';
+      const n = state.view === 'board' && !panelShown && !state.poster ? noteAt(e) : null;
+      state.hover = n ? 'note' : null; state.hoverLabel = n ? (n.poster ? 'a poster' : `a note: “${n.text}”`) : '';
       canvas.classList.toggle('hot', !!n);
       return;
     }
@@ -77,20 +78,45 @@ export function setupUI(state, canvas) {
   canvas.addEventListener('click', (e) => {
     if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h && VIEWS[h.id]) enter(h.id); return; }
     if (!twoStep(state.view)) { leave(); return; }         // a panel view: any click steps back
-    const n = state.view === 'board' ? noteAt(e) : null;   // a note on the cork: offer to tear it down
+    if (state.poster) { putBack(); return; }               // holding a poster: any click puts it back
+    const n = state.view === 'board' ? noteAt(e) : null;   // a note on the cork: offer to tear it down; a poster: hold it up
     if (panelShown) { hidePanel(); if (!n) return; }       // a click off the form puts it away
-    if (settled) n ? tearPanel(n) : (state.view === 'board' ? compose : showPanel)(state.view);
+    if (settled) n ? (n.poster ? holdUp(n) : tearPanel(n)) : (state.view === 'board' ? compose : showPanel)(state.view);
   });
   window.addEventListener('keydown', (e) => {
     // typing into the board's note field must not drive the scene
     if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) { if (e.key === 'Escape') e.target.blur(); return; }
-    if (e.key === 'Escape') leave();
+    if (e.key === 'Escape') { if (state.poster) putBack(); else leave(); }
     if (e.key === 'd' || e.key === 'D') { const d = $('debug'); d.hidden = !d.hidden; }
   });
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
   function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); }
-  function leave() { state.view = 'scene'; state.closeup = null; phone.hangUp(); hidePanel(); }
+  function leave() { state.view = 'scene'; state.closeup = null; state.poster = null; phone.hangUp(); hidePanel(); }
+  // A poster held up: the second zoom, the picture large over the dimmed board. Its panel offers
+  // to tear it down; a click anywhere, or Escape, puts it back.
+  function holdUp(n) {
+    state.poster = n; state.hover = null; canvas.classList.remove('hot');
+    panelShown = true; panelFor = 'board';
+    panel.className = 'dock-left';
+    panel.hidden = false;
+    pTitle.textContent = 'a poster';
+    pBody.innerHTML = '';
+    const lead = document.createElement('div'); lead.className = 'dim'; lead.textContent = 'Someone pinned this up.' + (n.mine && notesMode() !== 'api' ? ' It is yours.' : '');
+    const err = document.createElement('div'); err.className = 'note-err';
+    pBody.append(lead, err);
+    pActions.innerHTML = '';
+    const tear = document.createElement('button'); tear.textContent = 'tear it down';
+    const back = document.createElement('button'); back.textContent = 'put it back'; back.onclick = putBack;
+    pActions.append(tear, back);
+    tear.onclick = async () => {
+      if (tear.disabled) return;
+      tear.disabled = true; err.textContent = '';
+      try { await tearDown(n); state.notes = buildNotes(); state.notesVersion++; putBack(); }
+      catch (e) { err.textContent = e.message || 'it will not come off'; tear.disabled = false; }
+    };
+  }
+  function putBack() { state.poster = null; hidePanel(); }
   function hidePanel() { panel.hidden = true; panelShown = false; panelFor = null; }
   function showPanel(view) {
     if (view === 'phone') return phonePanel();
@@ -120,7 +146,29 @@ export function setupUI(state, canvas) {
     const input = document.createElement('input');
     input.id = 'note-text'; input.maxLength = NOTE_MAX; input.placeholder = 'write something'; input.autocomplete = 'off'; input.spellcheck = false;
     const err = document.createElement('div'); err.className = 'note-err';
-    pBody.append(lead, input, err);
+    // or a poster: a picture from this device, made into pixel art here before it goes anywhere
+    const or = document.createElement('div'); or.className = 'dim poster-or'; or.textContent = 'or pin a picture, if you brought one:';
+    const file = document.createElement('input'); file.type = 'file'; file.accept = 'image/*'; file.id = 'poster-file';
+    const preview = document.createElement('canvas'); preview.className = 'poster-preview'; preview.hidden = true;
+    let poster = null;   // { png, w, h } once a picture is pixelated
+    file.addEventListener('change', async () => {
+      poster = null; preview.hidden = true; err.textContent = '';
+      const f = file.files && file.files[0]; if (!f) return;
+      err.textContent = 'pixelating…';
+      try {
+        const bmp = await createImageBitmap(f);
+        await new Promise((r) => setTimeout(r, 30));   // let the word show first
+        const art = pixelate(bmp, { kind: 'prop' }); bmp.close();
+        const c = document.createElement('canvas'); c.width = art.width; c.height = art.height; c.getContext('2d').putImageData(art, 0, 0);
+        const png = c.toDataURL('image/png');
+        const k = Math.max(1, Math.floor(Math.min(240 / art.width, 240 / art.height)));
+        preview.width = art.width * k; preview.height = art.height * k;
+        const g = preview.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(c, 0, 0, preview.width, preview.height);
+        preview.hidden = false; err.textContent = `${art.width} by ${art.height}, ${art.colors} colors`;
+        poster = { png, w: art.width, h: art.height };
+      } catch (e) { err.textContent = 'that picture would not take'; }
+    });
+    pBody.append(lead, input, or, file, preview, err);
     pActions.innerHTML = '';
     const pin = document.createElement('button'); pin.textContent = 'pin it';
     // with the board's close-up the form simply goes away and the cork is there to read
@@ -131,8 +179,10 @@ export function setupUI(state, canvas) {
     const submit = async () => {
       if (pin.disabled) return;
       pin.disabled = true; err.textContent = '';
-      try { await postNote(input.value); state.notes = buildNotes(); state.notesVersion++; done(); }
-      catch (e) { err.textContent = e.message || 'the pin would not go in'; pin.disabled = false; }
+      try {
+        if (poster && !input.value.trim()) await postPoster(poster.png, poster.w, poster.h); else await postNote(input.value);
+        state.notes = buildNotes(); state.notesVersion++; done();
+      } catch (e) { err.textContent = e.message || 'the pin would not go in'; pin.disabled = false; }
     };
     pin.onclick = submit;
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
@@ -271,7 +321,7 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      caption.textContent = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
+      caption.textContent = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
 
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;

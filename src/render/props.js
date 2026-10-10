@@ -1,6 +1,7 @@
 import { W, H, HORIZON, SCALE, META } from '../state.js';
 import { ditherPattern, fillCircle, clamp, rgb, lerpRGB, hex, makeCanvas } from '../util/pixel.js';
 import { hash2 } from '../util/noise.js';
+import { posterImage } from '../notes.js';
 
 // The bench, bulletin board, pay phone and pole are part of the painting (art/concept_art_03.png,
 // masked as material PROP by tools/build_backdrop.py). This module only knows where they are, and
@@ -40,7 +41,9 @@ function drawNote(ctx, n, u = 1, legible = false) {
   px(ctx, rgb(paper), x, y, w, h);
   px(ctx, edge, x + w - s, y, s, h);
   px(ctx, edge, x, y + h - s, w, s);
-  if (legible) {
+  if (n.poster) {
+    drawPoster(ctx, n, x, y, w, h, s, legible);
+  } else if (legible) {
     drawNoteText(ctx, n.text, x + 4 * s, y + 4 * s, w - 8 * s, h - 8 * s, rgb(ink), u);
   } else {
     // a heading and scribbled lines of "text"
@@ -53,6 +56,40 @@ function drawNote(ctx, n, u = 1, legible = false) {
   if (fade > 0.35) { for (let i = 0; i < c; i++) px(ctx, '#8b6a4a', x, y + h - 1 - i, c - i, 1); px(ctx, curl, x + s, y + h - c, 2 * s, s); }
   if (fade > 0.7) { for (let i = 0; i < c; i++) px(ctx, '#8b6a4a', x + w - (c - i), y + i, c - i, 1); }
   // pin
+  px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
+}
+
+// A poster's picture on its paper: on the scene it is averaged down to fit (a hard shrink drops
+// rows of its pixels); up close it is laid at a whole-number scale so its pixels stay square.
+function drawPoster(ctx, n, x, y, w, h, s, legible) {
+  const im = posterImage(n.poster);
+  if (!im) return;                                   // still loading: the paper waits
+  const pw = n.poster.w || im.width, ph = n.poster.h || im.height, m = 2 * s;
+  if (!legible) {
+    const k = Math.min((w - m) / pw, (h - m) / ph), dw = Math.max(1, Math.round(pw * k)), dh = Math.max(1, Math.round(ph * k));
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(im, x + ((w - dw) >> 1), y + ((h - dh) >> 1), dw, dh);
+    ctx.imageSmoothingEnabled = false;
+    return;
+  }
+  const k = Math.max(1, Math.floor(Math.min((w - m) / pw, (h - m) / ph)));
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(im, x + ((w - pw * k) >> 1), y + ((h - ph * k) >> 1), pw * k, ph * k);
+}
+
+// One poster held up to look at: the frame dimmed by a dither, the paper centered at a
+// whole-number scale that fills most of the height, its pin on top.
+export function drawPosterView(ctx, n) {
+  const im = posterImage(n.poster);
+  ctx.fillStyle = ditherPattern(ctx, '#000', 8);
+  ctx.fillRect(0, 0, W, H);
+  const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
+  const k = Math.max(1, Math.floor(H * 0.78 / ph)), s = Math.max(1, Math.round(SCALE));
+  const m = 6 * s, w = pw * k + 2 * m, h = ph * k + 2 * m, x = (W - w) >> 1, y = (H - h) >> 1;
+  drawNote(ctx, { ...n, x, y, w, h, poster: null, text: '' }, s, false);   // the paper, bare
+  ctx.fillStyle = rgb(lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], clamp(n.age, 0, 1) * 0.75));
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);           // over the scribbles
+  if (im) { ctx.imageSmoothingEnabled = false; ctx.drawImage(im, x + m, y + m, pw * k, ph * k); }
   px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
 }
 

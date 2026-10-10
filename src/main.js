@@ -6,7 +6,7 @@ import { Renderer } from './render/renderer.js';
 import { setupUI } from './ui.js';
 import { loadBackdrop } from './assets.js';
 import { peakSnowAmount, updatePeakSnowLatch, PEAK_BARE, PEAK_FIRST } from './season.js';
-import { loadPosted, buildNotes } from './notes.js';
+import { loadPosted, buildNotes, whenPosterLoads } from './notes.js';
 
 const state = createState();
 // the painting's default notes at once; whatever has been pinned lands when the store answers
@@ -14,6 +14,7 @@ state.notes = buildNotes();
 state.notesVersion = 1;
 const refreshNotes = () => { state.notes = buildNotes(); state.notesVersion++; };
 loadPosted().then(refreshNotes, refreshNotes);
+whenPosterLoads(refreshNotes);   // a poster's picture landing is a change on the cork
 setInterval(refreshNotes, 10 * 60 * 1000);   // paper ages
 
 const T0 = performance.now();

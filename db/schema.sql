@@ -33,3 +33,17 @@ CREATE TABLE IF NOT EXISTS torn (
 );
 CREATE INDEX IF NOT EXISTS torn_key_at ON torn (key, at);
 CREATE INDEX IF NOT EXISTS torn_who_at ON torn (who, at);
+
+-- Posters (2026-10-10): pictures people bring, pixelated in their browser (src/pixelate.js) and
+-- pinned beside the notes (functions/api/posters.js). The PNG the page made, as base64 text:
+-- a few tens of kilobytes each, six on the board at most, blown away with the notes.
+CREATE TABLE IF NOT EXISTS posters (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  png  TEXT    NOT NULL,      -- the picture, base64
+  w    INTEGER NOT NULL,      -- art pixels
+  h    INTEGER NOT NULL,
+  at   INTEGER NOT NULL,      -- ms since the epoch
+  who  TEXT    NOT NULL       -- salted daily hash of the poster's address, for the rate limit only
+);
+CREATE INDEX IF NOT EXISTS posters_at ON posters (at);
+CREATE INDEX IF NOT EXISTS posters_who_at ON posters (who, at);

@@ -37,6 +37,7 @@ export function createState() {
     env: null,        // derived per-frame environment (sun, palette, conditions)
     view: 'scene',    // scene | phone | board | bench
     closeup: null,    // which view's close-up painting is up, once its zoom has settled
+    poster: null,     // a poster on the board held up to look at (one of state.notes)
     camera: { cx: W / 2, cy: H / 2, s: 1 },
     hover: null,
     notes: [],
