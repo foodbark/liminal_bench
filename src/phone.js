@@ -148,7 +148,7 @@ export class Phone {
     const id = this.call;
     const go = (fn) => id === this.call && this.state !== 'hung' && fn();
     if (entry.kind === 'intercept') return this.intercept(entry.which || 'service');
-    if (entry.kind === 'busy') { this.set('busy'); this.sounds.busy(20); return; }
+    if (entry.kind === 'busy') { this.set('busy'); if (entry.text) this.say(entry.text); this.sounds.busy(20); return; }
     // the key that opened the line may have a sound of its own (the whistle) before the far end rings
     const opener = key && entry.opens && entry.opens[key];
     if (opener) {

@@ -31,11 +31,10 @@
       "kind": "time"
     },
     "4065550199": {
-      "kind": "machine",
+      "kind": "busy",
       "name": "the bench",
-      "greeting": "You have reached the bench. Nobody is sitting here right now. Leave a message after the tone.",
-      "file": null,
-      "rings": 3
+      "note": "The pay phone's own line, and you are standing on it. When another visitor is in the scene it should ring their booth instead (README).",
+      "text": "Busy. It is this phone's own number, and you are standing on the line."
     },
     "4065550123": {
       "kind": "recording",
