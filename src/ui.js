@@ -130,7 +130,7 @@ export function setupUI(state, canvas) {
   let ph = null;   // the panel's live elements
   function phonePanel() {
     panelShown = true; panelFor = 'phone';
-    panel.className = 'dock-' + (VIEWS.phone.dock || 'center');
+    panel.className = 'dock-' + (VIEWS.phone.dock || 'center') + ' phone';   // the wide layout: keypad beside the book
     panel.hidden = false;
     pTitle.textContent = 'pay phone';
     pBody.innerHTML = '';
@@ -148,7 +148,9 @@ export function setupUI(state, canvas) {
     input.autocomplete = 'off'; input.spellcheck = false;
     const err = document.createElement('div'); err.className = 'note-err';
     form.append(input, err);
-    pBody.append(display, lines, keypad, book, form);
+    const body = document.createElement('div'); body.className = 'phone-body';
+    body.append(display, lines, keypad, book, form);
+    pBody.append(body);
     pActions.innerHTML = '';
     const send = document.createElement('button'); send.textContent = 'leave it'; send.hidden = true;
     const submit = async () => {
@@ -235,7 +237,7 @@ export function setupUI(state, canvas) {
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;
         const w = state.weatherShown, env = state.env;
-        const bits = ['a place sort of like. . .   missoula, mt', formatTime(state.now).toLowerCase()];
+        const bits = ['a place, sort of.  liminally MSLA, MT, USA, EARTH.', formatTime(state.now).toLowerCase()];
         if (w.temp != null) bits.push(Math.round(w.temp) + '°f');
         bits.push(w.ok ? env.cond.label : 'weather unavailable');
         const r = window.__liminal && window.__liminal.renderer;

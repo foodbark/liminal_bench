@@ -297,10 +297,10 @@
  "lamp_pool_y": 1504,
  "views": {
   "phone": {
-   "cx": 1666,
-   "cy": 1109,
-   "s": 1.8,
-   "dock": "left"
+   "cx": 2129,
+   "cy": 1202,
+   "s": 2.3,
+   "dock": "right"
   },
   "board": {
    "cx": 1720,

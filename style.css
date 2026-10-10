@@ -21,7 +21,7 @@ body { display: flex; align-items: center; justify-content: center; font-family:
   font-size: calc(18px * var(--u)); letter-spacing: 0.02em; text-transform: lowercase;
 }
 #caption-text { color: #e8e2cc; white-space: nowrap; }
-#status { color: #7d8595; font-size: calc(15px * var(--u)); text-align: left; white-space: pre; }
+#status { color: #7d8595; font-size: calc(15px * var(--u)); text-align: left; white-space: pre; text-transform: none; }   /* the tag line's capitals are its own */
 #panel {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
 }
@@ -51,6 +51,31 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 }
 #panel-body #note-text:focus { border-color: #7d8595; }
 #panel-body .note-err { color: #c98a6a; min-height: 1.25em; margin-top: calc(4px * var(--u)); }
+/* the pay phone's panel: the phone itself stands large on the left of the frame, this takes the right;
+   the keypad sits beside the phone book, the line's words above, the message field below, no scrolling */
+#panel.phone { width: calc(50% - 40px * var(--u)); max-width: none; max-height: 94%; overflow: hidden; padding: calc(16px * var(--u)) calc(22px * var(--u)); }
+#panel.phone #panel-title { font-size: calc(28px * var(--u)); }
+#panel.phone .phone-body { display: grid; grid-template-columns: auto 1fr; column-gap: calc(28px * var(--u)); align-items: start; }
+#panel.phone .phone-display { grid-column: 1 / -1; font-size: calc(30px * var(--u)); }
+#panel.phone .phone-lines { grid-column: 1 / -1; font-size: calc(22px * var(--u)); min-height: 3.75em; margin: calc(6px * var(--u)) 0 calc(10px * var(--u)); }
+#panel.phone .keypad { width: calc(210px * var(--u)); gap: calc(6px * var(--u)); margin: 0; }
+#panel.phone .keypad button { font-size: calc(30px * var(--u)); padding: calc(8px * var(--u)) 0; }
+#panel.phone .book { font-size: calc(21px * var(--u)); }
+#panel.phone .book .list { margin-top: calc(4px * var(--u)); }
+#panel.phone .book { max-width: calc(460px * var(--u)); }
+#panel.phone .book .list li { padding: calc(4px * var(--u)) 0; }
+#panel.phone .phone-form { grid-column: 1 / -1; }
+#panel.phone .phone-form #message-text { font-size: calc(22px * var(--u)); }
+#panel.phone #panel-actions button { font-size: calc(21px * var(--u)); padding: calc(4px * var(--u)) calc(14px * var(--u)); }
+/* a narrow window cannot hold the two columns: the plain box, as before */
+@media (max-width: 900px), (max-height: 520px) {
+  #panel.phone { width: calc(420px * var(--u)); max-width: calc(100% - 32px); max-height: 80%; overflow: auto; }
+  #panel.phone .phone-body { display: block; }
+  #panel.phone .phone-display { font-size: calc(22px * var(--u)); }
+  #panel.phone .phone-lines { font-size: inherit; min-height: 1.25em; }
+  #panel.phone .keypad { width: calc(150px * var(--u)); gap: calc(4px * var(--u)); margin: calc(6px * var(--u)) 0; }
+  #panel.phone .keypad button { font-size: calc(20px * var(--u)); padding: calc(2px * var(--u)) 0; }
+}
 /* the pay phone's panel */
 #panel-body .phone-display { color: #f0e6c8; font-size: calc(22px * var(--u)); min-height: 1.3em; letter-spacing: 0.06em; }
 #panel-body .phone-lines { color: #d0cab6; min-height: 1.25em; margin: calc(4px * var(--u)) 0; white-space: pre-wrap; }
