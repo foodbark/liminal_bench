@@ -1,5 +1,7 @@
 {
-  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item the caller must have found (state.items) or the call gets its locked intercept; ring picks the ringback (us | eu | uk). intercepts: the phone company's lines, Jane Barbe's when the files arrive.",
+  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item the caller must have found (state.items) or the call gets its locked intercept; ring picks the ringback (us | eu | uk). area: the local area code, so seven digits dial a listed number. exchange: the listed exchange; an unlisted number in it is not in service, one in any other exchange cannot be completed as dialed. intercepts: the phone company's lines, Jane Barbe's when the files arrive (a file that is not there yet falls back to the transcript).",
+  "area": "406",
+  "exchange": "555",
   "book": [
     {
       "name": "time and temperature",
@@ -8,6 +10,11 @@
     {
       "name": "the bench",
       "number": "406-555-0199"
+    },
+    {
+      "name": "home",
+      "number": "406-721-0000",
+      "note": "crossed out"
     },
     {
       "name": "the phone company",
@@ -59,16 +66,22 @@
       "rings": 4,
       "requires": "bluebox",
       "locked": "international"
+    },
+    "4067210000": {
+      "kind": "intercept",
+      "which": "cannot",
+      "name": "home",
+      "note": "An old listing. The exchange is gone."
     }
   },
   "intercepts": {
     "cannot": {
       "text": "We're sorry, your call cannot be completed as dialed. Please check the number and dial again.",
-      "file": null
+      "file": "barbe_cannot.mp3"
     },
     "service": {
       "text": "The number you have reached is not in service. Please check the number and dial again.",
-      "file": null
+      "file": "barbe_service.mp3"
     },
     "directory": {
       "text": "Directory assistance is not available from this telephone.",

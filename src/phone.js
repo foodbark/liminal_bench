@@ -126,13 +126,18 @@ export class Phone {
   lookup(n) {
     const d = n.length === 11 && n[0] === '1' ? n.slice(1) : n;
     const map = manifest.numbers || {};
-    return map[d] || map[d.slice(-7)] || (d.length === 10 && map[d.slice(3)]) || null;
+    const area = manifest.area || '406';   // a seven-digit dial is local
+    return map[d] || (d.length === 7 && map[area + d]) || (d.length === 10 && map[d.slice(3)]) || null;
   }
   async place() {
     if (this.state !== 'dialing' || !this.number) return;
     const n = this.number;
     if (/^911/.test(n)) { this.set('intercept'); this.say('If this is an emergency, hang up and dial 911 on a real phone.'); return; }
-    let entry = this.lookup(n) || { kind: 'intercept', which: n.startsWith('011') ? 'international' : n.length < 7 ? 'cannot' : 'service' };
+    // an unlisted number: in the listed exchange it is a line nobody has ("not in service"); in any
+    // other exchange, or with too few digits, it is a misdial ("cannot be completed as dialed")
+    const local = n.length === 11 && n[0] === '1' ? n.slice(1) : n;
+    const exchange = local.length === 10 ? local.slice(3, 6) : local.length === 7 ? local.slice(0, 3) : '';
+    let entry = this.lookup(n) || { kind: 'intercept', which: n.startsWith('011') ? 'international' : exchange === (manifest.exchange || '555') ? 'service' : 'cannot' };
     if (entry.requires && !this.hasItem(entry.requires)) entry = { kind: 'intercept', which: entry.locked || 'international' };   // some numbers need something found first
     this.set('connecting', { entry });
     const id = this.call;
@@ -152,8 +157,9 @@ export class Phone {
     const t = this.sounds.sit();
     if (!(await this.wait(t + 0.2))) return;
     this.say(it.text);
-    if (it.file) { try { await this.sounds.play(it.file); } catch (e) { /* transcript only */ } }
-    else if (!(await this.wait(5))) return;
+    let spoken = false;
+    if (it.file) { try { await this.sounds.play(it.file); spoken = true; } catch (e) { /* the recording is not in yet: the transcript carries it */ } }
+    if (!spoken && !(await this.wait(5))) return;
     if (this.state === 'intercept') { this.sounds.reorder(30); this.set('reorder'); }
   }
   async time() {
