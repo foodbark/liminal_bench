@@ -96,12 +96,12 @@ function drawNoteText(ctx, text, x, y, w, h, color, u) {
 
 // The notes on a close-up's cork: the scene's slots stretched onto the bigger cork, the paper
 // scaled uniformly, the text legible.
-export function drawCloseupNotes(ctx, state, cu) {
+export function closeupNotes(state, cu) {
   const kx = cu.cork.w / CORK.w, ky = cu.cork.h / CORK.h, u = Math.min(kx, ky);
-  for (const n of state.notes) {
-    const big = { ...n, x: Math.round(cu.cork.x + (n.x - CORK.x) * kx), y: Math.round(cu.cork.y + (n.y - CORK.y) * ky), w: Math.round(n.w * u), h: Math.round(n.h * u) };
-    drawNote(ctx, big, u, true);
-  }
+  return state.notes.map((n) => ({ ...n, x: Math.round(cu.cork.x + (n.x - CORK.x) * kx), y: Math.round(cu.cork.y + (n.y - CORK.y) * ky), w: Math.round(n.w * u), h: Math.round(n.h * u), u, note: n }));
+}
+export function drawCloseupNotes(ctx, state, cu) {
+  for (const big of closeupNotes(state, cu)) drawNote(ctx, big, big.u, true);
 }
 
 // Sun shadows on the ground, drawn as crisp dithered scanlines.

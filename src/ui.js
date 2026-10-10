@@ -1,7 +1,7 @@
 import { W, H, META, formatTime } from './state.js';
-import { HOTSPOTS, CLOSEUPS } from './render/props.js';
+import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -53,8 +53,22 @@ export function setupUI(state, canvas) {
     for (const s of starSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) return { id: 'star', label: s.label };
     return null;
   }
+  // on the board's close-up the notes themselves can be pointed at (and torn down); the close-up
+  // is drawn in canvas pixels, under no camera
+  function noteAt(e) {
+    if (state.closeup !== 'board' || !settled || !CLOSEUPS.board) return null;
+    const r = canvas.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width * W, my = (e.clientY - r.top) / r.height * H;
+    const hit = closeupNotes(state, CLOSEUPS.board).reverse().find((n) => mx >= n.x && mx < n.x + n.w && my >= n.y && my < n.y + n.h);
+    return hit ? hit.note : null;
+  }
   canvas.addEventListener('mousemove', (e) => {
-    if (state.view !== 'scene') { state.hover = null; canvas.classList.remove('hot'); return; }
+    if (state.view !== 'scene') {
+      const n = state.view === 'board' && !panelShown ? noteAt(e) : null;
+      state.hover = n ? 'note' : null; state.hoverLabel = n ? `a note: “${n.text}”` : '';
+      canvas.classList.toggle('hot', !!n);
+      return;
+    }
     const h = hitTest(toWorld(e));
     state.hover = h ? h.id : null; state.hoverLabel = h ? h.label : '';
     canvas.classList.toggle('hot', !!h && !!VIEWS[h.id]);
@@ -63,8 +77,9 @@ export function setupUI(state, canvas) {
   canvas.addEventListener('click', (e) => {
     if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h && VIEWS[h.id]) enter(h.id); return; }
     if (!twoStep(state.view)) { leave(); return; }         // a panel view: any click steps back
-    if (panelShown) { hidePanel(); return; }               // a click off the form puts it away
-    if (settled) (state.view === 'board' ? compose : showPanel)(state.view);
+    const n = state.view === 'board' ? noteAt(e) : null;   // a note on the cork: offer to tear it down
+    if (panelShown) { hidePanel(); if (!n) return; }       // a click off the form puts it away
+    if (settled) n ? tearPanel(n) : (state.view === 'board' ? compose : showPanel)(state.view);
   });
   window.addEventListener('keydown', (e) => {
     // typing into the board's note field must not drive the scene
@@ -122,6 +137,30 @@ export function setupUI(state, canvas) {
     pin.onclick = submit;
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
     setTimeout(() => input.focus(), 0);
+  }
+
+  // Tearing a note down: anyone can, the way a real board works. A posted note is gone for good;
+  // one of the painting's own comes back after a note's life, as if someone put up a fresh one.
+  function tearPanel(n) {
+    panelShown = true; panelFor = 'board';
+    panel.className = 'dock-' + (VIEWS.board.dock || 'center');
+    panel.hidden = false;
+    pTitle.textContent = 'bulletin board';
+    pBody.innerHTML = '';
+    const quote = document.createElement('div'); quote.textContent = `“${n.text}”` + (n.mine ? ' (yours)' : '');
+    const lead = document.createElement('div'); lead.className = 'dim'; lead.textContent = 'The pin is loose. Nobody would stop you.';
+    const err = document.createElement('div'); err.className = 'note-err';
+    pBody.append(quote, lead, err);
+    pActions.innerHTML = '';
+    const tear = document.createElement('button'); tear.textContent = 'tear it down';
+    const keep = document.createElement('button'); keep.textContent = 'leave it'; keep.onclick = hidePanel;
+    pActions.append(tear, keep);
+    tear.onclick = async () => {
+      if (tear.disabled) return;
+      tear.disabled = true; err.textContent = '';
+      try { await tearDown(n); state.notes = buildNotes(); state.notesVersion++; hidePanel(); }
+      catch (e) { err.textContent = e.message || 'it will not come off'; tear.disabled = false; }
+    };
   }
 
   // The pay phone's panel: the handset display, the keypad, the phone book, the transcript of
@@ -232,7 +271,7 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      caption.textContent = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : viewLabel + hint;
+      caption.textContent = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
 
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;

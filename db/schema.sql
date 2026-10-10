@@ -20,3 +20,16 @@ CREATE TABLE IF NOT EXISTS voicemail (
 );
 CREATE INDEX IF NOT EXISTS voicemail_number_at ON voicemail (number, at);
 CREATE INDEX IF NOT EXISTS voicemail_who_at ON voicemail (who, at);
+
+-- Notes torn down (2026-10-10). Anyone can tear any note off the board, the way a real board
+-- works. A posted note is deleted and the tearing recorded here for the rate limit; a default
+-- note (key seed:N, from the painting's config) stays down for the life of a note and then
+-- comes back, as if someone put up a fresh flyer.
+CREATE TABLE IF NOT EXISTS torn (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  key  TEXT    NOT NULL,      -- note:ID or seed:N
+  at   INTEGER NOT NULL,      -- ms since the epoch
+  who  TEXT    NOT NULL       -- salted daily hash of the tearer's address, for the rate limit only
+);
+CREATE INDEX IF NOT EXISTS torn_key_at ON torn (key, at);
+CREATE INDEX IF NOT EXISTS torn_who_at ON torn (who, at);
