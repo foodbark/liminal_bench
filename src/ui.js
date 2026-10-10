@@ -160,18 +160,22 @@ export function setupUI(state, canvas) {
     };
     send.onclick = submit;
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-    const hang = document.createElement('button'); hang.textContent = 'hang up'; hang.onclick = leave;
-    pActions.append(send, hang);
-    ph = { display, lines, keypad, book, form, input, send };
+    // hanging up stays at the phone (the receiver can be lifted again); stepping back leaves it
+    const hang = document.createElement('button'); hang.textContent = 'hang up';
+    hang.onclick = () => { if (phone.state === 'hung') phone.lift(); else phone.hangUp(); };
+    const back = document.createElement('button'); back.textContent = 'step back'; back.onclick = leave;
+    pActions.append(send, hang, back);
+    ph = { display, lines, keypad, book, form, input, send, hang };
     phone.lift();
     renderPhone(true);
   }
-  const STATE_TEXT = { hung: '', dialtone: 'dial tone', dialing: '', connecting: 'connecting…', ringing: 'ringing…', intercept: '', reorder: 'the line is dead', busy: 'busy', time: '', machine: '', record: 'after the tone…', left: '', recording: '' };
+  const STATE_TEXT = { hung: 'the receiver is on the hook', dialtone: 'dial tone', dialing: '', connecting: 'connecting…', ringing: 'ringing…', intercept: '', reorder: 'the line is dead', busy: 'busy', time: '', machine: '', record: 'after the tone…', left: '', recording: '' };
   function renderPhone(book = false) {
     if (!ph || panelFor !== 'phone') return;
     const n = formatNumber(phone.number);
     ph.display.textContent = n ? n + (STATE_TEXT[phone.state] ? ' · ' + STATE_TEXT[phone.state] : '') : (STATE_TEXT[phone.state] || '\u00a0');
     ph.lines.textContent = phone.lines.join('\n');
+    ph.hang.textContent = phone.state === 'hung' ? 'pick up' : 'hang up';
     const recording = phone.state === 'record';
     ph.form.hidden = !recording; ph.send.hidden = !recording;
     if (recording) setTimeout(() => ph.input.focus(), 0);
