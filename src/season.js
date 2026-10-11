@@ -23,7 +23,7 @@ export function peakSnowSince() { return latch ? new Date(latch.since) : null; }
 
 export function updatePeakSnowLatch(ridge, now = new Date()) {
   if (!ridge || peakSnowLatched(now)) return;
-  if (ridge.snowDepth >= LATCH_DEPTH) {
+  if ((ridge.heldDepth ?? ridge.snowDepth) >= LATCH_DEPTH) {   // held for half a day, not one hour's blip
     latch = { since: now.getTime() };
     try { localStorage.setItem(KEY, JSON.stringify(latch)); } catch (e) { /* private window: the session still has it */ }
   }
@@ -33,8 +33,10 @@ export function peakSnowAmount(month, now, ridge) {
   let amount = SEASON_SNOW[month];
   const arriving = ARRIVAL.includes(month);
   if (arriving) amount = peakSnowLatched(now) ? Math.max(amount, PEAK_FIRST) : Math.min(amount, PEAK_BARE);
-  // what the model says is on the ground at the summit right now: 2 cm shows as a first snow,
-  // 40 cm and more as a well-covered peak; the table decides anything deeper
-  if (ridge && ridge.snowDepth >= 0.02) amount = Math.max(amount, PEAK_FIRST + 0.4 * clamp((ridge.snowDepth - 0.02) / 0.4, 0, 1));
+  // what the model says has been on the ground at the summit for the last half day: 5 cm shows
+  // as a first snow, 40 cm and more as a well-covered peak; the table decides anything deeper.
+  // (2 cm of one hour's model snow once whitened peaks that were bare to the eye, 2026-10-10.)
+  const held = ridge ? (ridge.heldDepth ?? ridge.snowDepth) : 0;
+  if (held >= LATCH_DEPTH) amount = Math.max(amount, PEAK_FIRST + 0.4 * clamp((held - LATCH_DEPTH) / 0.4, 0, 1));
   return amount;
 }

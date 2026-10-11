@@ -19,10 +19,15 @@ export async function fetchRidge() {
   const key = localHourKey(new Date());
   let at = h.time.findIndex((t) => t.slice(0, 13) === key);
   if (at < 0) at = h.time.length - 1;
-  let freshSnow = 0, maxDepth = 0;
+  let freshSnow = 0, maxDepth = 0, heldDepth = Infinity;
   for (let k = Math.max(0, at - 72); k <= at; k++) { freshSnow += h.snowfall[k] || 0; maxDepth = Math.max(maxDepth, h.snow_depth[k] || 0); }
-  // snowDepth: metres on the ground at the summit now; freshSnow: cm fallen in the last three days
-  return { ok: true, snowDepth: h.snow_depth[at] || 0, maxDepth, freshSnow, temp: h.temperature_2m[at] };
+  // what has been on the ground for the last half day: the model's depth wobbles by a centimetre
+  // or two from hour to hour, and one hour of marginal model snow once whitened bare peaks
+  for (let k = Math.max(0, at - 12); k <= at; k++) heldDepth = Math.min(heldDepth, h.snow_depth[k] || 0);
+  if (!Number.isFinite(heldDepth)) heldDepth = 0;
+  // snowDepth: metres on the ground at the summit now; heldDepth: the least of the last 12 hours;
+  // freshSnow: cm fallen in the last three days
+  return { ok: true, snowDepth: h.snow_depth[at] || 0, heldDepth, maxDepth, freshSnow, temp: h.temperature_2m[at] };
 }
 
 export async function fetchWeather() {
