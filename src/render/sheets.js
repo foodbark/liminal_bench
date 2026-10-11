@@ -39,13 +39,13 @@ export function renderSheets(img, env) {
   const haze = (c, d) => lerpRGB(c, horizon, clamp((1 - 1 / d) * 0.55, 0, 0.55));
   const windSign = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
 
-  // --- cirrostratus / altostratus: milky veils the sun still shows through. The density has
-  // to move over tens of pixels (fibrous bands, thin patches, thicker ones), because a dither
-  // at one constant density is a lattice across the whole sky, not a cloud; and the threshold
-  // is mostly a hash with a little of the blue-noise tile, so no lattice locks in where it is even.
-  // The veil's milkiness is in the sky palette (skyPalette); this is only its fibrous texture.
-  const veils = [[sky.veilHigh, 1, 0.10, 0.22], [sky.veilMid, 2, 0.26, 0.30]];   // sparse: the milk itself is in the palette
-  for (const [k, tone, base, spread] of veils) {
+  // --- cirrostratus / altostratus: milky veils the sun still shows through. The milk itself is
+  // in the sky palette (skyPalette); this is only the fibrous texture: solid streaks where the
+  // combed noise runs high, with a thin grain only at their edges. Everything in this pass is
+  // shapes, never a field of single pixels: the sheet scrolls with the wind, and a stipple that
+  // scrolls is a dance of pixels however evenly it is spread (the user, 2026-10-11).
+  const veils = [[sky.veilHigh, 1, 0.64, 0.14], [sky.veilMid, 2, 0.58, 0.18]];   // [amount, tone, threshold at k=0, how far it drops by k=1]
+  for (const [k, tone, t0, drop] of veils) {
     if (k <= 0) continue;
     for (let y = 0; y < VANISH; y++) {
       const d = depthAt(y);
@@ -54,9 +54,8 @@ export function renderSheets(img, env) {
         const n = 0.5 * wrapNoise(nA, x, y, 0.0012 / SCALE, 0.006 / SCALE)
           + 0.3 * wrapNoise(nB, x, y, 0.0045 / SCALE, 0.02 / SCALE, d)
           + 0.2 * wrapNoise(nC, x, y, 0.014 / SCALE, 0.05 / SCALE, d);
-        const dens = k * (base + spread * (n * 2 - 1)) * (0.75 + 0.25 * clamp(1 - 1 / d, 0, 1));
-        const thr = blue(x, y) * 0.45 + hash2(x, y, 5) * 0.55;
-        if (thr < dens) put(data, x, y, haze(tones[tone], d));
+        const thr = t0 - drop * k - 0.08 * clamp(1 - 1 / d, 0, 1);   // denser toward the horizon
+        if (n + (blue(x, y) - 0.5) * 0.04 > thr) put(data, x, y, haze(tones[tone], d));
       }
     }
   }
@@ -81,7 +80,8 @@ export function renderSheets(img, env) {
           let x = Math.round(x0 + cosA * t - sinA * (off + wy)), y = Math.round(y0 + sinA * t + cosA * (off + wy));
           x = ((x % W) + W) % W;
           if (y < 0 || y >= VANISH) continue;
-          if (blue(x, y) < dens * fade) put(data, x, y, haze(tones[f % 3 === 0 ? 0 : 1], depthAt(y)));
+          // a solid filament, its ends fading as the fade crosses the threshold, a grain only there
+          if (dens * fade + (blue(x, y) - 0.5) * 0.1 > 0.38) put(data, x, y, haze(tones[f % 3 === 0 ? 0 : 1], depthAt(y)));
         }
       }
     }
@@ -150,8 +150,11 @@ export function renderSheets(img, env) {
         }
         if (!done && flat > 0) {
           const n = wrapNoise(nA, x, v * 40, 0.002 / SCALE, 0.03, d);
-          const ragged = y > VANISH * 0.82 && blue(x, y) > flat * (0.2 + n) * 3;   // frayed lower edge
-          if (!ragged && blue(x, y) < flat * (0.85 + 0.15 * n)) {
+          // gaps come as clumps where a second noise runs high, a grain only at their edges; at
+          // full cover the sheet is solid but for a few of them
+          const m = wrapNoise(nC, x, v * 40, 0.007 / SCALE, 0.06, d) + (blue(x, y) - 0.5) * 0.06;
+          const ragged = y > VANISH * 0.82 && m > flat * (0.2 + n) * 3;   // frayed lower edge
+          if (!ragged && m < flat * (0.85 + 0.15 * n)) {
             const c = n > 0.62 ? top1 : n > 0.35 ? shade : under;
             put(data, x, y, haze(c, d));
           }

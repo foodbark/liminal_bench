@@ -139,7 +139,7 @@ export function renderTerrain(img, env, assets) {
           if (above > 0 && above < 44 * SCALE) {
             const w = smooth(clamp(1 - above / (44 * SCALE), 0, 1));
             const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
-            const dens = smooth(clamp((n - (0.9 - mountainFog * 0.45)) / 0.4, 0, 1)) * w;
+            const dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
             if (d < dens) putPx(data, i, quantRGB(bankCol, 9, d));
           }
         }
@@ -236,14 +236,14 @@ export function renderTerrain(img, env, assets) {
       // --- mountain fog: ragged banks hanging mid-slope on the ranges
       if (mountainFog > 0 && layer !== LAYER.NEAR && layer !== LAYER.TREES && !isProp) {
         // banks hang from the crest down to mid-slope, stretched along the slope, stippled
-        const lo = layer === LAYER.PEAK ? 0.2 : layer === LAYER.RANGE ? 0.3 : 0.35;
+        const lo = layer === LAYER.PEAK ? 0.17 : layer === LAYER.RANGE ? 0.27 : 0.32;
         let w = smooth(clamp((e - lo) / 0.2, 0, 1));
         if (layer === LAYER.FLANK) w *= 0.6 * clamp((x - BANK_X0) / BANK_X1, 0, 1);   // Sentinel's near end is too close for banks
         if (w > 0) {
           const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
           // a soft blend by density, not an either/or: an either/or at a steady density was a
           // rectangle of checkerboard laid over the forest
-          const dens = smooth(clamp((n - (0.9 - mountainFog * 0.45)) / 0.4, 0, 1)) * w;
+          const dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
           if (dens > 0) c = lerpRGB(c, bankCol, 0.9 * dens);
         }
       }
