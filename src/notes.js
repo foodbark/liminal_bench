@@ -1,4 +1,4 @@
-import { META } from './state.js';
+import { META, SMALL } from './state.js';
 import { makeNote, CORK, CLOSEUPS } from './render/props.js';
 import { clamp } from './util/pixel.js';
 import { hash2 } from './util/noise.js';
@@ -28,7 +28,9 @@ export function pickPosterSize(r = Math.random()) {
   return POSTER_SCALES[2];
 }
 function posterBox(p, cx, cy) {
-  const k = POSTER_SCALES.includes(p.k) ? p.k : pickPosterSize(hash2(p.id % 9973, 3, 4));
+  // the size is set in the full build's close-up pixels; the half-size build (phones) has half
+  // the pixels, and a poster sized in its own pixels came out twice as big against the board
+  const k = (POSTER_SCALES.includes(p.k) ? p.k : pickPosterSize(hash2(p.id % 9973, 3, 4))) * (SMALL ? 0.5 : 1);
   const cu = CLOSEUPS.board, kk = cu ? Math.min(cu.cork.w / CORK.w, cu.cork.h / CORK.h) : 4;   // close-up pixels per scene pixel
   const w = Math.round((p.w || 160) * k / kk) + 2, h = Math.round((p.h || 212) * k / kk) + 2;
   const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - h / 2), CORK.y + 2, CORK.y + CORK.h - h - 2);

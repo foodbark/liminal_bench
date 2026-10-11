@@ -74,7 +74,7 @@ function drawPosterNote(ctx, n, u = 1, legible = false) {
   const s = Math.max(1, Math.round(u)), b = n.border ?? screenPx(legible ? 2 : 1.5);
   const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
   let dw, dh;
-  if (legible) { const k = n.k || Math.max(1, Math.floor(Math.min((n.w - 2 * b) / pw, (n.h - 2 * b) / ph))); dw = pw * k; dh = ph * k; }   // its own size, or what the box allows
+  if (legible) { const k = n.k || Math.max(1, Math.floor(Math.min((n.w - 2 * b) / pw, (n.h - 2 * b) / ph))); dw = Math.round(pw * k); dh = Math.round(ph * k); }   // its own size (a half on the half-size build), or what the box allows
   else { const k = Math.min((n.w - 2 * b) / pw, (n.h - 2 * b) / ph); dw = Math.max(1, Math.round(pw * k)); dh = Math.max(1, Math.round(ph * k)); }
   const w = dw + 2 * b, h = dh + 2 * b, x = n.x + ((n.w - w) >> 1), y = n.y + ((n.h - h) >> 1);
   const paper = lerpRGB([248, 246, 240], [180, 138, 94], clamp(n.age, 0, 1) * 0.75);
