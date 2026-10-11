@@ -13,7 +13,8 @@ const state = createState();
 state.notes = buildNotes();
 state.notesVersion = 1;
 const refreshNotes = () => { state.notes = buildNotes(); state.notesVersion++; };
-loadPosted().then(refreshNotes, refreshNotes);
+state.loaded = false; state.notesSettled = false; state.weatherSettled = false;   // the loading screen waits on these
+loadPosted().then(refreshNotes, refreshNotes).finally(() => { state.notesSettled = true; });
 whenPosterLoads(refreshNotes);   // a poster's picture landing is a change on the cork
 setInterval(refreshNotes, 10 * 60 * 1000);   // paper ages
 
@@ -152,9 +153,37 @@ async function refreshWeather() {
     renderer.diag.weather = 'ok ' + new Date().toLocaleTimeString() + (rg ? ` · summit ${Math.round(rg.temp)}°f, ${Math.round(rg.snowDepth * 100)} cm snow` : ' · summit unavailable');
   }
   catch (err) { console.warn('weather fetch failed', err); state.weather.ok = false; renderer.diag.weather = 'failed: ' + (err && err.message || err); }
+  state.weatherSettled = true;
 }
 refreshWeather();
 setInterval(refreshWeather, 10 * 60 * 1000);
+
+// The loading screen stays up until the first frame that has everything: the weather answered
+// (or failed), the pinned notes in, and the sky, the cloud sheets and the terrain all rendered for
+// the current environment, so the painting never shows unlit and the weather never pops in over
+// it. A watchdog lifts it anyway after a while (an offline page, a worker that fell back, a slow
+// phone), so the scene, and the status line's advice, are always reachable.
+const loading = document.getElementById('loading'), loadingStatus = document.getElementById('loading-status'), loadingDots = document.getElementById('loading-dots');
+const LOADING_MAX_MS = 45000;
+let loadingShown = '';
+function updateLoading(ts) {
+  if (state.loaded) return;
+  const env = state.env, r = renderer;
+  const lit = r.terrainKey === env.terrainKey && r.skyKey === env.skyKey && r.sheetKey === env.sheetKey;
+  const ready = (state.weatherSettled && state.notesSettled && lit) || performance.now() - T0 > LOADING_MAX_MS;
+  if (ready) {
+    state.loaded = true;
+    renderer.stage('loading screen down');
+    loading.classList.add('done');
+    setTimeout(() => { loading.hidden = true; }, 600);
+    return;
+  }
+  const msg = !state.weatherSettled ? 'asking about the weather' : !lit ? 'lighting the scene' : 'reading the board';
+  if (msg !== loadingShown) { loadingShown = msg; loadingStatus.firstChild.nodeValue = msg; }
+  loadingDots.textContent = '.'.repeat(1 + Math.floor(ts / 400) % 3);
+}
+// a watchdog that fires even if the frame loop never runs (a renderer that threw at boot)
+setTimeout(() => { if (!state.loaded) { state.loaded = true; loading.classList.add('done'); setTimeout(() => { loading.hidden = true; }, 600); } }, LOADING_MAX_MS + 1000);
 
 let last = performance.now();
 let frameCount = 0;
@@ -164,6 +193,7 @@ function frame(ts) {
   computeEnv();
   ui.update(dt, ts);
   renderer.render(state, ts / 1000, dt);
+  updateLoading(ts);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

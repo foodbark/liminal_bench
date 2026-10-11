@@ -13,6 +13,8 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 await page.goto(process.env.LIMINAL_URL || 'http://127.0.0.1:5173/', { waitUntil: 'load' });
 await page.waitForTimeout(2500);
 if (setup) await page.evaluate(setup);
+// the loading screen holds until the weather is in and the scene is lit; wait for it, then let the override settle
+await page.waitForFunction(() => window.__liminal && window.__liminal.state.loaded, null, { timeout: 60000 }).catch(() => errors.push('loading screen still up after 60s'));
 await page.waitForTimeout(10000);
 await page.screenshot({ path: out });
 console.log(errors.length ? errors.join('\n') : 'no console errors');

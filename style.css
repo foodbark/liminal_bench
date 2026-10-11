@@ -110,6 +110,14 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 #panel-actions button:hover { background: #2a3040; }
 #panel-actions button:disabled { color: #7d8595; cursor: default; }
 /* a phone held upright shows a letterboxed strip; the scene wants the width */
+/* The loading screen: up from the first paint until the weather is in and the scene is lit, so
+   the painting never shows unlit and the weather never pops in over it. Fades out, then gone. */
+#loading { position: fixed; inset: 0; z-index: 20; background: #07080c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5em; color: #d8d4c4; text-align: center; transition: opacity 0.5s ease; }
+#loading.done { opacity: 0; pointer-events: none; }
+#loading[hidden] { display: none; }
+#loading-title { font-size: clamp(28px, 3.2vw, 44px); letter-spacing: 0.03em; }
+#loading-status { color: #7d8595; font-size: clamp(18px, 1.9vw, 26px); white-space: pre; }
+#loading-dots { display: inline-block; width: 3ch; text-align: left; }
 #rotate { display: none; position: fixed; left: 0; right: 0; bottom: 12px; text-align: center; color: #7d8595; font-size: 18px; pointer-events: none; }
 @media (pointer: coarse) and (orientation: portrait) and (max-width: 700px) { #rotate { display: block; } }
 #debug {
