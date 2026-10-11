@@ -260,7 +260,7 @@ export function setupUI(state, canvas) {
     phone.lift();
     renderPhone(true);
   }
-  const STATE_TEXT = { hung: 'the receiver is on the hook', dialtone: 'dial tone', dialing: '', connecting: 'connecting…', ringing: 'ringing…', intercept: '', reorder: 'the line is dead', busy: 'busy', time: '', machine: '', record: 'after the tone…', left: '', recording: '' };
+  const STATE_TEXT = { hung: 'the receiver is on the hook', dialtone: 'dial tone', dialing: '', connecting: 'connecting…', ringing: 'ringing…', intercept: '', reorder: 'the line is dead', howler: 'hang up', busy: 'busy', time: '', machine: '', record: 'after the tone…', left: '', recording: '' };
   function renderPhone(book = false) {
     if (!ph || panelFor !== 'phone') return;
     const n = formatNumber(phone.number);

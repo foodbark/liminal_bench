@@ -71,6 +71,12 @@ class Sounds {
   busy(seconds) { const n = Math.ceil(seconds / 1); for (let i = 0; i < n; i++) this.tones([480, 620], 0.5, GAIN, i * 1); return n; }
   reorder(seconds) { const n = Math.ceil(seconds / 0.5); for (let i = 0; i < n; i++) this.tones([480, 620], 0.25, GAIN, i * 0.5); return n * 0.5; }
   beep() { this.tones([1000], 0.6, GAIN); return 0.7; }
+  // the receiver-off-hook howler: four high tones in a fast beat, swelling until someone hangs up
+  howler(seconds) {
+    const n = Math.ceil(seconds / 0.2);
+    for (let i = 0; i < n; i++) this.tones([1400, 2060, 2450, 2600], 0.1, GAIN * (1.0 + 1.6 * Math.min(1, i / 40)), i * 0.2);
+    return n * 0.2;
+  }
   // the pay phone's coin tones, as a caller hears them in the earpiece: a quarter is five quick
   // beeps, a dime two slower ones, a nickel one. Returns the seconds they take.
   coin(kind = 'quarter') {
@@ -197,7 +203,13 @@ export class Phone {
     let spoken = false;
     if (it.file) { try { await this.sounds.play(it.file); spoken = true; } catch (e) { /* the recording is not in yet: the transcript carries it */ } }
     if (!spoken && !(await this.wait(5))) return;
-    if (this.state === 'intercept') { this.sounds.reorder(30); this.set('reorder'); }
+    if (this.state !== 'intercept') return;
+    if (it.after === 'howler') {   // the line left open: a few seconds of nothing, then the howler until the receiver goes down
+      if (!(await this.wait(4))) return;
+      if (this.state !== 'intercept') return;
+      this.say('Nothing. Then a rising howl up the line.');
+      this.sounds.howler(60); this.set('howler');
+    } else { this.sounds.reorder(30); this.set('reorder'); }
   }
   async time() {
     this.set('time');
