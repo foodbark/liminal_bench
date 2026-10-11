@@ -60,7 +60,9 @@ export class WeatherFX {
     if (wantCb && !this.cb) this.cb = this.makeCumulonimbus(env);
     if (!wantCb) this.cb = null;
     const sign = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;
-    const speed = (1.5 + env.wind.speed * 0.4) * sign * SCALE;
+    // drift: a cloud a few miles off in a 20 mph wind crosses the sky in minutes, not seconds; the
+    // old 0.4 per mph had the field whizzing past on a windy evening (2026-10-10, 19 mph)
+    const speed = (0.8 + env.wind.speed * 0.12) * sign * SCALE;
     for (const c of this.clouds) {
       c.x += speed * c.depth * dt;
       if (c.x > W + 40) c.x = -c.w - 40; else if (c.x < -c.w - 40) c.x = W + 40;

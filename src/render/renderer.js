@@ -197,7 +197,7 @@ export class Renderer {
     const clouds = (sk ? sk.cumulus > 0.02 : env.cond.cover > 0.02) || sheets;
     // sheets drift with the wind, high and slow
     const sgn = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
-    this.sheetX = ((this.sheetX + (0.4 + env.wind.speed * 0.12) * SCALE * sgn * dt) % W + W) % W;
+    this.sheetX = ((this.sheetX + (0.25 + env.wind.speed * 0.07) * SCALE * sgn * dt) % W + W) % W;
     const gliders = this.fx.gliders.list.length > 0;
     const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}` : '';
     if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
