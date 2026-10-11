@@ -1,6 +1,11 @@
 // Pixel-art helpers: ordered dithering, crisp primitives, color math.
+import { BLUE64 } from './bluenoise.js';
 export const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 export const bayer = (x, y) => (BAYER4[y & 3][x & 3] + 0.5) / 16;
+// Blue-noise threshold (a 64x64 tile): an even, random-looking stipple at every density, where
+// Bayer locks into a lattice over any big soft area (the sky, a cloud sheet, a fog bank) and
+// crawls when it scrolls. The big passes dither with this; Bayer stays for small page-side fills.
+export const blue = (x, y) => (BLUE64[((y & 63) << 6) + (x & 63)] + 0.5) / 256;
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const smooth = (t) => t * t * (3 - 2 * t);
@@ -57,6 +62,21 @@ export function ditherPattern(ctx, color, level) {
     const c = document.createElement('canvas'); c.width = 4; c.height = 4;
     const g = c.getContext('2d'); g.fillStyle = color;
     for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (BAYER4[y][x] < level) g.fillRect(x, y, 1, 1);
+    p = ctx.createPattern(c, 'repeat'); patCache.set(key, p);
+  }
+  return p;
+}
+// A fill pattern of `color` at `density` (0..1) through the blue-noise tile: a grain, not a
+// lattice. Patterns are anchored to the canvas origin, so rows of the same tile line up.
+export function grainPattern(ctx, color, density) {
+  const level = clamp(Math.round(density * 64), 0, 64);
+  const key = 'g|' + color + '|' + level;
+  let p = patCache.get(key);
+  if (!p) {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const g = c.getContext('2d'); g.fillStyle = color;
+    const thr = level * 4;
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) if (BLUE64[(y << 6) + x] < thr) g.fillRect(x, y, 1, 1);
     p = ctx.createPattern(c, 'repeat'); patCache.set(key, p);
   }
   return p;

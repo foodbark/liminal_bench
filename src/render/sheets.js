@@ -1,5 +1,5 @@
 import { W, H, HORIZON, SCALE } from '../state.js';
-import { bayer, clamp, lerpRGB, lerp, smooth } from '../util/pixel.js';
+import { blue, clamp, lerpRGB, lerp, smooth } from '../util/pixel.js';
 import { valueNoise2D, valueNoise1D, hash2, mulberry32 } from '../util/noise.js';
 import { cloudTones } from './clouds.js';
 
@@ -42,7 +42,7 @@ export function renderSheets(img, env) {
   // --- cirrostratus / altostratus: milky veils the sun still shows through. The density has
   // to move over tens of pixels (fibrous bands, thin patches, thicker ones), because a dither
   // at one constant density is a lattice across the whole sky, not a cloud; and the threshold
-  // is mostly a hash with a little of the Bayer cell, so no lattice locks in where it is even.
+  // is mostly a hash with a little of the blue-noise tile, so no lattice locks in where it is even.
   // The veil's milkiness is in the sky palette (skyPalette); this is only its fibrous texture.
   const veils = [[sky.veilHigh, 1, 0.10, 0.22], [sky.veilMid, 2, 0.26, 0.30]];   // sparse: the milk itself is in the palette
   for (const [k, tone, base, spread] of veils) {
@@ -55,7 +55,7 @@ export function renderSheets(img, env) {
           + 0.3 * wrapNoise(nB, x, y, 0.0045 / SCALE, 0.02 / SCALE, d)
           + 0.2 * wrapNoise(nC, x, y, 0.014 / SCALE, 0.05 / SCALE, d);
         const dens = k * (base + spread * (n * 2 - 1)) * (0.75 + 0.25 * clamp(1 - 1 / d, 0, 1));
-        const thr = bayer(x, y) * 0.45 + hash2(x, y, 5) * 0.55;
+        const thr = blue(x, y) * 0.45 + hash2(x, y, 5) * 0.55;
         if (thr < dens) put(data, x, y, haze(tones[tone], d));
       }
     }
@@ -81,7 +81,7 @@ export function renderSheets(img, env) {
           let x = Math.round(x0 + cosA * t - sinA * (off + wy)), y = Math.round(y0 + sinA * t + cosA * (off + wy));
           x = ((x % W) + W) % W;
           if (y < 0 || y >= VANISH) continue;
-          if (bayer(x, y) < dens * fade) put(data, x, y, haze(tones[f % 3 === 0 ? 0 : 1], depthAt(y)));
+          if (blue(x, y) < dens * fade) put(data, x, y, haze(tones[f % 3 === 0 ? 0 : 1], depthAt(y)));
         }
       }
     }
@@ -118,7 +118,7 @@ export function renderSheets(img, env) {
             for (let dx = -hw; dx <= hw; dx++) {
               const xx = ((Math.round(lx + dx) % W) + W) % W;
               const edge = hw - Math.abs(dx) < 1.5 || Math.abs(dy) > ry - 1.5;
-              if (edge && bayer(xx, yy) > 0.5) continue;
+              if (edge && blue(xx, yy) > 0.5) continue;
               const rel = (yy - top) / Math.max(1, R * flat * 2);   // 0 at the patch's top, 1 at its bottom
               put(data, xx, yy, rel < 0.45 ? litT : rel < 0.78 ? midT : shT);
             }
@@ -141,7 +141,7 @@ export function renderSheets(img, env) {
         if (lumpy > 0) {
           const n = 0.6 * wrapNoise(nB, x, v * 60, 0.0035 / SCALE, 0.02, d) + 0.4 * wrapNoise(nC, x, v * 60, 0.011 / SCALE, 0.06, d);
           const thr = 1 - lumpy * 0.92;
-          const q = n + (bayer(x, y) - 0.5) * 0.05;
+          const q = n + (blue(x, y) - 0.5) * 0.05;
           if (q > thr) {
             const k = (q - thr) / Math.max(0.05, 1 - thr);
             const c = k > 0.55 ? top0 : k > 0.3 ? top1 : shade;
@@ -150,8 +150,8 @@ export function renderSheets(img, env) {
         }
         if (!done && flat > 0) {
           const n = wrapNoise(nA, x, v * 40, 0.002 / SCALE, 0.03, d);
-          const ragged = y > VANISH * 0.82 && bayer(x, y) > flat * (0.2 + n) * 3;   // frayed lower edge
-          if (!ragged && bayer(x, y) < flat * (0.85 + 0.15 * n)) {
+          const ragged = y > VANISH * 0.82 && blue(x, y) > flat * (0.2 + n) * 3;   // frayed lower edge
+          if (!ragged && blue(x, y) < flat * (0.85 + 0.15 * n)) {
             const c = n > 0.62 ? top1 : n > 0.35 ? shade : under;
             put(data, x, y, haze(c, d));
           }

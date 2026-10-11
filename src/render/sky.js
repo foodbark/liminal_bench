@@ -1,7 +1,7 @@
 import { W, H, HORIZON, SCALE, LAT } from '../state.js';
 import { planetPositions } from '../util/planets.js';
 import { starAltAz, altAzToRaDec, galacticLat } from '../util/solar.js';
-import { bayer, lerpRGB, quant, clamp, rgb, fillCircle, ditherPattern, makeCanvas, lerp, smooth } from '../util/pixel.js';
+import { blue, lerpRGB, quant, clamp, rgb, fillCircle, ditherPattern, makeCanvas, lerp, smooth } from '../util/pixel.js';
 import { mulberry32, hash2, valueNoise2D as valueNoise2DSky } from '../util/noise.js';
 
 const SKY_BOTTOM = HORIZON + 24;
@@ -42,7 +42,7 @@ export function renderSkyGradient(img, env) {
         const g = Math.exp(-(dx * dx + dy * dy) * 2.2) * glowK;
         if (g > 0.01) c = lerpRGB(base, sunColor, g * 0.75);
       }
-      const d = bayer(x, y);
+      const d = blue(x, y);
       const i = (y * W + x) * 4;
       if (mw > 0 && (x & 1) === 0) {
         // the Milky Way: galactic latitude of this bit of sky, sampled every 2 px; a soft band

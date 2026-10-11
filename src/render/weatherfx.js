@@ -1,5 +1,5 @@
 import { W, H, HORIZON, SCALE } from '../state.js';
-import { fillCircle, ditherPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine, makeCanvas } from '../util/pixel.js';
+import { fillCircle, ditherPattern, grainPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine, makeCanvas } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
 import { starAltAz } from '../util/solar.js';
@@ -194,8 +194,18 @@ export class WeatherFX {
   drawFog(ctx, env) {
     if (!env.cond.fog) return;
     const col = rgb(mulRGB([214, 219, 230], env.pal.ambient));
-    const bands = [[-110, -70, 2], [-70, -40, 5], [-40, -10, 8], [-10, 30, 10], [30, 80, 7], [80, 140, 4], [140, 200, 2]];
-    for (const [a, b, lv] of bands) { ctx.fillStyle = ditherPattern(ctx, col, lv); ctx.fillRect(0, Math.round(HORIZON + a * SCALE), W, Math.round((b - a) * SCALE)); }
+    // density through the fog's depth, row by row through the blue-noise grain: thickest a
+    // little below the horizon, thinning up into the sky and down into the meadow
+    const knots = [[-110, 0.1], [-55, 0.3], [-25, 0.5], [10, 0.62], [55, 0.45], [110, 0.25], [200, 0.1]];
+    const y0 = Math.round(HORIZON + knots[0][0] * SCALE), y1 = Math.round(HORIZON + knots[knots.length - 1][0] * SCALE);
+    let k = 0;
+    for (let y = y0; y < y1; y++) {
+      const u = (y - HORIZON) / SCALE;
+      while (k < knots.length - 2 && u > knots[k + 1][0]) k++;
+      const t = (u - knots[k][0]) / (knots[k + 1][0] - knots[k][0]);
+      ctx.fillStyle = grainPattern(ctx, col, knots[k][1] + (knots[k + 1][1] - knots[k][1]) * t);
+      ctx.fillRect(0, y, W, 1);
+    }
   }
 
   // A repeating tile of streaks or flakes; two layers scroll at different speeds for depth.

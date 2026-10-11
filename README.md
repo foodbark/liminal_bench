@@ -271,6 +271,7 @@ art/                      paintings + a JSON config each (silhouettes, prop boxe
 assets/                   generated backdrop.png, backdrop_mask.png, backdrop.json, board_closeup.png (tools/build_backdrop.py)
 functions/api/notes.js    the board's server side (Cloudflare Pages Function over D1); db/schema.sql, wrangler.toml
 tools/forest_study.py     does the painting tell larch and deciduous from fir? histograms and overlays
+tools/make_bluenoise.py   writes src/util/bluenoise.js, the blue-noise tile the sky, sheets, fog and terrain dither through (run once)
 tools/pixelate.py         a photograph to shaded pixel art (edge-keeping flatten, hue ramps from the photo, ink, Bayer dither), with presets for mountains, trees and props; no model
 docs/deploy.md            Cloudflare Pages, D1, the domains, retiring GitHub Pages (what is done and what is left)
 ```

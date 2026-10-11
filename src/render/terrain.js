@@ -1,5 +1,5 @@
 import { W, H, SEASON_SNOW, SCALE, META } from '../state.js';
-import { bayer, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum, smooth } from '../util/pixel.js';
+import { blue, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum, smooth } from '../util/pixel.js';
 import { valueNoise1D, valueNoise2D, hash2 } from '../util/noise.js';
 import { LAYER, MAT } from '../assets.js';
 
@@ -131,7 +131,7 @@ export function renderTerrain(img, env, assets) {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
       const layer = mask[i];
-      const d = bayer(x, y);
+      const d = blue(x, y);
       if (layer === LAYER.SKY) {
         // mountain fog spills over the crest: stippled cloud in the sky just above the ridge
         if (mountainFog > 0) {
@@ -139,7 +139,7 @@ export function renderTerrain(img, env, assets) {
           if (above > 0 && above < 44 * SCALE) {
             const w = smooth(clamp(1 - above / (44 * SCALE), 0, 1));
             const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
-            const dens = clamp((n - (0.9 - mountainFog * 0.45)) / 0.32, 0, 1) * w;
+            const dens = smooth(clamp((n - (0.9 - mountainFog * 0.45)) / 0.4, 0, 1)) * w;
             if (d < dens) putPx(data, i, quantRGB(bankCol, 9, d));
           }
         }
@@ -241,8 +241,10 @@ export function renderTerrain(img, env, assets) {
         if (layer === LAYER.FLANK) w *= 0.6 * clamp((x - BANK_X0) / BANK_X1, 0, 1);   // Sentinel's near end is too close for banks
         if (w > 0) {
           const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
-          const dens = clamp((n - (0.9 - mountainFog * 0.45)) / 0.32, 0, 1) * w;
-          if (d < dens) c = lerpRGB(c, bankCol, 0.9);
+          // a soft blend by density, not an either/or: an either/or at a steady density was a
+          // rectangle of checkerboard laid over the forest
+          const dens = smooth(clamp((n - (0.9 - mountainFog * 0.45)) / 0.4, 0, 1)) * w;
+          if (dens > 0) c = lerpRGB(c, bankCol, 0.9 * dens);
         }
       }
 
