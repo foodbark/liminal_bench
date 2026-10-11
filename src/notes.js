@@ -17,13 +17,18 @@ const API = 'api/notes';   // relative: the site may live at a path prefix
 export const NOTE_MAX = 80;
 const PILE = 24;   // posters the board carries: past the slots they pile up, newest on top
 // A poster comes in one of three sizes, a handbill, a flyer or a big sheet (its picture at 1, 2
-// or 3 close-up pixels per art pixel), picked by its id so a board is a mix; its box sits on
-// the slot's center, held inside the cork, and a big one spills over its neighbors.
+// or 3 close-up pixels per art pixel), chosen on the pin form (`k`), or picked by its id when
+// nothing was chosen so a board is a mix; its box sits on the slot's center, held inside the
+// cork, and a big one spills over its neighbors.
+export const POSTER_SIZES_NAMED = [[1, 'handbill'], [2, 'flyer'], [3, 'big sheet']];
 const POSTER_SCALES = [1, 2, 3], POSTER_ODDS = [0.3, 0.55, 0.15];
+export function pickPosterSize(r = Math.random()) {
+  let acc = 0;
+  for (let i = 0; i < POSTER_ODDS.length; i++) { acc += POSTER_ODDS[i]; if (r < acc) return POSTER_SCALES[i]; }
+  return POSTER_SCALES[2];
+}
 function posterBox(p, cx, cy) {
-  const r = hash2(p.id % 9973, 3, 4);
-  let k = POSTER_SCALES[2], acc = 0;
-  for (let i = 0; i < POSTER_ODDS.length; i++) { acc += POSTER_ODDS[i]; if (r < acc) { k = POSTER_SCALES[i]; break; } }
+  const k = POSTER_SCALES.includes(p.k) ? p.k : pickPosterSize(hash2(p.id % 9973, 3, 4));
   const cu = CLOSEUPS.board, kk = cu ? Math.min(cu.cork.w / CORK.w, cu.cork.h / CORK.h) : 4;   // close-up pixels per scene pixel
   const w = Math.round((p.w || 160) * k / kk) + 2, h = Math.round((p.h || 212) * k / kk) + 2;
   const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - h / 2), CORK.y + 2, CORK.y + CORK.h - h - 2);
@@ -80,17 +85,17 @@ export async function loadPosted() {
 }
 
 // Pinning a poster: `png` is the data URL of the art pixels the page made, `w` by `h`.
-export async function postPoster(png, w, h) {
+export async function postPoster(png, w, h, k = 0) {
   if (!/^data:image\/png;base64,/.test(png || '')) throw new Error('nothing to pin');
   if (mode === 'api') {
-    const r = await fetch(POSTER_API + '?v=2', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ png }) });
+    const r = await fetch(POSTER_API + '?v=2', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ png, k }) });
     const body = await r.json().catch(() => null);
     if (!r.ok) throw new Error((body && body.error) || 'the pin would not go in');
     takeBoard(body);
     return posters;
   }
   const now = Date.now();
-  posters = [...posters, { id: now, w, h, at: now, src: png }].filter((p) => alive(p, now)).slice(-PILE);
+  posters = [...posters, { id: now, w, h, k, at: now, src: png }].filter((p) => alive(p, now)).slice(-PILE);
   writePosters(posters);
   return posters;
 }

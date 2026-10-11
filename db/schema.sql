@@ -42,8 +42,11 @@ CREATE TABLE IF NOT EXISTS posters (
   png  TEXT    NOT NULL,      -- the picture, base64
   w    INTEGER NOT NULL,      -- art pixels
   h    INTEGER NOT NULL,
+  k    INTEGER NOT NULL DEFAULT 0,   -- the size chosen: 1 handbill, 2 flyer, 3 big sheet; 0 lets the board pick
   at   INTEGER NOT NULL,      -- ms since the epoch
   who  TEXT    NOT NULL       -- salted daily hash of the poster's address, for the rate limit only
 );
+-- a posters table from before the size column (2026-10-10) takes it once, by hand:
+--   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE posters ADD COLUMN k INTEGER NOT NULL DEFAULT 0"
 CREATE INDEX IF NOT EXISTS posters_at ON posters (at);
 CREATE INDEX IF NOT EXISTS posters_who_at ON posters (who, at);

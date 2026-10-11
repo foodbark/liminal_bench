@@ -1,7 +1,7 @@
 import { W, H, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize } from './notes.js';
 import { peakSnowLatched, peakSnowSince } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -150,9 +150,17 @@ export function setupUI(state, canvas) {
     const or = document.createElement('div'); or.className = 'dim poster-or'; or.textContent = 'or pin a picture, if you brought one:';
     const file = document.createElement('input'); file.type = 'file'; file.accept = 'image/*'; file.id = 'poster-file';
     const preview = document.createElement('canvas'); preview.className = 'poster-preview'; preview.hidden = true;
+    // its size on the board: a handbill, a flyer or a big sheet, one pre-chosen the way the board would
+    const sizes = document.createElement('div'); sizes.className = 'poster-sizes'; sizes.hidden = true;
+    let sizeK = pickPosterSize();
+    const sizeButtons = POSTER_SIZES_NAMED.map(([k, name]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.classList.toggle('chosen', k === sizeK);
+      b.onclick = () => { sizeK = k; sizeButtons.forEach((o, i) => o.classList.toggle('chosen', POSTER_SIZES_NAMED[i][0] === k)); };
+      sizes.appendChild(b); return b;
+    });
     let poster = null;   // { png, w, h } once a picture is pixelated
     file.addEventListener('change', async () => {
-      poster = null; preview.hidden = true; err.textContent = '';
+      poster = null; preview.hidden = true; sizes.hidden = true; err.textContent = '';
       const f = file.files && file.files[0]; if (!f) return;
       err.textContent = 'pixelating…';
       try {
@@ -164,11 +172,11 @@ export function setupUI(state, canvas) {
         const k = Math.max(1, Math.floor(Math.min(240 / art.width, 240 / art.height)));
         preview.width = art.width * k; preview.height = art.height * k;
         const g = preview.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(c, 0, 0, preview.width, preview.height);
-        preview.hidden = false; err.textContent = `${art.width} by ${art.height}, ${art.colors} colors`;
+        preview.hidden = false; sizes.hidden = false; err.textContent = `${art.width} by ${art.height}, ${art.colors} colors`;
         poster = { png, w: art.width, h: art.height };
       } catch (e) { err.textContent = 'that picture would not take'; }
     });
-    pBody.append(lead, input, or, file, preview, err);
+    pBody.append(lead, input, or, file, preview, sizes, err);
     pActions.innerHTML = '';
     const pin = document.createElement('button'); pin.textContent = 'pin it';
     // with the board's close-up the form simply goes away and the cork is there to read
@@ -180,7 +188,7 @@ export function setupUI(state, canvas) {
       if (pin.disabled) return;
       pin.disabled = true; err.textContent = '';
       try {
-        if (poster && !input.value.trim()) await postPoster(poster.png, poster.w, poster.h); else await postNote(input.value);
+        if (poster && !input.value.trim()) await postPoster(poster.png, poster.w, poster.h, sizeK); else await postNote(input.value);
         state.notes = buildNotes(); state.notesVersion++; done();
       } catch (e) { err.textContent = e.message || 'the pin would not go in'; pin.disabled = false; }
     };

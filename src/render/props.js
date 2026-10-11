@@ -61,9 +61,17 @@ function drawNote(ctx, n, u = 1, legible = false) {
 // A poster: the picture with a thin white border, the paper cut to it, centered in its slot.
 // On the scene the picture is averaged down to fit (a hard shrink drops rows of its pixels); up
 // close it is laid at a whole-number scale so its pixels stay square. The border yellows with age.
+// A size in screen pixels, as canvas pixels: the canvas is shown scaled by --s (shrunk on most
+// screens), and a border sized in canvas pixels came out a hair wide on one machine and gone on
+// the next.
+function screenPx(px) {
+  let css = 1;
+  if (typeof document !== 'undefined') css = Number(getComputedStyle(document.documentElement).getPropertyValue('--s')) || 1;
+  return Math.max(1, Math.round(px / css));
+}
 function drawPosterNote(ctx, n, u = 1, legible = false) {
   const im = posterImage(n.poster);
-  const s = Math.max(1, Math.round(u)), b = n.border ?? Math.max(1, Math.round(s * 0.5));
+  const s = Math.max(1, Math.round(u)), b = n.border ?? screenPx(legible ? 2 : 1.5);
   const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
   let dw, dh;
   if (legible) { const k = n.k || Math.max(1, Math.floor(Math.min((n.w - 2 * b) / pw, (n.h - 2 * b) / ph))); dw = pw * k; dh = ph * k; }   // its own size, or what the box allows
@@ -83,7 +91,7 @@ export function drawPosterView(ctx, n) {
   ctx.fillRect(0, 0, W, H);
   const im = posterImage(n.poster);
   const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
-  const s = Math.max(1, Math.round(SCALE)), b = s, k = Math.max(1, Math.floor((H * 0.8 - 2 * b) / ph));
+  const s = Math.max(1, Math.round(SCALE)), b = screenPx(3), k = Math.max(1, Math.floor((H * 0.8 - 2 * b) / ph));
   const w = pw * k + 2 * b, h = ph * k + 2 * b;
   drawPosterNote(ctx, { ...n, x: (W - w) >> 1, y: (H - h) >> 1, w, h, border: b, k }, s, true);
 }

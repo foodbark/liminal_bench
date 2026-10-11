@@ -2,7 +2,8 @@
 // and pinned beside the notes. Stored in D1 as the small PNG the page made (base64 text), read
 // back by id from posters/[id].js. Torn down through DELETE api/notes { poster }.
 //
-//   POST /api/posters { png }  -> pins one (201) and returns the board (?v=2 shape); 400 when the
+//   POST /api/posters { png, k }  -> pins one (201) and returns the board (?v=2 shape); k is the size
+//                                 chosen (1 handbill, 2 flyer, 3 big sheet; 0 or absent: the board picks); 400 when the
 //                                 picture is not a small PNG, 429 at the limits
 //
 // The limits are loose for now (the user's call, 2026-10-10): twenty an hour per address, sixty
@@ -25,6 +26,7 @@ export async function onRequestPost({ request, env }) {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const w = dv.getUint32(16), h = dv.getUint32(20);
   if (w < MIN_SIDE || h < MIN_SIDE || w > MAX_SIDE || h > MAX_SIDE) return json({ error: 'the poster is the wrong size' }, 400);
+  const k = body && Number.isInteger(body.k) && body.k >= 0 && body.k <= 3 ? body.k : 0;
   const now = Date.now(), since = now - HOUR, who = await whoHash(request, env);
   const [mine, all] = await Promise.all([
     env.DB.prepare('SELECT count(*) AS n FROM posters WHERE who = ?1 AND at > ?2').bind(who, since).first('n'),
@@ -33,7 +35,7 @@ export async function onRequestPost({ request, env }) {
   if (mine >= PER_ADDRESS_HOUR) return json({ error: 'you have papered the board enough for now. come back in a while.' }, 429, { 'retry-after': '3600' });
   if (all >= ALL_HOUR) return json({ error: 'the board is papered over for now. come back later.' }, 429, { 'retry-after': '3600' });
   await env.DB.batch([
-    env.DB.prepare('INSERT INTO posters (png, w, h, at, who) VALUES (?1, ?2, ?3, ?4, ?5)').bind(b64, w, h, now, who),
+    env.DB.prepare('INSERT INTO posters (png, w, h, k, at, who) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(b64, w, h, k, now, who),
     env.DB.prepare('DELETE FROM posters WHERE at < ?1').bind(now - 2 * LIFE_DAYS * DAY),
   ]);
   return json(await board(env.DB, wantsV2(request)), 201);

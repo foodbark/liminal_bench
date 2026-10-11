@@ -18,7 +18,7 @@ export async function board(db, v2) {
   if (!v2) return notes;
   const [t, p] = await db.batch([
     db.prepare("SELECT key, max(at) AS at FROM torn WHERE key LIKE 'seed:%' AND at > ?1 GROUP BY key").bind(since),
-    db.prepare('SELECT id, w, h, at FROM posters WHERE at > ?1 ORDER BY at DESC LIMIT ?2').bind(since, PILE),
+    db.prepare('SELECT id, w, h, k, at FROM posters WHERE at > ?1 ORDER BY at DESC LIMIT ?2').bind(since, PILE),
   ]);
   return { notes, torn: t.results.map((r) => ({ seed: Number(r.key.slice(5)), at: r.at })), posters: p.results.reverse() };
 }
