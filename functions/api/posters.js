@@ -5,12 +5,12 @@
 //   POST /api/posters { png }  -> pins one (201) and returns the board (?v=2 shape); 400 when the
 //                                 picture is not a small PNG, 429 at the limits
 //
-// A picture is heavier than a line of text and a public image board will be found sooner than a
-// text one, so the limits are tighter: one an hour per address, a dozen an hour in all. The size
-// cap and the pixel cap are what the page produces, with a little room; anything else is refused.
+// The limits are loose for now (the user's call, 2026-10-10): twenty an hour per address, sixty
+// an hour in all; tearing down is the moderation. The size cap and the pixel cap are what the
+// page produces, with a little room; anything else is refused.
 import { board, json, wantsV2, whoHash, HOUR, LIFE_DAYS, DAY } from './_board.js';
 const MAX_BYTES = 48 * 1024, MAX_SIDE = 224, MIN_SIDE = 16;
-const PER_ADDRESS_HOUR = 1, ALL_HOUR = 12;
+const PER_ADDRESS_HOUR = 20, ALL_HOUR = 60;
 
 export async function onRequestPost({ request, env }) {
   let body;
@@ -30,7 +30,7 @@ export async function onRequestPost({ request, env }) {
     env.DB.prepare('SELECT count(*) AS n FROM posters WHERE who = ?1 AND at > ?2').bind(who, since).first('n'),
     env.DB.prepare('SELECT count(*) AS n FROM posters WHERE at > ?1').bind(since).first('n'),
   ]);
-  if (mine >= PER_ADDRESS_HOUR) return json({ error: 'one poster an hour. come back in a while.' }, 429, { 'retry-after': '3600' });
+  if (mine >= PER_ADDRESS_HOUR) return json({ error: 'you have papered the board enough for now. come back in a while.' }, 429, { 'retry-after': '3600' });
   if (all >= ALL_HOUR) return json({ error: 'the board is papered over for now. come back later.' }, 429, { 'retry-after': '3600' });
   await env.DB.batch([
     env.DB.prepare('INSERT INTO posters (png, w, h, at, who) VALUES (?1, ?2, ?3, ?4, ?5)').bind(b64, w, h, now, who),

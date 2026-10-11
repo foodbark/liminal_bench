@@ -32,6 +32,7 @@ export function makeNote(text, opts = {}) {
 // A note is a scrap of paper at unit `u` (1 on the scene; the close-up's scale, where the text is
 // set for real). Aging yellows and curls it.
 function drawNote(ctx, n, u = 1, legible = false) {
+  if (n.poster) return drawPosterNote(ctx, n, u, legible);
   const fade = clamp(n.age, 0, 1);
   const paper = lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], fade * 0.75);
   const ink = lerpRGB([80, 82, 96], [150, 130, 105], fade);
@@ -41,9 +42,7 @@ function drawNote(ctx, n, u = 1, legible = false) {
   px(ctx, rgb(paper), x, y, w, h);
   px(ctx, edge, x + w - s, y, s, h);
   px(ctx, edge, x, y + h - s, w, s);
-  if (n.poster) {
-    drawPoster(ctx, n, x, y, w, h, s, legible);
-  } else if (legible) {
+  if (legible) {
     drawNoteText(ctx, n.text, x + 4 * s, y + 4 * s, w - 8 * s, h - 8 * s, rgb(ink), u);
   } else {
     // a heading and scribbled lines of "text"
@@ -59,38 +58,34 @@ function drawNote(ctx, n, u = 1, legible = false) {
   px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
 }
 
-// A poster's picture on its paper: on the scene it is averaged down to fit (a hard shrink drops
-// rows of its pixels); up close it is laid at a whole-number scale so its pixels stay square.
-function drawPoster(ctx, n, x, y, w, h, s, legible) {
+// A poster: the picture with a thin white border, the paper cut to it, centered in its slot.
+// On the scene the picture is averaged down to fit (a hard shrink drops rows of its pixels); up
+// close it is laid at a whole-number scale so its pixels stay square. The border yellows with age.
+function drawPosterNote(ctx, n, u = 1, legible = false) {
   const im = posterImage(n.poster);
-  if (!im) return;                                   // still loading: the paper waits
-  const pw = n.poster.w || im.width, ph = n.poster.h || im.height, m = 2 * s;
-  if (!legible) {
-    const k = Math.min((w - m) / pw, (h - m) / ph), dw = Math.max(1, Math.round(pw * k)), dh = Math.max(1, Math.round(ph * k));
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(im, x + ((w - dw) >> 1), y + ((h - dh) >> 1), dw, dh);
-    ctx.imageSmoothingEnabled = false;
-    return;
-  }
-  const k = Math.max(1, Math.floor(Math.min((w - m) / pw, (h - m) / ph)));
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(im, x + ((w - pw * k) >> 1), y + ((h - ph * k) >> 1), pw * k, ph * k);
+  const s = Math.max(1, Math.round(u)), b = n.border ?? Math.max(1, Math.round(s * 0.5));
+  const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
+  let dw, dh;
+  if (legible) { const k = Math.max(1, Math.floor(Math.min((n.w - 2 * b) / pw, (n.h - 2 * b) / ph))); dw = pw * k; dh = ph * k; }
+  else { const k = Math.min((n.w - 2 * b) / pw, (n.h - 2 * b) / ph); dw = Math.max(1, Math.round(pw * k)); dh = Math.max(1, Math.round(ph * k)); }
+  const w = dw + 2 * b, h = dh + 2 * b, x = n.x + ((n.w - w) >> 1), y = n.y + ((n.h - h) >> 1);
+  const paper = lerpRGB([248, 246, 240], [180, 138, 94], clamp(n.age, 0, 1) * 0.75);
+  px(ctx, '#5a4030', x + s, y + s, w, h);            // shadow on the cork
+  px(ctx, rgb(paper), x, y, w, h);
+  if (im) { ctx.imageSmoothingEnabled = !legible; ctx.drawImage(im, x + b, y + b, dw, dh); ctx.imageSmoothingEnabled = false; }
+  px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
 }
 
-// One poster held up to look at: the frame dimmed by a dither, the paper centered at a
-// whole-number scale that fills most of the height, its pin on top.
+// One poster held up to look at: the frame dimmed by a dither, the picture centered at a
+// whole-number scale that fills most of the height, its thin border and its pin.
 export function drawPosterView(ctx, n) {
-  const im = posterImage(n.poster);
   ctx.fillStyle = ditherPattern(ctx, '#000', 8);
   ctx.fillRect(0, 0, W, H);
+  const im = posterImage(n.poster);
   const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
-  const k = Math.max(1, Math.floor(H * 0.78 / ph)), s = Math.max(1, Math.round(SCALE));
-  const m = 6 * s, w = pw * k + 2 * m, h = ph * k + 2 * m, x = (W - w) >> 1, y = (H - h) >> 1;
-  drawNote(ctx, { ...n, x, y, w, h, poster: null, text: '' }, s, false);   // the paper, bare
-  ctx.fillStyle = rgb(lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], clamp(n.age, 0, 1) * 0.75));
-  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);           // over the scribbles
-  if (im) { ctx.imageSmoothingEnabled = false; ctx.drawImage(im, x + m, y + m, pw * k, ph * k); }
-  px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
+  const s = Math.max(1, Math.round(SCALE)), b = s, k = Math.max(1, Math.floor((H * 0.8 - 2 * b) / ph));
+  const w = pw * k + 2 * b, h = ph * k + 2 * b;
+  drawPosterNote(ctx, { ...n, x: (W - w) >> 1, y: (H - h) >> 1, w, h, border: b }, s, true);
 }
 
 // Text in the page's font, wrapped to the paper and snapped to hard pixels: the glyphs are set on

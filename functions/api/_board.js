@@ -1,6 +1,6 @@
 // Shared by the board's functions (notes.js, posters.js, posters/[id].js): the board as the page
 // reads it, the caller's daily hash for the rate limits, and the JSON response. Not a route.
-export const LIFE_DAYS = 16, BOARD = 6;
+export const LIFE_DAYS = 16, BOARD = 6, PILE = 24;   // notes on the board; posters, which pile up
 export const DAY = 86400e3, HOUR = 3600e3;
 
 export const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), {
@@ -18,7 +18,7 @@ export async function board(db, v2) {
   if (!v2) return notes;
   const [t, p] = await db.batch([
     db.prepare("SELECT key, max(at) AS at FROM torn WHERE key LIKE 'seed:%' AND at > ?1 GROUP BY key").bind(since),
-    db.prepare('SELECT id, w, h, at FROM posters WHERE at > ?1 ORDER BY at DESC LIMIT ?2').bind(since, BOARD),
+    db.prepare('SELECT id, w, h, at FROM posters WHERE at > ?1 ORDER BY at DESC LIMIT ?2').bind(since, PILE),
   ]);
   return { notes, torn: t.results.map((r) => ({ seed: Number(r.key.slice(5)), at: r.at })), posters: p.results.reverse() };
 }

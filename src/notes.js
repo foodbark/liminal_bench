@@ -1,6 +1,7 @@
 import { META } from './state.js';
 import { makeNote } from './render/props.js';
 import { clamp } from './util/pixel.js';
+import { hash2 } from './util/noise.js';
 
 // Notes on the bulletin board. What you pin is kept in this browser (localStorage) unless the
 // page is served with the notes API behind it (Cloudflare Pages with functions/api/notes.js, see
@@ -14,6 +15,7 @@ import { clamp } from './util/pixel.js';
 const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.posters';
 const API = 'api/notes';   // relative: the site may live at a path prefix
 export const NOTE_MAX = 80;
+const PILE = 24;   // posters the board carries: past the slots they pile up, newest on top
 export const NOTE_LIFE_DAYS = 16;
 const FADE_DAYS = 14, DAY = 86400e3;
 const SEED_TEXTS = ['lost: orange cat, answers to "biscuit"', 'free piano. you haul.', 'open mic thursdays', 'room for rent, quiet house', 'the river is low this year', 'call me'];
@@ -75,7 +77,7 @@ export async function postPoster(png, w, h) {
     return posters;
   }
   const now = Date.now();
-  posters = [...posters, { id: now, w, h, at: now, src: png }].filter((p) => alive(p, now)).slice(-META.notes.length);
+  posters = [...posters, { id: now, w, h, at: now, src: png }].filter((p) => alive(p, now)).slice(-PILE);
   writePosters(posters);
   return posters;
 }
@@ -133,11 +135,18 @@ export function buildNotes(now = Date.now()) {
   const slots = META.notes.map(([x, y, w, h, paper, age], i) => ({ x, y, w, h, paper, age, text: SEED_TEXTS[i % SEED_TEXTS.length], seed: i }));
   const down = new Set(torn.filter((t) => alive(t, now)).map((t) => t.seed));
   const order = slots.map((s, i) => i).sort((a, b) => (down.has(b) - down.has(a)) || (slots[b].age - slots[a].age));
-  // notes and posters share the slots, in the order they went up
-  const mine = sortByAt([...posted.filter((n) => alive(n, now)), ...posters.filter((p) => alive(p, now)).map((p) => ({ ...p, poster: p }))]).slice(-slots.length);
-  mine.forEach((n, k) => {
-    const s = slots[order[k]];
-    slots[order[k]] = { ...s, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper: Math.floor(n.at / 1000) % 6, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null };
+  // notes and posters share the slots, in the order they went up: the latest take the slots,
+  // and older posters past that pile up beneath them, each a little askew, newest on top (an old
+  // text note simply blows away)
+  const items = sortByAt([...posted.filter((n) => alive(n, now)), ...posters.filter((p) => alive(p, now)).map((p) => ({ ...p, poster: p }))]);
+  const top = items.slice(-slots.length), under = items.slice(0, Math.max(0, items.length - slots.length)).filter((n) => n.poster);
+  const placed = (n, s) => ({ ...s, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper: Math.floor(n.at / 1000) % 6, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null });
+  const pile = under.map((n, k) => {
+    const s = slots[order[k % slots.length]];
+    const dx = Math.round((hash2(n.poster.id % 9973, 1, 2) - 0.5) * 20), dy = Math.round((hash2(n.poster.id % 9973, 2, 3) - 0.5) * 16);
+    return { ...placed(n, s), x: s.x + dx, y: s.y + dy, under: true };
   });
-  return slots.filter((s) => s.mine || !down.has(s.seed)).map((s) => Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null }));
+  top.forEach((n, k) => { slots[order[k]] = placed(n, slots[order[k]]); });
+  const make = (s) => Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under });
+  return [...pile.map(make), ...slots.filter((s) => s.mine || !down.has(s.seed)).map(make)];
 }
