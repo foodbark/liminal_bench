@@ -71,6 +71,13 @@ class Sounds {
   busy(seconds) { const n = Math.ceil(seconds / 1); for (let i = 0; i < n; i++) this.tones([480, 620], 0.5, GAIN, i * 1); return n; }
   reorder(seconds) { const n = Math.ceil(seconds / 0.5); for (let i = 0; i < n; i++) this.tones([480, 620], 0.25, GAIN, i * 0.5); return n * 0.5; }
   beep() { this.tones([1000], 0.6, GAIN); return 0.7; }
+  // the pay phone's coin tones, as a caller hears them in the earpiece: a quarter is five quick
+  // beeps, a dime two slower ones, a nickel one. Returns the seconds they take.
+  coin(kind = 'quarter') {
+    const beeps = kind === 'nickel' ? [[0, 0.066]] : kind === 'dime' ? [[0, 0.066], [0.132, 0.066]] : [0, 1, 2, 3, 4].map((i) => [i * 0.066, 0.033]);
+    for (const [at, dur] of beeps) this.tones([1700, 2200], dur, GAIN * 0.9, at);
+    const last = beeps[beeps.length - 1]; return last[0] + last[1] + 0.1;
+  }
   // a recording from assets/audio/; resolves when it ends, rejects if it cannot play
   play(file) {
     return new Promise((resolve, reject) => {
@@ -155,6 +162,11 @@ export class Phone {
       if (opener.text) this.say(opener.text);
       if (opener.file) { try { await this.sounds.play(opener.file); } catch (e) { /* no sound: the line still opens */ } }
       if (!(await this.wait(0.6))) return;
+      if (opener.coin) {   // the phone answers as if a coin had dropped
+        if (opener.coinText) this.say(opener.coinText);
+        const t = this.sounds.coin(opener.coin);
+        if (!(await this.wait(t + 0.5))) return;
+      }
     }
     // the rest ring first
     const rings = entry.kind === 'time' ? 1 : entry.rings || 2;
