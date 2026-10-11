@@ -206,6 +206,48 @@ The paintings came from Gemini, and a lot of the people this is for will not wan
 - Wind-swayed foliage.
 - **Lolo Peak, right of Dean Stone (2026-09-28).** It sits south-southwest of town, so in the scene's east-to-west sweep it belongs in the empty sky right of Dean Stone's shoulder: higher, twice as far, paler, snow into July. The mask's `peak` layer is unused and already has its lighting row (most aerial perspective, sun horizon -4°, longest dusting melt), so it slots in with no new code. Needs: a painting from the user of the upper part of the massif alone on checkerboard at scene size; a `back` option in the build to composite a painting behind Dean Stone where its sky is; the `peak` trace re-measured and a summit snow cap; and its own snow lapse (summit 2772 m, versus Dean Stone's 2050 m) or a bias in the season table, or it melts off months early.
 
+## Layers (as of 2026-10-11)
+
+What is actually stacked in a frame, back to front. Two kinds of layer: the painting's depth planes, which come from the mask the build writes, and the drawing passes the renderer composites on the page.
+
+### The painting: 7 depth planes, 4 in use
+
+`assets/backdrop_mask.png` tags every pixel with one plane (plus a material and a height fraction within the plane). The terrain pass lights each plane with its own sun horizon, haze depth, snowline bias and dusting melt time (`LAYERS` in `src/render/terrain.js`).
+
+| code | plane | in the current painting (`layered_photo`) |
+|---|---|---|
+| 0 | sky | masked out; the procedural sky shows through |
+| 1 | peak | **unused**, reserved for Lolo Peak behind Dean Stone's shoulder |
+| 2 | range | Dean Stone, all foliage: canopy snow in the gaps, holds a dusting longest, takes the alpenglow strongest |
+| 3 | far hill | **unused** in this painting |
+| 4 | flank | Mount Sentinel (the photographed flank), grass: backlit at dawn, sunset glow on the face |
+| 5 | trees | the valley trees, foliage |
+| 6 | near | the meadow (grass, dirt, shrubs) and the painted props (bench, board, phone, pole) |
+
+Materials in use: grass, foliage, dirt, shrub, prop. Rock and snow exist in the enum but nothing in this painting is tagged with them: there is no painted summit snow, so every bit of snow on the peaks is the terrain pass (the config's `snow_caps` are the props' caps).
+
+### The frame: what the compositor draws, back to front
+
+Three of these are rebuilt in the worker only when their key changes (sky gradient, cloud sheets, terrain); the rest are cached canvases or per-frame sprites. "Sky" below means everything that the painting's sky holes reveal.
+
+1. **Sky gradient** (worker). The palette's keyframed gradient by sun altitude, grayed by cloud shade, with the Milky Way as a dithered band on dark clear nights. One image.
+2. **Moon and sun.** The painted moon disc with its phase cut, dimmed or hidden by the sheets; the solid sun disc with its dithered corona.
+3. **Terrain** (worker). The painting re-lit in one pass: seasonal grass, snowline, the overnight dusting, rain darkening, aerial perspective, the sun and shadow line per plane, alpenglow and afterglow, rim light on every silhouette, moonlight, the inversion's fog sea behind the trees, mountain fog banks on the slopes.
+4. **Fog bands, shadows, props.** In fog, flat dithered bands across the horizon; the props' sun shadows; what changes on the props (notes on the cork, snow caps), multiplied by the ambient. Items 3 and 4 are `fg`; 1 through 4 are `base`.
+5. **Thin cloud sheets** (worker, scrolled with the wind): cirrus, cirrostratus veil, altocumulus, altostratus veil. These go *under* the stars so a wisp cannot strobe a star.
+6. **Stars and planets.** The Bright Star Catalog by sidereal time, the five planets, twinkle; redrawn ten times a second into their own layer, clipped to the sky.
+7. **Meteors.** Behind the ridges, so a streak that reaches the mountain goes behind it.
+8. **Thick cloud sheets**: stratocumulus, stratus, nimbostratus. Solid enough to stay in front of the stars.
+9. **Cumulus** sprites, the storm's cumulonimbus, and the lightning bolt.
+10. **`fg` again**: the terrain and props back over the clouds and meteors, so clouds sit behind the mountains.
+11. **Paragliders**, then the **near planes** (flank, trees, near, props) back over them: a wing flies in front of Dean Stone and behind Sentinel.
+12. **Lamp glow**: two additive sprites at night.
+13. **Close-up painting** when standing at a prop, its notes set legibly, lit by the ambient.
+14. **Precipitation**: rain or snow as two scrolling tiles at different speeds, blowing-snow streaks and the drift off the meadow, the lightning's frame flash.
+15. **A poster held up**, over everything, the scene dimmed behind it.
+
+So the sky is five drawing layers deep (gradient and Milky Way, moon and sun, thin sheets, stars and meteors, thick sheets and cumulus) and the landscape is four painted planes, with two more planes reserved in the mask for when there is art for them.
+
 ## Layout
 
 ```
