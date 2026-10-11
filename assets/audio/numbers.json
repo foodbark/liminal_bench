@@ -63,7 +63,7 @@
       "greeting": "Jó napot kívánunk! Köszönjük, hogy a Mézes Csók Cukrászdát hívta. Jelenleg minden kezünk a friss tésztákkal és a sütemények sütésével van elfoglalva, ezért most nem tudjuk fogadni a hívását. Nyitva tartásunk keddtől vasárnapig reggel nyolc és este hat óra között. Kérjük, hagyjon üzenetet a sípszó után a nevével és telefonszámával, vagy látogasson el hozzánk személyesen egy meleg finomságra. Szép napot kívánunk!",
       "file": "Kiss_of_honey.mp3",
       "ring": "eu",
-      "rings": 4,
+      "rings": 2,
       "requires": [
         "bluebox",
         "whistle"
