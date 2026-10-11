@@ -204,8 +204,8 @@ export class Phone {
     if (it.file) { try { await this.sounds.play(it.file); spoken = true; } catch (e) { /* the recording is not in yet: the transcript carries it */ } }
     if (!spoken && !(await this.wait(5))) return;
     if (this.state !== 'intercept') return;
-    if (it.after === 'howler') {   // the line left open: a few seconds of nothing, then the howler until the receiver goes down
-      if (!(await this.wait(4))) return;
+    if (it.after === 'howler') {   // the line left open: a breath of nothing, then the howler until the receiver goes down
+      if (!(await this.wait(it.pause ?? 1.5))) return;
       if (this.state !== 'intercept') return;
       this.say('Nothing. Then a rising howl up the line.');
       this.sounds.howler(60); this.set('howler');
