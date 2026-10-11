@@ -1,5 +1,5 @@
 {
-  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item (or a list, any of them) the caller must have found (src/items.js) or the call gets its locked intercept; opens gives an item's own sound and line when it opens the call, and coin (quarter | dime | nickel) the coin tones the phone answers with; ring picks the ringback (us | eu | uk). area: the local area code, so seven digits dial a listed number. exchange: the listed exchange; an unlisted number in it is not in service, one in any other exchange cannot be completed as dialed. intercepts: the phone company's lines (sit: false for a routing with no tones in front), Jane Barbe's when the files arrive (a file that is not there yet falls back to the transcript).",
+  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item (or a list, any of them) the caller must have found (src/items.js) or the call gets its locked intercept; opens gives an item's own sound and line when it opens the call (interrupt: seconds into the locked outcome before the item cuts it off), and coin (quarter | dime | nickel) the coin tones the phone answers with; ring picks the ringback (us | eu | uk). area: the local area code, so seven digits dial a listed number. exchange: the listed exchange; an unlisted number in it is not in service, one in any other exchange cannot be completed as dialed. intercepts: the phone company's lines (sit: false for a routing with no tones in front), Jane Barbe's when the files arrive (a file that is not there yet falls back to the transcript).",
   "area": "406",
   "exchange": "555",
   "book": [
@@ -71,10 +71,15 @@
       "locked": "international",
       "opens": {
         "whistle": {
+          "interrupt": 4.5,
           "file": "whistle.mp3",
-          "text": "The whistle, into the mouthpiece. Something far away clicks over.",
+          "text": "The whistle, into the mouthpiece. The menu stops mid-word. Something far away clicks over.",
           "coin": "quarter",
           "coinText": "The phone beeps back at you, the way it does for a quarter."
+        },
+        "bluebox": {
+          "interrupt": 4.5,
+          "text": "The box, held to the mouthpiece. The menu stops mid-word. Something far away clicks over."
         }
       },
       "note": "A pastry shop in Budapest, all hands in the dough. The recording is the user's (2026-10-10)."

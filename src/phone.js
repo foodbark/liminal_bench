@@ -159,6 +159,17 @@ export class Phone {
     // the key that opened the line may have a sound of its own (the whistle) before the far end rings
     const opener = key && entry.opens && entry.opens[key];
     if (opener) {
+      if (opener.interrupt) {   // the call starts down the locked road, and the item cuts it off mid-word
+        const it = (manifest.intercepts || {})[entry.locked || 'international'] || {};
+        this.set('intercept');
+        if (it.sit !== false) { const t = this.sounds.sit(); if (!(await this.wait(t + 0.2))) return; }
+        else if (!(await this.wait(1.2))) return;
+        if (it.text) this.say(it.text);
+        if (it.file) this.sounds.play(it.file).catch(() => { /* the transcript carries it */ });
+        if (!(await this.wait(opener.interrupt))) return;
+        this.sounds.stopAll();
+        this.set('connecting');
+      }
       if (opener.text) this.say(opener.text);
       if (opener.file) { try { await this.sounds.play(opener.file); } catch (e) { /* no sound: the line still opens */ } }
       if (!(await this.wait(0.6))) return;
