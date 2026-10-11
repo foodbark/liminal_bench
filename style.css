@@ -54,6 +54,7 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 /* a poster for the board: the file picker and the pixelated preview */
 #panel-body .poster-or { margin-top: calc(10px * var(--u)); }
 #panel-body #poster-file { display: block; margin-top: calc(4px * var(--u)); font-family: var(--font); font-size: calc(16px * var(--u)); color: #b9b4a4; max-width: 100%; }
+#panel-body .poster-preview[hidden] { display: none; }
 #panel-body .poster-preview { display: block; margin-top: calc(8px * var(--u)); image-rendering: pixelated; max-width: 100%; border: calc(2px * var(--u)) solid #3a3f4c; }
 /* the pay phone's panel: the phone itself stands large on the left of the frame, this takes the right;
    the keypad sits beside the phone book, the line's words above, the message field below, no scrolling */
