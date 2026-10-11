@@ -75,6 +75,14 @@ export function renderTerrain(img, env, assets) {
     return;
   }
   const { rgb, mask, ridge } = assets;
+  // the ridge line smoothed over a stretch, for the cloud that hangs over the crest: following
+  // the crest's every tree made vertical streaks in it
+  const RS = Math.round(14 * SCALE), ridgeS = new Float32Array(W);
+  for (let x = 0, acc = 0, cnt = 0; x < W; x++) {
+    if (x === 0) { for (let k = 0; k <= RS && k < W; k++) { acc += ridge[k]; cnt++; } }
+    else { if (x + RS < W) { acc += ridge[x + RS]; cnt++; } if (x - RS - 1 >= 0) { acc -= ridge[x - RS - 1]; cnt--; } }
+    ridgeS[x] = acc / cnt;
+  }
   const alt = env.sun.altitude;
   const fogK = env.cond.fog ? 0.45 : 0;
   const wet = env.cond.precip.type === 'rain';
@@ -135,11 +143,13 @@ export function renderTerrain(img, env, assets) {
       if (layer === LAYER.SKY) {
         // mountain fog spills over the crest: stippled cloud in the sky just above the ridge
         if (mountainFog > 0) {
-          const above = ridge[x] - y;
+          const above = ridgeS[x] - y;
           if (above > 0 && above < 44 * SCALE) {
             const w = smooth(clamp(1 - above / (44 * SCALE), 0, 1));
             const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
-            const dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
+            let dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
+            const ceilK = mountainFog * mountainFog;
+            if (ceilK > 0.2) dens = Math.max(dens, w * w * (0.4 + 0.6 * ceilK) * (0.75 + 0.25 * n));   // the cloud the crest goes up into
             if (d < dens) putPx(data, i, quantRGB(bankCol, 9, d));
           }
         }
@@ -238,13 +248,27 @@ export function renderTerrain(img, env, assets) {
         // banks hang from the crest down to mid-slope, stretched along the slope, stippled
         const lo = layer === LAYER.PEAK ? 0.17 : layer === LAYER.RANGE ? 0.27 : 0.32;
         let w = smooth(clamp((e - lo) / 0.2, 0, 1));
-        if (layer === LAYER.FLANK) w *= 0.6 * clamp((x - BANK_X0) / BANK_X1, 0, 1);   // Sentinel's near end is too close for banks
+        // Sentinel: lighter toward its near end at the frame's edge (too close for banks), full by BANK_X0
+        if (layer === LAYER.FLANK) w *= 0.45 + 0.55 * clamp(x / BANK_X0, 0, 1);
         if (w > 0) {
           const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
           // a soft blend by density, not an either/or: an either/or at a steady density was a
           // rectangle of checkerboard laid over the forest
-          const dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
-          if (dens > 0) c = lerpRGB(c, bankCol, 0.9 * dens);
+          let dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
+          // the ceiling: when the low cloud is solid (mountainFog near 1) its base is on the
+          // mountains, and the crests go up into it, a ragged edge; the real thing on a drizzly
+          // day swallows the tops of Dean Stone and Sentinel both (the user, 2026-10-11)
+          const ceilK = mountainFog * mountainFog;
+          if (ceilK > 0.2) {
+            // Sentinel is lower and nearer: the base sits higher on it, its edge more ragged and
+            // the cloud thinner, so the hill still shows through (a flat wash read as snow)
+            const flank = layer === LAYER.FLANK;
+            const from = (flank ? 1.25 : 1.1) - 0.7 * ceilK;   // height fraction where the cloud base sits
+            const rag = flank ? smooth(clamp((n - 0.25) / 0.5, 0, 1)) : 0.75 + 0.25 * n;
+            const cf = smooth(clamp((e - from) / 0.3, 0, 1)) * rag * (flank ? 0.8 * (0.55 + 0.45 * clamp(x / BANK_X0, 0, 1)) : 1);
+            dens = Math.max(dens, cf);
+          }
+          if (dens > 0) c = lerpRGB(c, bankCol, 0.92 * dens);
         }
       }
 
