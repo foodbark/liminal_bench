@@ -104,8 +104,8 @@
       "file": null
     },
     "international": {
-      "text": "We're sorry, international calls cannot be placed from this telephone without assistance.",
-      "file": null
+      "text": "We're sorry. International calls cannot be completed from this telephone without payment. Please deposit three dollars and forty cents for the first three minutes, or hang up and dial your operator. This is a recording.",
+      "file": "intercept_international.mp3"
     }
   },
   "credits": {
