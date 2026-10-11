@@ -41,7 +41,7 @@ const ctx_pattern = (cv) => ({ cv });
 export class WeatherFX {
   constructor() {
     this.clouds = []; this.rnd = mulberry32(99);
-    this.rain = { t: 0, tiles: null, key: '' }; this.snow = { t: 0, tiles: null, key: '' };
+    this.rain = { t: 0, tiles: null, key: '' }; this.snow = { t: 0, tiles: null, key: '' }; this.blow = { tiles: null, key: '' };
     this.flash = 0; this.nextFlash = 4;
     this.meteors = []; this.nextMeteor = 20 + Math.random() * 60;
     this.gliders = new Gliders();
@@ -199,10 +199,13 @@ export class WeatherFX {
   }
 
   // A repeating tile of streaks or flakes; two layers scroll at different speeds for depth.
-  precipTiles(kind, color, slant, intensity) {
+  // `blow` is { ang, sign }: streaks of snow in the wind at `ang` from the horizontal, plus a
+  // ground tile of near-flat streaks for the drift the wind lifts off the meadow.
+  precipTiles(kind, color, slant, intensity, blow = null) {
     const T = Math.round(384 * SCALE);
     const tiles = [];
-    const rnd = mulberry32(kind === 'rain' ? 7 : 8);
+    const rnd = mulberry32(kind === 'rain' ? 7 : kind === 'blow' ? 9 : 8);
+    const wrapped = (g, x, y, dx, dy) => { for (const [ox, oy] of [[0, 0], [-T, 0], [T, 0], [0, -T], [0, T]]) plotLine(g, x + ox, y + oy, x + ox + dx, y + oy + dy); };
     for (let layer = 0; layer < 2; layer++) {
       const [cv, g] = makeCanvas(T, T);
       g.fillStyle = color;
@@ -212,9 +215,10 @@ export class WeatherFX {
         const x = Math.floor(rnd() * T), y = Math.floor(rnd() * T);
         if (kind === 'rain') {
           const len = Math.round((5 + Math.floor(rnd() * 3) * 2.5) * SCALE * (layer ? 0.7 : 1));
-          const dx = Math.round(slant * len);
-          // draw the streak twice (wrapped) so it tiles seamlessly at the edges
-          for (const [ox, oy] of [[0, 0], [-T, 0], [T, 0], [0, -T], [0, T]]) plotLine(g, x + ox, y + oy, x + ox + dx, y + oy + len);
+          wrapped(g, x, y, Math.round(slant * len), len);   // drawn wrapped so it tiles seamlessly at the edges
+        } else if (kind === 'blow') {
+          const len = (6 + rnd() * 12) * SCALE * (layer ? 0.7 : 1);
+          wrapped(g, x, y, Math.round(Math.cos(blow.ang) * len * blow.sign), Math.round(Math.sin(blow.ang) * len));
         } else {
           const sz = Math.max(1, Math.round((rnd() > 0.7 ? 2 : 1) * SCALE * (layer ? 0.7 : 1)));
           for (const [ox, oy] of [[0, 0], [-T, 0], [0, -T]]) g.fillRect(x + ox, y + oy, sz, sz);
@@ -222,7 +226,18 @@ export class WeatherFX {
       }
       tiles.push(ctx_pattern(cv));
     }
-    return { T, tiles };
+    let ground = null;
+    if (kind === 'blow') {
+      const [cv, g] = makeCanvas(T, T);
+      g.fillStyle = color;
+      const n = Math.round(380 / (1024 * 572) * T * T * intensity * 0.6);
+      for (let i = 0; i < n; i++) {
+        const x = Math.floor(rnd() * T), y = Math.floor(rnd() * T), len = (14 + rnd() * 26) * SCALE;
+        wrapped(g, x, y, Math.round(len * blow.sign), Math.round(len * (0.04 + rnd() * 0.1) * (rnd() > 0.5 ? 1 : -1)));
+      }
+      ground = ctx_pattern(cv);
+    }
+    return { T, tiles, ground };
   }
 
   // Meteors are drawn between the stars and the terrain, so a streak that reaches the ridge goes
@@ -263,7 +278,26 @@ export class WeatherFX {
         tileOver(ctx, tiles[layer].cv, T, ox, oy);
       }
     }
-    if (p.type === 'snow' && p.intensity > 0) {
+    const bl = env.cond.blowing || 0;
+    if (p.type === 'snow' && p.intensity > 0 && bl > 0) {
+      // blowing snow: streaks in the wind, a slant at first and near-flat in a blizzard, fast; and
+      // low in the frame the drift the wind lifts off the meadow, flatter and faster still
+      const k = Math.max(amb[0], 0.6);
+      const color = `rgb(${(240 * k) | 0},${(243 * k) | 0},${(252 * k) | 0})`;
+      const ang = (34 - 22 * bl) * RAD;
+      const key = `${color}|${p.intensity.toFixed(1)}|${bl.toFixed(1)}|${sign}`;
+      if (this.blow.key !== key) { this.blow.tiles = this.precipTiles('blow', color, 0, p.intensity * (1 + 2 * bl), { ang, sign }); this.blow.key = key; }
+      const { T, tiles, ground } = this.blow.tiles;
+      const v = (260 + 420 * bl) * SCALE, vx = Math.cos(ang) * v * sign, vy = Math.sin(ang) * v;
+      for (let layer = 0; layer < 2; layer++) {
+        const kk = layer ? 0.6 : 1;
+        tileOver(ctx, tiles[layer].cv, T, ((this.snow.t * vx * kk) % T + T) % T, ((this.snow.t * vy * kk) % T + T) % T);
+      }
+      const gy = Math.round(HORIZON + (H - HORIZON) * 0.3);
+      ctx.save(); ctx.beginPath(); ctx.rect(0, gy, W, H - gy); ctx.clip();
+      tileOver(ctx, ground.cv, T, ((this.snow.t * v * 1.5 * sign) % T + T) % T, 0);
+      ctx.restore();
+    } else if (p.type === 'snow' && p.intensity > 0) {
       const k = Math.max(amb[0], 0.55);
       const color = `rgb(${(238 * k) | 0},${(241 * k) | 0},${(252 * k) | 0})`;
       const key = `${color}|${p.intensity.toFixed(1)}`;

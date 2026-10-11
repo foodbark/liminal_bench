@@ -78,6 +78,20 @@ function computeEnv() {
   if (!preset && cond.precip.intensity > 0) mountainFog = Math.max(mountainFog, cond.precip.intensity * 0.6);
   if (inversion) { cond.fog = false; cond.label = 'inversion'; }
   else if (mountainFog > 0.5 && !cond.fog && cond.precip.intensity === 0) cond.label = 'low clouds';
+  // Blowing snow, as they call it: wind over loose snow, on the ground or in the air, from about
+  // 15 mph, a full blizzard by 30. The feed never names it; wind and snow together do. It fills
+  // the air with streaks and takes the mountains into a whiteout (mountainFog); the sky keeps
+  // its color, a blizzard is white, not gray.
+  const snowing = cond.precip.type === 'snow' && cond.precip.intensity > 0;
+  const loose = snowing || (w.freshSnow || 0) > 0.5 || (w.snowDepth || 0) > 0.05;
+  const windMph = w.wind ?? 0;
+  const blowing = loose && !inversion && (w.temp == null || w.temp <= 34) ? Math.max(0, Math.min(1, (windMph - 15) / 15)) : 0;
+  if (blowing > 0) {
+    mountainFog = Math.max(mountainFog, 0.45 + 0.55 * blowing);
+    cond.label = snowing && (cond.precip.intensity >= 0.6 || windMph >= 30) ? 'blizzard' : 'blowing snow';
+    if (!snowing) cond.precip = { type: 'snow', intensity: 0.25 + 0.25 * blowing };   // snow in the air, off the ground
+  }
+  cond.blowing = blowing;
   // Overnight dusting on the hills, melting from the bottom up with hours above freezing.
   const dustAmount = preset ? (preset.freshSnow || 0) : Math.min(1, (w.freshSnow || 0) / 2);
   const thawHours = preset ? Math.max(0, hourLocal + minute / 60 - 7.5) : (w.thawHours || 0);

@@ -90,4 +90,6 @@ export const WEATHER_PRESETS = {
   dusting:   { code: 1,  cover: 0.2, coverLow: 0.1, coverMid: 0.1, coverHigh: 0.3, temp: 38, wind: 3, snowDepth: 0, freshSnow: 1 },     // last night's skiff, melting off through the day
   mountainfog: { code: 3, cover: 0.8, coverLow: 0.9, coverMid: 0.4, coverHigh: 0.2, temp: 41, wind: 3, snowDepth: 0, lowcloud: 1 },
   storm:    { code: 95, cover: 1.0,  coverLow: 0.9, coverMid: 0.9, coverHigh: 0.7, temp: 66, wind: 22, snowDepth: 0 },
+  blowing:  { code: 71, cover: 0.9,  coverLow: 0.8, coverMid: 0.5, coverHigh: 0.3, temp: 22, wind: 24, snowDepth: 0.25 },   // light snow in a hard wind
+  blizzard: { code: 75, cover: 1.0,  coverLow: 1.0, coverMid: 0.9, coverHigh: 0.8, temp: 18, wind: 34, snowDepth: 0.3 },
 };
