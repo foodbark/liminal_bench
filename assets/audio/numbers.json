@@ -1,5 +1,5 @@
 {
-  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item (or a list, any of them) the caller must have found (src/items.js) or the call gets its locked intercept; opens gives an item's own sound and line when it opens the call, and coin (quarter | dime | nickel) the coin tones the phone answers with; ring picks the ringback (us | eu | uk). area: the local area code, so seven digits dial a listed number. exchange: the listed exchange; an unlisted number in it is not in service, one in any other exchange cannot be completed as dialed. intercepts: the phone company's lines, Jane Barbe's when the files arrive (a file that is not there yet falls back to the transcript).",
+  "_": "The pay phone's directory (src/phone.js). book: what the phone book lists. numbers: digits (7 or 10) to an outcome: kind time | machine | recording | intercept | busy; file is a recording in assets/audio/ when there is one, otherwise the transcript carries it; requires names an item (or a list, any of them) the caller must have found (src/items.js) or the call gets its locked intercept; opens gives an item's own sound and line when it opens the call, and coin (quarter | dime | nickel) the coin tones the phone answers with; ring picks the ringback (us | eu | uk). area: the local area code, so seven digits dial a listed number. exchange: the listed exchange; an unlisted number in it is not in service, one in any other exchange cannot be completed as dialed. intercepts: the phone company's lines (sit: false for a routing with no tones in front), Jane Barbe's when the files arrive (a file that is not there yet falls back to the transcript).",
   "area": "406",
   "exchange": "555",
   "book": [
@@ -104,11 +104,13 @@
       "file": null
     },
     "international": {
-      "text": "We're sorry. International calls cannot be completed from this telephone without payment. Please deposit three dollars and forty cents for the first three minutes, or hang up and dial your operator. This is a recording.",
-      "file": "intercept_international.mp3"
+      "text": "AT&T. To place a calling card or credit card call, press 1. To place a collect call, press 2. For AT&T customer service, press 3. For 00 Info U.S. directory, press 4. For rates, terms and conditions, press 5. Or to place an operator-assisted call, press 0 now.",
+      "file": "att_menu_2002.mp3",
+      "sit": false,
+      "note": "An international call this phone cannot bill is handed to the long-distance company's operator platform: the 1-800-CALL-ATT menu of February 2002 (Telephone World), and nothing on it this caller can press."
     }
   },
   "credits": {
-    "barbe": "The intercepts and the phone company's number are Jane Barbe, from Telephone World's collection (telephoneworld.org), cut from their compilation; the whistle is a Cap'n Crunch Bo'sun whistle recorded for a comparison video."
+    "barbe": "The intercepts and the phone company's number are Jane Barbe, from Telephone World's collection (telephoneworld.org), cut from their compilation; the whistle is a Cap'n Crunch Bo'sun whistle recorded for a comparison video. The international line is the AT&T operator services menu of February 2002, from the same site."
   }
 }

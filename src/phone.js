@@ -178,8 +178,10 @@ export class Phone {
   async intercept(which) {
     const it = (manifest.intercepts || {})[which] || { text: "We're sorry, your call cannot be completed as dialed. Please check the number and dial again." };
     this.set('intercept');
-    const t = this.sounds.sit();
-    if (!(await this.wait(t + 0.2))) return;
+    if (it.sit !== false) {   // the three tones before a phone-company announcement; a routing (a menu) has none
+      const t = this.sounds.sit();
+      if (!(await this.wait(t + 0.2))) return;
+    } else if (!(await this.wait(1.2))) return;
     this.say(it.text);
     let spoken = false;
     if (it.file) { try { await this.sounds.play(it.file); spoken = true; } catch (e) { /* the recording is not in yet: the transcript carries it */ } }
