@@ -25,6 +25,7 @@ Then open http://127.0.0.1:5173. Any static file server works; there is no build
 - Live weather from Open-Meteo (no key needed): low, mid and high cloud cover become cirrus, altocumulus, stratus, stratocumulus, nimbostratus and cumulus; precipitation, fog, wind, snow depth. Refreshes every 10 minutes. Thunderstorms bring a cumulonimbus and lightning.
 - The real night sky: the Bright Star Catalog placed by sidereal time, the Milky Way on dark nights, shooting stars (more during the meteor showers), and a painted moon with its phase that lights the clouds.
 - Seasonal snow on the peaks, snow on the ground when there is snow on the ground.
+- Sentinel's slope and the meadow follow the grass year (green April to mid July, gold and brown after), and green back up some after a week with rain in it and two warm days since (the `greenup` preset in the debug panel shows it).
 - Hover the pay phone, bulletin board, or bench and click to zoom in. Esc backs out.
 - Press `D` for the debug panel: override hour, month, weather, and cloud cover to preview any condition.
 

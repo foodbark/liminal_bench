@@ -1,4 +1,4 @@
-// Usage: npm run dev (in another shell), then: node tools/screenshot.mjs out.png ["js to run on page before the shot"]
+// Usage: npm run dev (in another shell), then: node tools/screenshot.mjs out.png ["js to run on page before the shot"] LIMINAL_URL overrides the page address.
 // Needs: npm install && npx playwright install chromium
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ const page = await browser.newPage({ viewport: { width: meta.w, height: meta.h }
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-await page.goto('http://127.0.0.1:5173/', { waitUntil: 'load' });
+await page.goto(process.env.LIMINAL_URL || 'http://127.0.0.1:5173/', { waitUntil: 'load' });
 await page.waitForTimeout(2500);
 if (setup) await page.evaluate(setup);
 await page.waitForTimeout(10000);

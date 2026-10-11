@@ -3,8 +3,10 @@ import { LAT, LON, RIDGE, localHourKey } from './state.js';
 const URL = 'https://api.open-meteo.com/v1/forecast'
   + `?latitude=${LAT}&longitude=${LON}`
   + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
-  + '&hourly=snow_depth,snowfall,temperature_2m&past_days=1&forecast_days=1&timezone=America%2FDenver'
+  + '&hourly=snow_depth,snowfall,temperature_2m,precipitation&past_days=7&forecast_days=1&timezone=America%2FDenver'
   + '&temperature_unit=fahrenheit&wind_speed_unit=mph';
+// A week back: the grass greens up again after a few days of rain in warm weather, and that is
+// read off the week's hourly rain and temperature, not the current hour.
 // The same model lapsed to Dean Stone's summit (Open-Meteo takes an elevation): snow on the
 // ridges is decided up there, where the valley station is useless. Three days back, so an
 // overnight fall that the current hour has already melted still counts.
@@ -35,7 +37,7 @@ export async function fetchWeather() {
   if (!r.ok) throw new Error('weather http ' + r.status);
   const j = await r.json();
   const c = j.current;
-  let snowDepth = 0, freshSnow = 0, thawHours = 0;
+  let snowDepth = 0, freshSnow = 0, thawHours = 0, rainWeek = 0, warmWeek = 0, greenup = 0;
   if (j.hourly && j.hourly.time) {
     const idx = j.hourly.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13));
     if (idx >= 0 && j.hourly.snow_depth[idx] != null) snowDepth = j.hourly.snow_depth[idx];
@@ -48,6 +50,22 @@ export async function fetchWeather() {
         if (sf > 0) { freshSnow += sf; last = k; }
       }
       for (let k = Math.max(0, last + 1); k <= idx; k++) if ((j.hourly.temperature_2m[k] ?? 0) > 33) thawHours++;
+      // Green-up: liquid rain over the past week (mm; counted from half a day after it fell,
+      // since the grass takes that long to answer, and fading out past five days), and how warm
+      // the last two days were, which is when the growing happens: a cold-front rain greens
+      // nothing until the warm days after it. Sentinel's slope and the meadow go brown by
+      // August but come back some after a soaking if it stays warm.
+      let hours = 0, tempSum = 0;
+      for (let k = Math.max(0, idx - 168); k <= idx; k++) {
+        const temp = j.hourly.temperature_2m[k];
+        if (temp == null) continue;
+        const age = (idx - k) / 24;   // days ago
+        if (age <= 2) { hours++; tempSum += temp; }
+        const liquid = temp > 36 ? Math.max(0, (j.hourly.precipitation[k] || 0) - (j.hourly.snowfall[k] || 0) * 10) : 0;
+        rainWeek += liquid * Math.max(0, Math.min(1, (age - 0.5) / 1, (7 - age) / 2));
+      }
+      if (hours > 0) warmWeek = Math.max(0, Math.min(1, (tempSum / hours - 42) / 18));   // 42°F mean: dormant; 60°F: growing
+      greenup = Math.min(1, rainWeek / 8) * warmWeek;   // 8 mm of effective rain then two warm days is a full green-up
     }
   }
   return {
@@ -55,6 +73,7 @@ export async function fetchWeather() {
     temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100, coverMid: (c.cloud_cover_mid ?? 0) / 100, coverHigh: (c.cloud_cover_high ?? 0) / 100,
     wind: c.wind_speed_10m, windDir: c.wind_direction_10m,
     precip: c.precipitation, snowfall: c.snowfall, snowDepth, freshSnow, thawHours,
+    rainWeek, warmWeek, greenup,
     ridge,
   };
 }
@@ -92,4 +111,5 @@ export const WEATHER_PRESETS = {
   storm:    { code: 95, cover: 1.0,  coverLow: 0.9, coverMid: 0.9, coverHigh: 0.7, temp: 66, wind: 22, snowDepth: 0 },
   blowing:  { code: 71, cover: 0.9,  coverLow: 0.8, coverMid: 0.5, coverHigh: 0.3, temp: 22, wind: 24, snowDepth: 0.25 },   // light snow in a hard wind
   blizzard: { code: 75, cover: 1.0,  coverLow: 1.0, coverMid: 0.9, coverHigh: 0.8, temp: 18, wind: 34, snowDepth: 0.3 },
+  greenup:  { code: 1,  cover: 0.3,  coverLow: 0.25, coverMid: 0.1, coverHigh: 0.2, temp: 64, wind: 5, snowDepth: 0, greenup: 1 },   // a few days after a warm soaking: the brown slopes green up some
 };

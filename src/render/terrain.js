@@ -39,10 +39,13 @@ function hillGrass(month) {
   return [lerpRGB(d, [150, 130, 90], 0.15), lerpRGB(l, [225, 205, 150], 0.25)];
 }
 // The painting is a late-summer scene; tint grass by the ratio of this month's tone to September's.
-const ART_MONTH = 8;
-function grassTint(month, hill) {
-  const now = hill ? hillGrass(month)[1] : grassColors(month)[1];
-  const ref = hill ? hillGrass(ART_MONTH)[1] : grassColors(ART_MONTH)[1];
+// greenup (0..1, from the week's rain and warmth) pulls the month's tone partway back toward
+// early June's: a brown August slope greens up some after a warm soaking, never all the way.
+const ART_MONTH = 8, GREEN_MONTH = 5, GREENUP_MAX = 0.55;
+function grassTint(month, hill, greenup = 0) {
+  const tone = (m) => (hill ? hillGrass(m) : grassColors(m))[1];
+  const now = lerpRGB(tone(month), tone(GREEN_MONTH), GREENUP_MAX * clamp(greenup, 0, 1));
+  const ref = tone(ART_MONTH);
   return [0, 1, 2].map((i) => clamp(now[i] / ref[i], 0.5, 1.6));
 }
 
@@ -75,7 +78,7 @@ export function renderTerrain(img, env, assets) {
   const alt = env.sun.altitude;
   const fogK = env.cond.fog ? 0.45 : 0;
   const wet = env.cond.precip.type === 'rain';
-  const tintMeadow = grassTint(env.month, false), tintHill = grassTint(env.month, true);
+  const tintMeadow = grassTint(env.month, false, env.greenup), tintHill = grassTint(env.month, true, env.greenup);
   const groundSnow = env.groundSnow;
   const bare = env.snowAmount < BARE_BELOW;
   const extraSnow = clamp((env.snowAmount - ART_SNOW) / (1 - ART_SNOW), 0, 1);

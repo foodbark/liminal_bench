@@ -96,6 +96,8 @@ function computeEnv() {
   const dustAmount = preset ? (preset.freshSnow || 0) : Math.min(1, (w.freshSnow || 0) / 2);
   const thawHours = preset ? Math.max(0, hourLocal + minute / 60 - 7.5) : (w.thawHours || 0);
   const dusting = { amount: dustAmount, thaw: thawHours };
+  // the grass greening back up after a warm week's rain (weather.js reads it off the week's feed)
+  const greenup = preset ? (preset.greenup || 0) : Math.max(0, Math.min(1, w.greenup || 0));
   // Which clouds, from the three cover bands (Open-Meteo reports low, mid and high separately):
   // high thin -> cirrus, high thick -> cirrostratus veil; mid -> altocumulus fields or an
   // altostratus veil; low -> fair cumulus, a lumpy stratocumulus sheet when it closes up, flat
@@ -133,10 +135,10 @@ function computeEnv() {
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
-    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog, dusting, sky,
+    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog, dusting, greenup, sky,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}|${dusting.amount.toFixed(2)}|${dusting.thaw.toFixed(1)}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}|${dusting.amount.toFixed(2)}|${dusting.thaw.toFixed(1)}|${greenup.toFixed(2)}`,
     sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}`,
     ambientKey,
   };

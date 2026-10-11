@@ -8,7 +8,7 @@ import { renderSheets } from './sheets.js';
 function envForWorker(env) {
   return {
     pal: env.pal, sun: env.sun, moon: env.moon, lst: env.lst, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
-    groundSnow: env.groundSnow, inversion: env.inversion, mountainFog: env.mountainFog, dusting: env.dusting,
+    groundSnow: env.groundSnow, inversion: env.inversion, mountainFog: env.mountainFog, dusting: env.dusting, greenup: env.greenup,
   };
 }
 import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
