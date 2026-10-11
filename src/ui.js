@@ -7,7 +7,7 @@ import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
 import { Phone, loadPhoneBook, phoneBook, formatNumber, MESSAGE_MAX } from './phone.js';
 import { pixelate } from './pixelate.js';
-import { hasItem, give, inventory } from './items.js';
+import { hasItem, give, inventory, ITEM_NAMES } from './items.js';
 
 const VIEWS = { scene: { cx: W / 2, cy: H / 2, s: 1 }, ...META.views };
 // screens where a panel over a close-up would cover what it describes: touch, or a short window
@@ -284,6 +284,9 @@ export function setupUI(state, canvas) {
         }
         ph.book.appendChild(ul);
       }
+      // what the caller carries, so the gate on a number is no mystery
+      const carried = inventory();
+      if (carried.length) { const c = document.createElement('div'); c.className = 'dim'; c.textContent = 'in your pocket: ' + carried.map((id) => ITEM_NAMES[id] || id).join(', '); ph.book.appendChild(c); }
     }
   }
   window.addEventListener('keydown', (e) => {
