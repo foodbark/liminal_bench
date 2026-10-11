@@ -1,5 +1,5 @@
 import { META } from './state.js';
-import { makeNote } from './render/props.js';
+import { makeNote, CORK, CLOSEUPS } from './render/props.js';
 import { clamp } from './util/pixel.js';
 import { hash2 } from './util/noise.js';
 
@@ -16,6 +16,19 @@ const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.po
 const API = 'api/notes';   // relative: the site may live at a path prefix
 export const NOTE_MAX = 80;
 const PILE = 24;   // posters the board carries: past the slots they pile up, newest on top
+// A poster comes in one of three sizes, a handbill, a flyer or a big sheet (its picture at 1, 2
+// or 3 close-up pixels per art pixel), picked by its id so a board is a mix; its box sits on
+// the slot's center, held inside the cork, and a big one spills over its neighbors.
+const POSTER_SCALES = [1, 2, 3], POSTER_ODDS = [0.3, 0.55, 0.15];
+function posterBox(p, cx, cy) {
+  const r = hash2(p.id % 9973, 3, 4);
+  let k = POSTER_SCALES[2], acc = 0;
+  for (let i = 0; i < POSTER_ODDS.length; i++) { acc += POSTER_ODDS[i]; if (r < acc) { k = POSTER_SCALES[i]; break; } }
+  const cu = CLOSEUPS.board, kk = cu ? Math.min(cu.cork.w / CORK.w, cu.cork.h / CORK.h) : 4;   // close-up pixels per scene pixel
+  const w = Math.round((p.w || 160) * k / kk) + 2, h = Math.round((p.h || 212) * k / kk) + 2;
+  const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - h / 2), CORK.y + 2, CORK.y + CORK.h - h - 2);
+  return { x, y, w, h, k };
+}
 export const NOTE_LIFE_DAYS = 16;
 const FADE_DAYS = 14, DAY = 86400e3;
 const SEED_TEXTS = ['lost: orange cat, answers to "biscuit"', 'free piano. you haul.', 'open mic thursdays', 'room for rent, quiet house', 'the river is low this year', 'call me'];
@@ -140,13 +153,16 @@ export function buildNotes(now = Date.now()) {
   // text note simply blows away)
   const items = sortByAt([...posted.filter((n) => alive(n, now)), ...posters.filter((p) => alive(p, now)).map((p) => ({ ...p, poster: p }))]);
   const top = items.slice(-slots.length), under = items.slice(0, Math.max(0, items.length - slots.length)).filter((n) => n.poster);
-  const placed = (n, s) => ({ ...s, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper: Math.floor(n.at / 1000) % 6, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null });
+  const placed = (n, s, dx = 0, dy = 0) => {
+    const box = n.poster ? posterBox(n.poster, s.x + s.w / 2 + dx, s.y + s.h / 2 + dy) : { x: s.x + dx, y: s.y + dy };
+    return { ...s, ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper: Math.floor(n.at / 1000) % 6, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null };
+  };
   const pile = under.map((n, k) => {
     const s = slots[order[k % slots.length]];
     const dx = Math.round((hash2(n.poster.id % 9973, 1, 2) - 0.5) * 20), dy = Math.round((hash2(n.poster.id % 9973, 2, 3) - 0.5) * 16);
-    return { ...placed(n, s), x: s.x + dx, y: s.y + dy, under: true };
+    return { ...placed(n, s, dx, dy), under: true };
   });
   top.forEach((n, k) => { slots[order[k]] = placed(n, slots[order[k]]); });
-  const make = (s) => Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under });
+  const make = (s) => Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under, k: s.k });
   return [...pile.map(make), ...slots.filter((s) => s.mine || !down.has(s.seed)).map(make)];
 }
