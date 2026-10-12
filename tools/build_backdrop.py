@@ -392,6 +392,40 @@ def main():
     layer[sky] = 0
     layer[prop] = L_NEAR
 
+    # --- the masts on Dean Stone's summit: tall narrow spikes standing on the range crest (the
+    # pine tips along it are half the height and widen). Each is straightened into a true
+    # vertical of its own width, its painted colors moved sideways row by row (the painting's
+    # masts wobble a pixel or two, and a beacon over the tip pixel sat beside the top; the
+    # user, 2026-10-11), and its tip goes to META.beacons for the renderer's blinking light.
+    crest_now = np.where((~sky).any(0), (~sky).argmax(0), H).astype(float)
+    spike = np.nonzero(line_open(crest_now, 7 * k) - crest_now >= 20 * k)[0]
+    beacons = []
+    for x0, x1 in runs(spike):
+        if x1 - x0 > 6 * k: continue
+        ty = int(crest_now[x0:x1].min()); xc = x0 + int(np.argmin(crest_now[x0:x1]))
+        if ty + 16 * k >= H or layer[ty + 2, xc] != L_RANGE: continue
+        # follow the mast down, row by row, the non-sky run under the row above's center
+        body = []; cx = xc
+        for y in range(ty, H):
+            row = ~sky[y]
+            if not row[cx]: break
+            l = r = cx
+            while l > 0 and row[l - 1]: l -= 1
+            while r < W - 1 and row[r + 1]: r += 1
+            if r - l + 1 > 5 * k: break        # joined the dome
+            body.append((y, l, r)); cx = (l + r) // 2
+        if len(body) < 16 * k: continue
+        cx = int(round(np.median([(l + r) / 2 for _, l, r in body])))
+        w = int(round(np.median([r - l + 1 for _, l, r in body])))
+        nl = cx - w // 2
+        for y, l, r in body:
+            cols = rgb[y, l:r + 1].copy(); ow = r - l + 1
+            sky[y, l:r + 1] = True; layer[y, l:r + 1] = 0
+            pick = [min(ow - 1, max(0, (ow - w) // 2 + i)) for i in range(w)]   # the run's middle, edges repeated
+            rgb[y, nl:nl + w] = cols[pick]; sky[y, nl:nl + w] = False; layer[y, nl:nl + w] = L_RANGE
+        beacons.append([cx, ty])
+    print('masts straightened, beacons at', beacons)
+
     # --- materials
     q = rgb.copy(); q[sky] = 0
     r, g, b = [q[..., i].astype(int) for i in range(3)]
@@ -448,20 +482,6 @@ def main():
         props[pid] = { 'x': S(p['rect'][0]), 'y': S(p['rect'][1]), 'w': S(p['rect'][2]), 'h': S(p['rect'][3]),
                        'label': p.get('label'), 'baseY': S(p['baseY']), 'footprint': [S(p['footprint'][0]), S(p['footprint'][1])],
                        'height': S(p['height']), 'hot': p['hot'] }
-    # --- aircraft warning beacons: the masts on Dean Stone's summit are the tall narrow spikes
-    # standing on the range crest; the renderer blinks a red pixel on each tip at night
-    crest_now = np.where((~sky).any(0), (~sky).argmax(0), H).astype(float)
-    spike = np.nonzero(line_open(crest_now, 7 * k) - crest_now >= 20 * k)[0]   # pine tips on the crest are half that
-    beacons = []
-    for x0, x1 in runs(spike):
-        if x1 - x0 > 6 * k: continue
-        ty = int(crest_now[x0:x1].min()); xc = x0 + int(np.argmin(crest_now[x0:x1]))
-        if ty + 16 * k >= H or layer[ty + 2, xc] != L_RANGE: continue
-        row = ~sky[ty + 16 * k]; l = r = xc      # a mast keeps its width down its length, a pine widens
-        while l > 0 and row[l - 1]: l -= 1
-        while r < W - 1 and row[r + 1]: r += 1
-        if r - l + 1 <= 5 * k: beacons.append([int(xc), ty])
-    print('beacons on the masts at', beacons)
     meta = {
         'w': W, 'h': H, 'horizon': S(cfg['horizon']), 'art': name, 'beacons': beacons,
         'props': props,
