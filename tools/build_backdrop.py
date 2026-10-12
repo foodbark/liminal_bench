@@ -348,12 +348,22 @@ def main():
     mat[nearm & (mat == 0)] = 1
     mat[prop] = 7
 
-    # --- height fraction within the layer column: 0 at the layer's bottom line, 255 at its top
+    # --- height fraction within the layer column: 0 at the layer's bottom line, 255 at its top.
+    # The top line is the crest with narrow spikes taken off (a grey opening over a short window):
+    # the masts on Dean Stone's summit and the tallest tree tips are a few pixels wide, and a
+    # column measured to a mast's tip sits lower in the layer all the way down, which the fog
+    # ceiling and the snow line drew as a streak down the whole face under each mast.
+    def opened(line, win):
+        pad = np.pad(line, win, mode='edge')
+        lo = np.max(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)   # y is down: fill a narrow spike to its neighbours' height
+        pad = np.pad(lo, win, mode='edge')
+        return np.min(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)  # and pull the broad crest back up
+    top_h = opened(top, 7 * k)
     hf = np.zeros((H, W), np.float32)
-    peak_top = np.minimum(top, polyline_y(PEAK[:-2], W)) if len(PEAK) >= 3 else top
+    peak_top = np.minimum(top_h, polyline_y(PEAK[:-2], W)) if len(PEAK) >= 3 else top_h
     for lid, (top_line, bot_line) in {
-        L_PEAK: (peak_top, far_mid), L_RANGE: (top, far_mid), L_FARHILL: (top, meadow),
-        L_FLANK: (top, meadow), L_TREES: (top, meadow), L_NEAR: (meadow, np.full(W, H, float)),
+        L_PEAK: (peak_top, far_mid), L_RANGE: (top_h, far_mid), L_FARHILL: (top_h, meadow),
+        L_FLANK: (top_h, meadow), L_TREES: (top_h, meadow), L_NEAR: (meadow, np.full(W, H, float)),
     }.items():
         sel = layer == lid
         t = np.clip((bot_line[None, :] - yy) / np.maximum(bot_line[None, :] - top_line[None, :], 1), 0, 1)
