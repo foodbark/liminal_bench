@@ -244,6 +244,7 @@ export function renderTerrain(img, env, assets) {
         }
       }
       // --- mountain fog: ragged banks hanging mid-slope on the ranges
+      let fogged = 0;   // how far this pixel has gone into the cloud, for the rim light after
       if (mountainFog > 0 && layer !== LAYER.NEAR && layer !== LAYER.TREES && !isProp) {
         // banks hang from the crest down to mid-slope, stretched along the slope, stippled
         const lo = layer === LAYER.PEAK ? 0.17 : layer === LAYER.RANGE ? 0.27 : 0.32;
@@ -267,8 +268,13 @@ export function renderTerrain(img, env, assets) {
             const rag = flank ? smooth(clamp((n - 0.25) / 0.5, 0, 1)) : 0.75 + 0.25 * n;
             const cf = smooth(clamp((e - from) / 0.3, 0, 1)) * rag * (flank ? 0.8 * (0.55 + 0.45 * clamp(x / BANK_X0, 0, 1)) : 1);
             dens = Math.max(dens, cf);
+            // the top of the layer is inside the cloud: the blend goes all the way, so the
+            // crest and the masts on Dean Stone's summit vanish into the same fog the sky
+            // above the ridge carries (the user's photos of 2026-10-11 show no masts at all)
+            fogged = smooth(clamp((e - from - 0.35) / 0.25, 0, 1)) * ceilK * (flank ? 0.55 + 0.45 * clamp(x / BANK_X0, 0, 1) : 1);
           }
-          if (dens > 0) c = lerpRGB(c, bankCol, 0.92 * dens);
+          fogged = Math.max(fogged, 0.92 * dens);
+          if (fogged > 0) c = lerpRGB(c, bankCol, fogged);
         }
       }
 
@@ -284,8 +290,8 @@ export function renderTerrain(img, env, assets) {
         const side = sunLeft ? (x >= k && mask[i - 4 * k] === LAYER.SKY) : (x < W - k && mask[i + 4 * k] === LAYER.SKY);
         if (up || side) dist = k;
       }
-      if (dist && d < 1.15 - (dist / SCALE) * (P.rimReach > 3 * SCALE ? 0.25 : 0.33)) {
-        const fall = 1 - ((dist - 1) / SCALE) * (P.rimReach > 3 * SCALE ? 0.22 : 0.3);
+      if (dist && fogged < 0.95 && d < 1.15 - (dist / SCALE) * (P.rimReach > 3 * SCALE ? 0.25 : 0.33)) {
+        const fall = (1 - ((dist - 1) / SCALE) * (P.rimReach > 3 * SCALE ? 0.22 : 0.3)) * (1 - fogged);
         if (glow > 0 && pixK > 0.2) c = lerpRGB(c, rimColor, clamp(glow * pixK * 0.7 * fall * P.rimK * rimMat, 0, 1));
         else if (moonK > 0.05) c = lerpRGB(c, [200, 215, 245], moonK * 0.5 * fall * rimMat);
       }
