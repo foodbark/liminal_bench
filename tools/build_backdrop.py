@@ -428,7 +428,9 @@ def main():
             sky[y, l:r + 1] = True; layer[y, l:r + 1] = 0
             pick = [min(ow - 1, max(0, (ow - w) // 2 + i)) for i in range(w)]   # the run's middle, edges repeated
             rgb[y, nl:nl + w] = cols[pick]; sky[y, nl:nl + w] = False; layer[y, nl:nl + w] = L_RANGE
-        beacons.append([cx, ty])
+        # the pixel the renderer lights: on top of the mast, or, every other mast, a side light
+        # halfway up it (the user, 2026-10-11: some mid-mast instead of all on the very top)
+        beacons.append([cx, ty + len(body) // 2] if len(beacons) % 2 == 1 else [cx, ty - 1])
     print('masts straightened, beacons at', beacons)
 
     # --- materials

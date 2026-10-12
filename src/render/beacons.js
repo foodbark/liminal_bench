@@ -3,7 +3,8 @@ import { lerpRGB } from '../util/pixel.js';
 
 // The aircraft warning beacons on the masts on Dean Stone's summit: one red pixel on each tip,
 // blinking slowly through the night. The build finds the masts (tall narrow spikes on the
-// range crest) and writes their tips into META.beacons. Each tower keeps its own clock, a
+// range crest) and writes the pixel to light on each into META.beacons: on top of the mast, or
+// halfway up it on every other mast, a side light. Each tower keeps its own clock, a
 // period near three seconds and a phase of its own, so they never fall into step (the user,
 // 2026-10-11: a slow blink, timed randomly to each other). A beacon up in the cloud ceiling
 // dulls toward the cloud's gray instead of going out: a glow in the fog.
@@ -24,6 +25,6 @@ export function drawBeacons(ctx, env, t) {
   for (let i = 0; i < BEACONS.length; i++) {
     const k = CLOCKS[i];
     const ph = (t / k.period + k.phase) % 1;
-    if (ph < 0.38) ctx.fillRect(BEACONS[i][0], BEACONS[i][1] - 1, 1, 1);
+    if (ph < 0.38) ctx.fillRect(BEACONS[i][0], BEACONS[i][1], 1, 1);
   }
 }
