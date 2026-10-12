@@ -448,8 +448,22 @@ def main():
         props[pid] = { 'x': S(p['rect'][0]), 'y': S(p['rect'][1]), 'w': S(p['rect'][2]), 'h': S(p['rect'][3]),
                        'label': p.get('label'), 'baseY': S(p['baseY']), 'footprint': [S(p['footprint'][0]), S(p['footprint'][1])],
                        'height': S(p['height']), 'hot': p['hot'] }
+    # --- aircraft warning beacons: the masts on Dean Stone's summit are the tall narrow spikes
+    # standing on the range crest; the renderer blinks a red pixel on each tip at night
+    crest_now = np.where((~sky).any(0), (~sky).argmax(0), H).astype(float)
+    spike = np.nonzero(line_open(crest_now, 7 * k) - crest_now >= 20 * k)[0]   # pine tips on the crest are half that
+    beacons = []
+    for x0, x1 in runs(spike):
+        if x1 - x0 > 6 * k: continue
+        ty = int(crest_now[x0:x1].min()); xc = x0 + int(np.argmin(crest_now[x0:x1]))
+        if ty + 16 * k >= H or layer[ty + 2, xc] != L_RANGE: continue
+        row = ~sky[ty + 16 * k]; l = r = xc      # a mast keeps its width down its length, a pine widens
+        while l > 0 and row[l - 1]: l -= 1
+        while r < W - 1 and row[r + 1]: r += 1
+        if r - l + 1 <= 5 * k: beacons.append([int(xc), ty])
+    print('beacons on the masts at', beacons)
     meta = {
-        'w': W, 'h': H, 'horizon': S(cfg['horizon']), 'art': name,
+        'w': W, 'h': H, 'horizon': S(cfg['horizon']), 'art': name, 'beacons': beacons,
         'props': props,
         'cork': { 'x': CORK[0], 'y': CORK[1], 'w': CORK[2] - CORK[0], 'h': CORK[3] - CORK[1] },
         'lamp': { 'x': S(cfg['lamp'][0]), 'y': S(cfg['lamp'][1]) }, 'lampPoolY': S(cfg['lamp_pool_y']),

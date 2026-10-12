@@ -12,6 +12,7 @@ function envForWorker(env) {
   };
 }
 import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
+import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
 
@@ -230,6 +231,8 @@ export class Renderer {
     if (clouds || meteors) { c.drawImage(this.fg, 0, 0); lap('fg'); }
     // wings fly in front of the clouds and the far ranges, behind Sentinel, the trees and the props
     if (gliders) { this.fx.gliders.draw(c, env); c.drawImage(this.near, 0, 0); lap('gliders'); }
+    // the red beacons on the masts, in front of the mountain and the fog on it, behind the rain
+    if (beaconsOn(env)) { drawBeacons(c, env, t); lap('beacons'); }
     drawLampGlow(c, env); lap('lamp');
     if (cuId) { c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0); c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup'); }
     this.fx.drawPrecip(c, env); lap('precip');
