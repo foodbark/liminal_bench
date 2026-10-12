@@ -27,6 +27,49 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_ART = 'concept_art_03'
 
 
+def line_open(line, win):
+    """a crest line (y down) with spikes narrower than the window (masts, lone tree tips) taken off"""
+    pad = np.pad(line, win, mode='edge')
+    lo = np.max(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)
+    pad = np.pad(lo, win, mode='edge')
+    return np.min(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)
+
+
+def line_close(line, win):
+    """a crest line (y down) with notches narrower than the window filled to their neighbours' height"""
+    pad = np.pad(line, win, mode='edge')
+    hi = np.min(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)
+    pad = np.pad(hi, win, mode='edge')
+    return np.max(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)
+
+
+def runs(idx):
+    """[start, end) runs of consecutive integers in a sorted index array"""
+    out = []
+    if len(idx) == 0: return out
+    start = prev = int(idx[0])
+    for v in idx[1:]:
+        v = int(v)
+        if v != prev + 1: out.append((start, prev + 1)); start = v
+        prev = v
+    out.append((start, prev + 1))
+    return out
+
+
+def reach_from_top(sky):
+    """the part of a sky mask connected (4-neighbour) to the top row of the frame"""
+    reach = np.zeros_like(sky)
+    reach[0] = sky[0]
+    for _ in range(4000):
+        grow = reach.copy()
+        grow[1:] |= reach[:-1]; grow[:-1] |= reach[1:]
+        grow[:, 1:] |= reach[:, :-1]; grow[:, :-1] |= reach[:, 1:]
+        grow &= sky
+        if np.array_equal(grow, reach): break
+        reach = grow
+    return reach
+
+
 def polyline_y(points, w):
     xs = np.array([p[0] for p in points], float); ys = np.array([p[1] for p in points], float)
     return np.interp(np.arange(w), xs, ys)
@@ -271,6 +314,29 @@ def main():
         if args.debug: np.save(os.path.join(args.debug, 'crest.npy'), crest); np.save(os.path.join(args.debug, 'scan.npy'), scan); np.save(os.path.join(args.debug, 'trace.npy'), polyline_y(pts(cfg['skyline']), W))
     sky |= (yy < top[None, :] - 1) & (~peak)
     sky = majority(sky)
+    # sky is only what the top of the frame reaches: an enclosed pocket of sky-colored pixels
+    # inside a hillside (the light squares of a checkerboard export that got through the keying)
+    # is painting, not sky, or the live sky shows through the mountain as a bright hole
+    sky = reach_from_top(sky)
+    # a narrow channel of sky cut down into a hillside below the crest (the light squares of a
+    # checkerboard export that got through the keying, chained up to the sky) is a broken image,
+    # not a gap between trees: the channel's columns are filled by mirroring the hillside beside
+    # them, down to the channel's bottom. A clean of a few hundred pixels, gone with the next export.
+    tt = np.where((~sky).any(0), (~sky).argmax(0), H).astype(float)
+    tt_closed = line_close(line_open(tt, 7 * k), 7 * k)     # masts off, then narrow notches filled to their neighbours' crest
+    chan = np.nonzero(tt > tt_closed + 4 * k)[0]
+    for x0, x1 in runs(chan):
+        if x1 - x0 > 14 * k or x0 < x1 - x0 or x1 + (x1 - x0) > W: continue
+        y0 = int(tt_closed[x0:x1].min())
+        lim = min(H, y0 + 80 * k)
+        if not sky[y0:lim, x0:x1].any(): continue
+        y1 = int(np.nonzero(sky[y0:lim, x0:x1].any(1))[0].max()) + y0 + 4 * k
+        if y1 - y0 < 24 * k: continue    # the gaps between tree crowns along a crest are half that deep
+        for x in range(x0, x1):
+            src = 2 * x0 - 1 - x if (x - x0) % 2 == 0 else 2 * x1 - 1 - x   # mirrored from both sides, interleaved
+            rgb[y0:y1, x] = rgb[y0:y1, src]
+            sky[y0:y1, x] = False
+        print('filled a sky channel at x %d..%d, y %d..%d' % (x0, x1, y0, y1))
     # thin dark things standing on the crest (radio masts, lone pines) survive the filter
     dark_raw = blum < 80
     sky &= ~(dark_raw & (yy > top[None, :] - 70 * k) & (yy >= ridge_min_y))
@@ -353,12 +419,12 @@ def main():
     # the masts on Dean Stone's summit and the tallest tree tips are a few pixels wide, and a
     # column measured to a mast's tip sits lower in the layer all the way down, which the fog
     # ceiling and the snow line drew as a streak down the whole face under each mast.
-    def opened(line, win):
+    def boxed(line, win):
         pad = np.pad(line, win, mode='edge')
-        lo = np.max(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)   # y is down: fill a narrow spike to its neighbours' height
-        pad = np.pad(lo, win, mode='edge')
-        return np.min(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)  # and pull the broad crest back up
-    top_h = opened(top, 7 * k)
+        return np.mean(np.lib.stride_tricks.sliding_window_view(pad, 2 * win + 1), -1)
+    # the opening leaves flat stretches with a step at each end, and the fog ceiling draws a
+    # step in the height fraction as a seam down the face, so the line is smoothed after it
+    top_h = boxed(boxed(line_close(line_open(top, 7 * k), 7 * k), 7 * k), 7 * k)
     hf = np.zeros((H, W), np.float32)
     peak_top = np.minimum(top_h, polyline_y(PEAK[:-2], W)) if len(PEAK) >= 3 else top_h
     for lid, (top_line, bot_line) in {
