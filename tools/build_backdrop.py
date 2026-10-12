@@ -340,6 +340,11 @@ def main():
     # thin dark things standing on the crest (radio masts, lone pines) survive the filter
     dark_raw = blum < 80
     sky &= ~(dark_raw & (yy > top[None, :] - 70 * k) & (yy >= ridge_min_y))
+    # rectangles the config keys to sky outright (ref coordinates, [x0, y0, x1, y1]): a blocky
+    # chunk of export residue standing up off Dean Stone's crest right of the masts (the user,
+    # 2026-10-11: totally wack, just remove it); gone with the next painting
+    for x0, y0, x1, y1 in cfg.get('erase_sky', []):
+        sky[S(y0):S(y1), S(x0):S(x1)] = True
     # pale patches below the crest are cloud between tree crowns (sky) or snow on a summit
     # (terrain): decide by the neighborhood, foliage around it vs rock around it
     # (judged on the scene painting: the prop-less export can differ around the props)
