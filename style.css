@@ -115,6 +115,8 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 #loading { position: fixed; inset: 0; z-index: 20; background: #07080c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5em; color: #d8d4c4; text-align: center; transition: opacity 0.5s ease; }
 #loading.done { opacity: 0; pointer-events: none; }
 #loading[hidden] { display: none; }
+#loading-title, #loading-status { visibility: hidden; }
+#loading.font #loading-title, #loading.font #loading-status { visibility: visible; }
 #loading-title { font-size: clamp(28px, 3.2vw, 44px); letter-spacing: 0.03em; }
 #loading-status { color: #7d8595; font-size: clamp(18px, 1.9vw, 26px); white-space: pre; }
 #loading-dots { display: inline-block; width: 3ch; text-align: left; }
