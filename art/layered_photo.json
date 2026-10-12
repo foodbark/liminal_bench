@@ -10,6 +10,7 @@
  "horizon": 1080,
  "skyline": null,
  "scan_simple": true,
+ "mast_width": 2,
  "peak": [],
  "far_mid": [
   [

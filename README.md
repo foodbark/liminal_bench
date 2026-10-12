@@ -213,7 +213,7 @@ What is actually stacked in a frame, back to front. Two kinds of layer: the pain
 
 ### The painting: 7 depth planes, 4 in use
 
-`assets/backdrop_mask.png` tags every pixel with one plane (plus a material and a height fraction within the plane). The terrain pass lights each plane with its own sun horizon, haze depth, snowline bias and dusting melt time (`LAYERS` in `src/render/terrain.js`).
+`assets/backdrop_mask.png` tags every pixel with one plane (plus a material and a height fraction within the plane). The terrain pass lights each plane with its own sun horizon, haze depth, snowline bias (`LAYERS` in `src/render/terrain.js`) and its elevations for the overnight dusting (`DUST_PLANES` in `src/dusting.js`).
 
 | code | plane | in the current painting (`layered_photo`) |
 |---|---|---|

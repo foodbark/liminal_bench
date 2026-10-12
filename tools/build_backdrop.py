@@ -422,6 +422,9 @@ def main():
         if len(body) < 16 * k: continue
         cx = int(round(np.median([(l + r) / 2 for _, l, r in body])))
         w = int(round(np.median([r - l + 1 for _, l, r in body])))
+        # the painting's masts are four pixels wide; a mast seen from the valley is a hair, so
+        # the config can thin them (mast_width, ref pixels), keeping the run's middle columns
+        if cfg.get('mast_width'): w = max(1, min(w, int(round(cfg['mast_width'] * k))))
         nl = cx - w // 2
         for y, l, r in body:
             cols = rgb[y, l:r + 1].copy(); ow = r - l + 1

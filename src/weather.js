@@ -37,19 +37,20 @@ export async function fetchWeather() {
   if (!r.ok) throw new Error('weather http ' + r.status);
   const j = await r.json();
   const c = j.current;
-  let snowDepth = 0, freshSnow = 0, thawHours = 0, rainWeek = 0, warmWeek = 0, greenup = 0;
+  let snowDepth = 0, freshSnow = 0, rainWeek = 0, warmWeek = 0, greenup = 0;
+  const feedHours = [];
   if (j.hourly && j.hourly.time) {
     const idx = j.hourly.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13));
     if (idx >= 0 && j.hourly.snow_depth[idx] != null) snowDepth = j.hourly.snow_depth[idx];
-    // A dusting: snowfall (cm) in the 18 hours before now, and how many hours above freezing
-    // have passed since the last of it fell, which is how far up the slopes it has melted.
+    // Loose snow for the wind: snowfall (cm) in the 18 hours before now. The dusting itself is
+    // budgeted by elevation from the last three days of the feed (src/dusting.js), since the
+    // valley's hour above freezing melts nothing on the hills.
     if (idx >= 0) {
-      let last = -1;
-      for (let k = Math.max(0, idx - 18); k <= idx; k++) {
-        const sf = j.hourly.snowfall[k] || 0;
-        if (sf > 0) { freshSnow += sf; last = k; }
+      for (let k = Math.max(0, idx - 18); k <= idx; k++) freshSnow += j.hourly.snowfall[k] || 0;
+      const off = (j.utc_offset_seconds || 0) * 1000;
+      for (let k = Math.max(0, idx - 72); k <= idx; k++) {
+        feedHours.push({ time: Date.parse(j.hourly.time[k] + 'Z') - off, temp: j.hourly.temperature_2m[k], snowfall: j.hourly.snowfall[k] || 0, precip: j.hourly.precipitation[k] || 0 });
       }
-      for (let k = Math.max(0, last + 1); k <= idx; k++) if ((j.hourly.temperature_2m[k] ?? 0) > 33) thawHours++;
       // Green-up: liquid rain over the past week (mm; counted from half a day after it fell,
       // since the grass takes that long to answer, and fading out past five days), and how warm
       // the last two days were, which is when the growing happens: a cold-front rain greens
@@ -72,7 +73,7 @@ export async function fetchWeather() {
     ok: true, fetchedAt: Date.now(),
     temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100, coverMid: (c.cloud_cover_mid ?? 0) / 100, coverHigh: (c.cloud_cover_high ?? 0) / 100,
     wind: c.wind_speed_10m, windDir: c.wind_direction_10m,
-    precip: c.precipitation, snowfall: c.snowfall, snowDepth, freshSnow, thawHours,
+    precip: c.precipitation, snowfall: c.snowfall, snowDepth, freshSnow, hours: feedHours,
     rainWeek, warmWeek, greenup,
     ridge,
   };

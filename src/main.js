@@ -1,6 +1,7 @@
 import { createState, W, H, META, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
 import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
+import { dustingTables, presetHours } from './dusting.js';
 import { skyPalette } from './palette.js';
 import { Renderer } from './render/renderer.js';
 import { setupUI } from './ui.js';
@@ -93,10 +94,9 @@ function computeEnv() {
     if (!snowing) cond.precip = { type: 'snow', intensity: 0.25 + 0.25 * blowing };   // snow in the air, off the ground
   }
   cond.blowing = blowing;
-  // Overnight dusting on the hills, melting from the bottom up with hours above freezing.
-  const dustAmount = preset ? (preset.freshSnow || 0) : Math.min(1, (w.freshSnow || 0) / 2);
-  const thawHours = preset ? Math.max(0, hourLocal + minute / 60 - 7.5) : (w.thawHours || 0);
-  const dusting = { amount: dustAmount, thaw: thawHours };
+  // The overnight dusting on the hills: the valley feed lapsed to each plane and budgeted hour
+  // by hour, fall against melt (src/dusting.js); a preset gets a made-up night of snow.
+  const dusting = dustingTables(preset ? presetHours(now, hourLocal, (preset.freshSnow || 0) * 3) : (w.hours || []));
   // the grass greening back up after a warm week's rain (weather.js reads it off the week's feed)
   const greenup = preset ? (preset.greenup || 0) : Math.max(0, Math.min(1, w.greenup || 0));
   // Which clouds, from the three cover bands (Open-Meteo reports low, mid and high separately):
@@ -139,7 +139,7 @@ function computeEnv() {
     now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog, dusting, greenup, sky,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}|${dusting.amount.toFixed(2)}|${dusting.thaw.toFixed(1)}|${greenup.toFixed(2)}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
     sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}`,
     ambientKey,
   };

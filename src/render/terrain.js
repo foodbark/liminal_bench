@@ -2,6 +2,7 @@ import { W, H, SEASON_SNOW, SCALE, META } from '../state.js';
 import { blue, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum, smooth } from '../util/pixel.js';
 import { valueNoise1D, valueNoise2D, hash2 } from '../util/noise.js';
 import { LAYER, MAT } from '../assets.js';
+import { DUST_STEPS } from '../dusting.js';
 
 // The scene is a painting (assets/backdrop.png) with a per-pixel layer/material/height mask.
 // This pass re-lights it for the moment: seasonal grass, snow creeping down each range, haze and
@@ -15,13 +16,12 @@ const LAYERS = {
   // horizon: sun altitude (deg) at which the layer's top is lit; base: at which its bottom is.
   // Missoula is a valley, so the floor loses the sun while ridge tops still glow: the shadow
   // climbs each hill as the sun drops (base > horizon).
-  // meltHours: how many hours above freezing it takes a dusting to melt off the whole layer,
-  // bottom up; the high forested range (Dean Stone) holds it longest.
-  [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, base: 1.0, snowBias: 0.0, hill: true, meltHours: 16 },
-  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, base: 2.2, snowBias: -0.05, hill: true, meltHours: 9.5, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
-  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, base: 3.0, snowBias: -0.12, hill: true, meltHours: 5 },
-  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, base: 4.0, snowBias: -0.15, hill: true, backlitAM: true, meltHours: 6.5 },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
-  [LAYER.TREES]:   { depth: 0.22, horizon: 3.0, base: 4.2, snowBias: -0.1, hill: true, meltHours: 4.5 },
+  // The overnight dusting's elevations and hold per plane live in src/dusting.js.
+  [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, base: 1.0, snowBias: 0.0, hill: true },
+  [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, base: 2.2, snowBias: -0.05, hill: true, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
+  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, base: 3.0, snowBias: -0.12, hill: true },
+  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, base: 4.0, snowBias: -0.15, hill: true, backlitAM: true },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
+  [LAYER.TREES]:   { depth: 0.22, horizon: 3.0, base: 4.2, snowBias: -0.1, hill: true },
   [LAYER.NEAR]:    { depth: 0.0, horizon: 4.5, base: 4.5, snowBias: 0, hill: false },
 };
 
@@ -120,8 +120,6 @@ export function renderTerrain(img, env, assets) {
     const L = LAYERS[id];
     const cov = clamp(extraSnow + L.snowBias, 0, 1);
     const sunK = smooth(clamp((alt - (L.horizon - 1.2)) / 2.4, 0, 1));   // at the layer's top
-    const dust = env.dusting || { amount: 0, thaw: 0 };
-    const meltLine = L.meltHours ? clamp(dust.thaw / L.meltHours, 0, 1) : 1;   // height fraction below which it has melted
     const backlit = !!L.backlitAM && env.sun.azimuth < 180;   // morning sun behind this ridge
     per[id] = {
       snowThresh: cov > 0 ? 1 - Math.min(1, Math.pow(cov, 1.4) * 1.35) : 2,
@@ -129,8 +127,7 @@ export function renderTerrain(img, env, assets) {
       rimK: backlit ? 1.8 : 1,          // but its outline burns
       rimReach: Math.round((backlit ? 4 : 3) * SCALE),
       persp: L.depth * 0.08,
-      dustLine: dust.amount > 0 && meltLine < 1 ? meltLine : 2,
-      dustK: dust.amount * (0.55 + 0.3 * (1 - meltLine)),   // thins as it melts
+      dust: env.dusting && env.dusting.tables ? env.dusting.tables[id] : null,   // cm of last night's snow by height fraction
     };
   }
 
@@ -182,11 +179,18 @@ export function renderTerrain(img, env, assets) {
             if (mat === MAT.FOLIAGE) {
               if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.45) { c = lerpRGB(c, SNOW_LIT, 0.6); snowy = true; }
             } else { c = lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 200, 0, 1)); snowy = true; }
-          } else if (e > P.dustLine + (snowN(x * 0.07 / SCALE + 9) - 0.5) * 0.14 + (d - 0.5) * 0.08) {
-            // last night's dusting: thin, grass and rock still showing through
-            if (mat === MAT.FOLIAGE) {
-              if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.5) { c = lerpRGB(c, SNOW_LIT, 0.45 * P.dustK); snowy = true; }
-            } else { c = lerpRGB(c, lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 200, 0, 1)), P.dustK); snowy = true; }
+          } else if (P.dust) {
+            // last night's dusting: the plane's snow budget sampled at this height (its edge
+            // fuzzed by noise), thin, grass and rock still showing through
+            const ee = clamp(e + (snowN(x * 0.07 / SCALE + 9) - 0.5) * 0.14 + (d - 0.5) * 0.08, 0, 1) * DUST_STEPS;
+            const s0 = ee | 0, f = ee - s0;
+            const cm = P.dust[s0] + (P.dust[Math.min(DUST_STEPS, s0 + 1)] - P.dust[s0]) * f;
+            if (cm > 0.1) {
+              const dustK = 0.85 * Math.min(1, cm / 2);   // a full dusting at 2 cm
+              if (mat === MAT.FOLIAGE) {
+                if (lum(c) > 60 && hash2(x >> 1, y >> 1, 3) > 0.5) { c = lerpRGB(c, SNOW_LIT, 0.45 * dustK); snowy = true; }
+              } else { c = lerpRGB(c, lerpRGB(SNOW_DARK, SNOW_LIT, clamp(lum(c) / 200, 0, 1)), dustK); snowy = true; }
+            }
           }
         }
       }
