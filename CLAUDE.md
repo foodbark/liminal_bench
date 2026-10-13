@@ -74,7 +74,7 @@ Three rules that override everything else:
 
 ## Open items
 
-The Denver punch list and backlog in README.md. Still open: the second domain's redirect and retiring GitHub Pages (`docs/deploy.md` sections 4 and 5), the open-topped trash can with critters, a real mobile landscape layout, and the seasonal tree work (the valley trees can be classified deciduous from the painting; larch on Dean Stone need a repaint).
+The open list and the design notes are in README.md. Still open: the second domain's redirect and retiring GitHub Pages (`docs/deploy.md` sections 4 and 5), the open-topped trash can with critters, a real mobile landscape layout, and the seasonal tree work (the valley trees can be classified deciduous from the painting; larch on Dean Stone need a repaint).
 
 ## Roadmap (not built yet)
 
