@@ -219,6 +219,17 @@ def main():
             if hh < H: out[hh:] = out[hh - 1:hh]
             return out
         fr = fit(fr); front = fit(alpha)
+        # the front's flat far field (front_erase_tan, rectangles in ref coordinates): the Sentinel
+        # export ran its slope across the whole frame as a tan band over the foot of Dean Stone,
+        # which the user never wanted (2026-10-12); tan pixels in these rectangles go transparent
+        # so the back painting's foothills show, and the trees in them, green or dark, stay
+        if cfg.get('front_erase_tan'):
+            ftan, fgreen, fdark, fnavy = classify(fr)
+            for x0, y0, x1, y1 in rects(cfg['front_erase_tan']):
+                box = np.zeros((H, W), bool); box[y0:y1, x0:x1] = True
+                erased = box & front & majority(ftan & ~fgreen & ~fdark, 1)
+                front[erased] = False
+                print(f'front field erased: {int(erased.sum())} px in ({x0}, {y0})..({x1}, {y1})')
         rgb = rgb.copy(); rgb[front] = fr[front]
         bare_np = bare_np.copy(); bare_np[front] = fr[front]
 
