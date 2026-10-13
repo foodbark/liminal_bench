@@ -19,9 +19,9 @@ const LAYERS = {
   // The overnight dusting's elevations and melt per plane live in src/dusting.js.
   [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, base: 1.0, snowBias: 0.0, hill: true },
   [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, base: 2.2, snowBias: -0.05, hill: true, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
-  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, base: 3.0, snowBias: -0.12, hill: true },
-  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, base: 4.0, snowBias: -0.15, hill: true, backlitAM: true },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it
-  [LAYER.TREES]:   { depth: 0.22, horizon: 3.0, base: 4.2, snowBias: -0.1, hill: true },
+  [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, base: 3.0, snowBias: -0.2, hill: true },
+  [LAYER.FLANK]:   { depth: 0.3, horizon: -4.2, base: 4.0, snowBias: -0.3, hill: true, backlitAM: true },   // Mount Sentinel: sunset glow on the face; at dawn the sun is behind it; its open west face takes the season's snow late (a first snow on Dean Stone's summit whitened its crest, 2026-10-13)
+  [LAYER.TREES]:   { depth: 0.22, horizon: 3.0, base: 4.2, snowBias: -0.3, hill: true },
   [LAYER.NEAR]:    { depth: 0.0, horizon: 4.5, base: 4.5, snowBias: 0, hill: false },
 };
 
