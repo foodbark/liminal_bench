@@ -16,7 +16,7 @@ const LAYERS = {
   // horizon: sun altitude (deg) at which the layer's top is lit; base: at which its bottom is.
   // Missoula is a valley, so the floor loses the sun while ridge tops still glow: the shadow
   // climbs each hill as the sun drops (base > horizon).
-  // The overnight dusting's elevations and hold per plane live in src/dusting.js.
+  // The overnight dusting's elevations and melt per plane live in src/dusting.js.
   [LAYER.PEAK]:    { depth: 1.0, horizon: -4.0, base: 1.0, snowBias: 0.0, hill: true },
   [LAYER.RANGE]:   { depth: 0.75, horizon: -2.6, base: 2.2, snowBias: -0.05, hill: true, pop: 1.18, glowBoost: 1.5 },   // Dean Stone: more contrast, and its forest takes the alpenglow strongly
   [LAYER.FARHILL]: { depth: 0.5, horizon: -2.4, base: 3.0, snowBias: -0.12, hill: true },

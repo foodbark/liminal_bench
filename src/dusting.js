@@ -7,7 +7,7 @@
 // all of Dean Stone, Sentinel almost down to its foot. So the valley's hourly feed is lapsed
 // to each plane's elevations and walked hour by hour: what fell there (rain in the valley is
 // snow above the freezing level), and what melted since (warm hours, faster in the sun and on
-// the low open slopes). The result is a small table per plane, depth in cm by height fraction,
+// the low open slopes, slower on the shaded north faces the bench looks at). The result is a small table per plane, depth in cm by height fraction,
 // that the terrain pass samples per pixel. Worker-safe: numbers only.
 import { LAYER } from './assets.js';
 import { LAT, LON } from './state.js';
@@ -19,14 +19,19 @@ export const DUST_STEPS = 12;            // samples per plane, from its foot (0)
 const SNOW_PER_MM = 0.7;                 // cm of snow per mm of precipitation that falls as snow
 const MELT_RATE = 2.5;                   // cm per hour at 40 °F in full sun
 // Each plane's elevation span (m) from where it shows above what is in front of it to its crest,
-// and how it holds snow: Dean Stone's forest and the far peaks keep it, the open valley loses it.
+// and how fast it melts, as a factor on the sun's melt at its foot and at its crest (interpolated
+// between), since the sun matters as much as the elevation: the bench looks south, so every face
+// it sees of Dean Stone is a north face, forested toward the top, that gets almost no October sun
+// and holds a dusting for days, while Mount Sentinel's open grass faces west into the afternoon and
+// is bare by the next day (the user's check, 2026-10-13: Sentinel long bare, Dean Stone's top still
+// white, the valley at 50 °F). A factor of 1 is the open valley's rate.
 export const DUST_PLANES = {
-  [LAYER.PEAK]:    { elev: [1800, 2600], hold: 0.5 },
-  [LAYER.RANGE]:   { elev: [1250, 2050], hold: 0.7 },   // Dean Stone, its foot behind the trees
-  [LAYER.FARHILL]: { elev: [1050, 1500], hold: 1.0 },
-  [LAYER.FLANK]:   { elev: [1000, 1592], hold: 1.0 },   // Mount Sentinel
-  [LAYER.TREES]:   { elev: [980, 1040],  hold: 1.2 },
-  [LAYER.NEAR]:    { elev: [980, 980],   hold: 1.3 },
+  [LAYER.PEAK]:    { elev: [1800, 2600], melt: [0.5, 0.3] },
+  [LAYER.RANGE]:   { elev: [1250, 2050], melt: [0.7, 0.2] },   // Dean Stone, its foot behind the trees; its north face
+  [LAYER.FARHILL]: { elev: [1050, 1500], melt: [0.9, 0.6] },   // the foothills under it, north faces too
+  [LAYER.FLANK]:   { elev: [1000, 1592], melt: [1.1, 0.9] },   // Mount Sentinel, open grass in the afternoon sun
+  [LAYER.TREES]:   { elev: [980, 1040],  melt: [0.9, 0.9] },
+  [LAYER.NEAR]:    { elev: [980, 980],   melt: [1.0, 1.0] },
 };
 
 // hours: the valley feed's last day or three, oldest first, ending at the current hour:
@@ -40,10 +45,11 @@ export function dustingTables(hours) {
   const tables = {};
   let key = '';
   for (const id in DUST_PLANES) {
-    const { elev: [lo, hi], hold } = DUST_PLANES[id];
+    const { elev: [lo, hi], melt: [mFoot, mCrest] } = DUST_PLANES[id];
     const tab = [];
     for (let s = 0; s <= DUST_STEPS; s++) {
       const dT = LAPSE * (lo + (hi - lo) * s / DUST_STEPS - VALLEY_ELEV);
+      const meltK = mFoot + (mCrest - mFoot) * s / DUST_STEPS;
       let depth = 0;
       for (let k = 0; k < hours.length; k++) {
         const h = hours[k];
@@ -52,7 +58,7 @@ export function dustingTables(hours) {
         // what fell as snow up here: the model's own snowfall, or all of the precipitation
         // where it is cold enough for the valley's rain to be snow
         const fall = Math.max(h.snowfall || 0, (h.precip || 0) * SNOW_PER_MM * Math.max(0, Math.min(1, (36 - T) / 2)));
-        const melt = MELT_RATE * Math.max(0, Math.min(1, (T - 32) / 8)) * sunK[k] / hold;
+        const melt = MELT_RATE * Math.max(0, Math.min(1, (T - 32) / 8)) * sunK[k] * meltK;
         depth = Math.max(0, depth + fall - melt);
       }
       tab.push(depth);
