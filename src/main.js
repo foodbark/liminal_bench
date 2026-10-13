@@ -1,5 +1,6 @@
 import { createState, W, H, META, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
+import { fetchCams, camCover } from './cams.js';
 import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { dustingTables, presetHours } from './dusting.js';
 import { skyPalette } from './palette.js';
@@ -46,7 +47,7 @@ if (/[?&]diag\b/.test(location.search)) {
     const d = renderer.diag;
     frames++;
     box.textContent = `liminal bench diag  ${W}x${H}  worker=${renderer.useWorker} ready=${renderer.workerReady}  frames=${frameCount}\n`
-      + `weather: ${d.weather || 'pending'}  cover=${state.env.cond.cover}  ${state.env.cond.label}\n`
+      + `weather: ${d.weather || 'pending'}  cover=${state.env.cond.cover}  ${state.env.cond.label}  cams: ${d.cams || 'pending'}\n`
       + d.stages.map(([n, t]) => `${String(t).padStart(6)}ms  ${n}`).join('\n')
       + (d.errors.length ? '\nERRORS:\n' + d.errors.join('\n') : '\nno errors')
       + `\n${navigator.userAgent}`;
@@ -61,6 +62,11 @@ function computeEnv() {
   const { month, hour: hourLocal, minute } = localParts(now);
   let w = state.weather;
   if (o.enabled && o.weather !== 'live') w = { ...w, ok: true, ...WEATHER_PRESETS[o.weather] };
+  else {
+    // the cumulus the webcams see and the feed does not (src/cams.js): the low cover raised to it
+    const cam = camCover(state.cams, w, now);
+    if (cam) w = { ...w, ...cam };
+  }
   state.weatherShown = w;
   let cover = w.cover;
   if (o.enabled && o.cover >= 0) cover = o.cover / 100;
@@ -157,6 +163,19 @@ async function refreshWeather() {
 }
 refreshWeather();
 setInterval(refreshWeather, 10 * 60 * 1000);
+
+// The webcams' cumulus (src/cams.js), read in the background: never waited on, and nothing
+// changes when they are absent (the dev server without its proxy, GitHub Pages, a cam down).
+async function refreshCams() {
+  try {
+    state.cams = await fetchCams();
+    const c = state.cams;
+    renderer.diag.cams = (c.ok ? `cumulus ${c.cumulus.toFixed(2)}` : 'none') + ' · ' + Object.entries(c.cams).map(([id, r]) => `${id} ${r.error ? 'failed' : r.cloud == null ? 'dark' : r.cloud.toFixed(2)}`).join(', ');
+  }
+  catch (err) { console.warn('cams failed', err); renderer.diag.cams = 'failed: ' + (err && err.message || err); }
+}
+refreshCams();
+setInterval(refreshCams, 10 * 60 * 1000);
 
 // The loading screen stays up until the first frame that has everything: the weather answered
 // (or failed), the pinned notes in, and the sky, the cloud sheets and the terrain all rendered for

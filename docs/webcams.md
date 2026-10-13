@@ -2,6 +2,10 @@
 
 Surveyed 2026-09-03. All are third-party cameras; check terms before anything public-facing, and fetch gently (every 10 to 15 minutes at most). Stills only, no video streams.
 
+## In use (2026-10-13)
+
+The Mountain Press and KPAX stills feed the cumulus: `functions/api/cam/[name].js` proxies them (`/api/cam/mp`, `/api/cam/kpax`) with a ten-minute edge cache and a user agent naming the site, and `src/cams.js` measures the cloud in the sky above each cam's ridges. See CLAUDE.md. If either cam is re-aimed, re-measure the sky rectangles in `CAMS`.
+
 ## Worth using
 
 ### KPAX "Missoula Cam" (St. Patrick Hospital)
