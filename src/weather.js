@@ -14,22 +14,36 @@ const RIDGE_URL = 'https://api.open-meteo.com/v1/forecast'
   + `?latitude=${RIDGE.lat}&longitude=${RIDGE.lon}&elevation=${RIDGE.elevation}`
   + '&hourly=snow_depth,snowfall,temperature_2m&past_days=3&forecast_days=1&timezone=America%2FDenver&temperature_unit=fahrenheit';
 
+export const BARE_DEPTH = 0.01;   // metres of model snow under which the summit counts as bare
+
 export async function fetchRidge() {
   const r = await fetch(RIDGE_URL);
   if (!r.ok) throw new Error('ridge http ' + r.status);
-  const h = (await r.json()).hourly;
+  const j = await r.json();
+  const h = j.hourly;
   const key = localHourKey(new Date());
   let at = h.time.findIndex((t) => t.slice(0, 13) === key);
   if (at < 0) at = h.time.length - 1;
-  let freshSnow = 0, maxDepth = 0, heldDepth = Infinity;
+  let freshSnow = 0, maxDepth = 0, heldDepth = Infinity, recentMax = 0;
   for (let k = Math.max(0, at - 72); k <= at; k++) { freshSnow += h.snowfall[k] || 0; maxDepth = Math.max(maxDepth, h.snow_depth[k] || 0); }
   // what has been on the ground for the last half day: the model's depth wobbles by a centimetre
   // or two from hour to hour, and one hour of marginal model snow once whitened bare peaks
-  for (let k = Math.max(0, at - 12); k <= at; k++) heldDepth = Math.min(heldDepth, h.snow_depth[k] || 0);
+  for (let k = Math.max(0, at - 12); k <= at; k++) { heldDepth = Math.min(heldDepth, h.snow_depth[k] || 0); recentMax = Math.max(recentMax, h.snow_depth[k] || 0); }
   if (!Number.isFinite(heldDepth)) heldDepth = 0;
-  // snowDepth: metres on the ground at the summit now; heldDepth: the least of the last 12 hours;
-  // freshSnow: cm fallen in the last three days
-  return { ok: true, snowDepth: h.snow_depth[at] || 0, heldDepth, maxDepth, freshSnow, temp: h.temperature_2m[at] };
+  // when the summit went bare: the hour after the model last showed snow on the ground, so a
+  // first snow that has melted off up there fades off the peaks from then (season.js), not from
+  // whenever a browser next looked. null while there is snow; the window's start if it has
+  // been bare the whole three days (then it is long gone either way).
+  const off = (j.utc_offset_seconds || 0) * 1000;
+  let bareSince = null;
+  if ((h.snow_depth[at] || 0) < BARE_DEPTH) {
+    let k = at;
+    while (k > 0 && (h.snow_depth[k - 1] || 0) < BARE_DEPTH) k--;
+    bareSince = Date.parse(h.time[k] + 'Z') - off;
+  }
+  // snowDepth: metres on the ground at the summit now; heldDepth: the least of the last 12 hours,
+  // recentMax the most; freshSnow: cm fallen in the last three days
+  return { ok: true, snowDepth: h.snow_depth[at] || 0, heldDepth, recentMax, maxDepth, freshSnow, bareSince, temp: h.temperature_2m[at] };
 }
 
 export async function fetchWeather() {
@@ -107,6 +121,7 @@ export const WEATHER_PRESETS = {
   snow:     { code: 73, cover: 0.95, coverLow: 0.95, coverMid: 0.9, coverHigh: 0.8, temp: 24, wind: 8,  snowDepth: 0.25 },
   fog:      { code: 45, cover: 0.55, coverLow: 0.5, coverMid: 0.2, coverHigh: 0.1, temp: 39, wind: 2,  snowDepth: 0 },
   inversion: { code: 45, cover: 0.08, coverLow: 0, coverMid: 0, coverHigh: 0.3, temp: 28, wind: 1, snowDepth: 0, inversion: 1 },   // snow follows the season
+  fogsea:    { code: 45, cover: 0.05, coverLow: 0, coverMid: 0, coverHigh: 0.1, temp: 33, wind: 1, snowDepth: 0, inversion: 1, fogTop: 1 },   // a deep morning fog, up the slopes: the cams' reading on a true inversion
   dusting:   { code: 1,  cover: 0.2, coverLow: 0.1, coverMid: 0.1, coverHigh: 0.3, temp: 38, wind: 3, snowDepth: 0, freshSnow: 1 },     // last night's skiff, melting off through the day
   mountainfog: { code: 3, cover: 0.8, coverLow: 0.9, coverMid: 0.4, coverHigh: 0.2, temp: 41, wind: 3, snowDepth: 0, lowcloud: 1 },
   storm:    { code: 95, cover: 1.0,  coverLow: 0.9, coverMid: 0.9, coverHigh: 0.7, temp: 66, wind: 22, snowDepth: 0 },

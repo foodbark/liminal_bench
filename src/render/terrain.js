@@ -57,10 +57,16 @@ const PACKED_DARK = [176, 184, 205], PACKED_LIT = [214, 220, 236];
 const ART_SNOW = 0.12, BARE_BELOW = 0.1;
 const ROCK_LIT = [110, 150, 214], ROCK_MID = [79, 122, 187];
 const snowN = valueNoise1D(7);
-const invN = valueNoise1D(31);
+const invN = valueNoise1D(31), invN2 = valueNoise1D(37);   // the top of the far bank and of Sentinel's
 const fogN = valueNoise2D(43), fogN2 = valueNoise2D(47);
-// The inversion's flat top (screen y) and how far below it the fog is solid.
-const INVERSION_TOP = META.inversionTop, INVERSION_BAND = Math.round(22 * SCALE);
+// The inversion's flat top (screen y) and how far below it the fog is solid. The top is the
+// painting's tree line, a sea in the far valley; a deep fog (env.fogTop, 0..1, from the cams)
+// lifts it up the lower slopes, by INVERSION_LIFT at most: over the foothills onto the foot of
+// Dean Stone, a third of the way up Sentinel, and across Sentinel's whole flank to the frame's
+// edge. Solid, with a bright flat top. Softer, thinner, lower and two-banked versions were all
+// tried on the first morning (2026-10-15) and the user's verdict was that the first one was
+// better, "maybe make it more opaque"; that is this.
+const INVERSION_TOP = META.inversionTop, INVERSION_BAND = Math.round(22 * SCALE), INVERSION_LIFT = Math.round(90 * SCALE);
 const [INV_X0, INV_X1] = META.inversionReachX, [BANK_X0, BANK_X1] = META.bankReachX;
 
 function putPx(data, i, c) {
@@ -111,6 +117,19 @@ export function renderTerrain(img, env, assets) {
   const rimColor = lerpRGB([255, 236, 200], [255, 170, 120], clamp(1 - Math.abs(alt + 1) / 5, 0, 1));
   // Fog colors: pale and bright by day, taking the glow at dawn and dusk, dim at night.
   const inversion = env.inversion || 0, mountainFog = env.mountainFog || 0;
+  const fogTop = env.fogTop || 0;
+  const invTop = INVERSION_TOP - Math.round(fogTop * INVERSION_LIFT);
+  const invDens = 0.985, invLit = 0.85;   // solid at any depth, as a true inversion is (the user, 2026-10-15)
+  // Sentinel's own bank: it is the near mountain, so the same sheet of fog meets it higher on the
+  // screen than it meets the foothills and Dean Stone behind, and its top has its own broader
+  // wobble, so the two read as separate masses with the valley between (the user, 2026-10-15)
+  // Sentinel's bank, by height fraction within the flank: where its top sits at the valley-floor
+  // depth and how far it climbs with the cams' depth, how far under the top the body is solid,
+  // and the reach of the lit lip
+  const BANK_E0 = 0.25, BANK_E_LIFT = 0.45, BANK_E_BAND = 0.08, BANK_E_LIP = 0.02;
+  // No haze over the trees and the meadow: the bench is above the sea (the beauty rule), and a
+  // fog that reached the bench would gray the whole scene, sky and all, not just the foreground
+  // (the user, 2026-10-15: "this close up fog would fog the whole scene, because we are under it").
   const fogBase = lerpRGB(lerpRGB([208, 216, 228], horizon, 0.22), scaleRGB(glowRGB, 0.9), glow * 0.55);
   const fogCol = mulRGB(fogBase, lerpRGB(ambient, [1, 1, 1], 0.25));
   const fogLit = mulRGB(lerpRGB([246, 248, 252], glowRGB, glow * 0.5), lerpRGB(ambient, [1, 1, 1], 0.4));
@@ -237,14 +256,36 @@ export function renderTerrain(img, env, assets) {
 
       // --- inversion: a sea of fog fills the far valley behind the trees, flat-topped, lit on top
       if (inversion > 0 && (layer === LAYER.PEAK || layer === LAYER.RANGE || layer === LAYER.FARHILL || layer === LAYER.FLANK)) {
-        const reach = layer === LAYER.FLANK ? clamp((x - INV_X0) / INV_X1, 0, 1) : 1;
-        const yTop = INVERSION_TOP + (invN(x * 0.02 / SCALE) - 0.5) * 8 * SCALE;
+        // the painting's own valley sea thins toward Sentinel's near end; a fog the cams have on
+        // the slopes covers Sentinel's bank full strength to the frame's edge (the user, 2026-10-15)
+        const reach = layer === LAYER.FLANK && fogTop <= 0 ? clamp((x - INV_X0) / INV_X1, 0, 1) : 1;
+        const nearBank = layer === LAYER.FLANK && fogTop > 0;
+        // the level sea, on every plane: the flank too, since the front painting's Sentinel runs
+        // on behind the foothills at the right and poked through the sea bare when only the
+        // slope bank covered it (the user, 2026-10-15); its lip is left off the flank, where the
+        // slope bank's own edge takes over
+        const yTop = invTop + (invN(x * 0.02 / SCALE) - 0.5) * 8 * SCALE;
         const below = y - yTop;
         if (below > -1 && reach > 0) {
-          const dens = clamp(below / INVERSION_BAND, 0, 1) * 0.95 * inversion * reach;
+          const dens = clamp(below / INVERSION_BAND, 0, 1) * invDens * inversion * reach;
           c = lerpRGB(c, fogCol, dens);
-          if (below < 6 * SCALE && d < 1.1 - below / (5 * SCALE)) c = lerpRGB(c, fogLit, 0.8 * inversion * reach);
+          if (!nearBank && below < 6 * SCALE && d < 1.1 - below / (5 * SCALE)) c = lerpRGB(c, fogLit, invLit * inversion * reach);
           c = quantRGB(c, 9, d);
+        }
+        if (nearBank) {
+          // Sentinel's bank: the same solid body and lit lip as the sea, but its top follows
+          // the slope. The top sits at a constant height fraction within the flank, a contour
+          // parallel to Sentinel's skyline, wobbled a little along it, so the edge runs up the
+          // hill with the slope instead of a level line across it (the user, 2026-10-15: "give
+          // it an edge at the top like dean stone has but have it follow its slope").
+          const eTop = BANK_E0 + BANK_E_LIFT * fogTop + (invN2(x * 0.012 / SCALE) - 0.5) * 0.05;
+          const belowE = eTop - e;   // how far under the bank's top, in height fraction
+          if (belowE > 0) {
+            const dens = clamp(belowE / BANK_E_BAND, 0, 1) * invDens * inversion;
+            c = lerpRGB(c, fogCol, dens);
+            if (belowE < BANK_E_LIP && d < 1.1 - belowE / BANK_E_LIP * 1.2) c = lerpRGB(c, fogLit, invLit * inversion);
+            c = quantRGB(c, 9, d);
+          }
         }
       }
       // --- mountain fog: ragged banks hanging mid-slope on the ranges

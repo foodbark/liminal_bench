@@ -2,7 +2,7 @@ import { W, H, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
 import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize } from './notes.js';
-import { peakSnowLatched, peakSnowSince } from './season.js';
+import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
 import { Phone, loadPhoneBook, phoneBook, formatNumber, MESSAGE_MAX } from './phone.js';
@@ -346,7 +346,8 @@ export function setupUI(state, canvas) {
         if (!$('debug').hidden) {
           const rg = state.weather.ridge, since = peakSnowSince();
           const peaks = rg ? `summit ${Math.round(rg.temp)}°f, ${Math.round(rg.snowDepth * 100)} cm` : 'summit n/a';
-          const latch = peakSnowLatched(state.now) ? `snowed in since ${since.getMonth() + 1}/${since.getDate()}` : 'no first snow yet';
+          const bare = peakSnowBareSince();
+          const latch = peakSnowLatched(state.now) ? `snowed in since ${since.getMonth() + 1}/${since.getDate()}` + (bare ? `, summit bare since ${bare.getMonth() + 1}/${bare.getDate()}, ${(peakSnowMelt(state.now) * 100) | 0}% left` : '') : 'no first snow yet';
           dbg.info.textContent = `sun alt ${env.sun.altitude.toFixed(1)}° az ${env.sun.azimuth.toFixed(0)}°  moon ${(env.moon.phase * 100) | 0}%\ncover ${(env.cond.cover * 100) | 0}%  snow ${env.snowAmount.toFixed(2)}  ground snow ${env.groundSnow}\npeaks: ${peaks}, ${latch}\nwind ${env.wind.speed} mph from ${env.wind.dir}°  gliders ${r && r.fx ? r.fx.gliders.list.length : 0} up, chance ${gliderChance(env).toFixed(2)}\nplanets up: ${planetSpots.map((s) => `${s.label} ${s.mag.toFixed(1)} alt ${s.altitude.toFixed(0)}° az ${s.azimuth.toFixed(0)}°`).join(', ') || 'none in frame'}`;
         }
       }

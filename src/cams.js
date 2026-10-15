@@ -9,14 +9,30 @@
 // that makes cloud white read bluer than the other cam's sky. The fraction tops up the low
 // cover the scene draws cumulus from (main.js, camCover); it never takes cloud away, and only
 // by day with the sun well up, since dusk paints the sky unevenly on its own.
+//
+// Fog, too. On a calm cold morning the valley fills with fog that the grid model never has (a
+// morning of fog to the South Hills, Sentinel gone from downtown, and the feed said clear, 0%
+// cloud, 18 km visibility, 2026-10-15). A fogged frame is smooth: the mountain that fills the
+// KPAX cam's frame is a flat gray, so the texture of each cam's scene (the mean spread within
+// 8 px blocks of the part of the frame that holds the hills) reads the fog, a flat frame fog
+// and a textured one clear. The KPAX cam decides (Sentinel fills it, so a blank frame is not
+// ambiguous); the Mountain Press cam, 400 ft up the South Hills, says how deep the fog is: in
+// it too, and the sea comes up the slopes (main.js, camFog).
 import { LAT, LON } from './state.js';
 import { sunPosition } from './util/solar.js';
 
 // Each cam's sky, as rectangles in fractions of the frame, kept off the burned-in captions and
 // sponsor boxes and above the ridges (docs/webcams.md). Re-measure if a cam is re-aimed.
+// `scene` is the part of the frame that holds the hills (off the near trees and the captions),
+// read for fog; `fogTex` the block texture that is full fog and the one that is clear. Measured
+// on a fogged morning (2026-10-15): 0.7 on the KPAX frame inside the fog; on the Mountain Press
+// frame 2.3 inside it and 3.6 an hour later with the cam just above the sea, hazy hills over a
+// white floor, which should read as the fog partway down, so its clear end sits just above that.
+// The clear ends are set without a clear frame to measure; check them against one (the ?diag
+// line shows each cam's texture).
 export const CAMS = [
-  { id: 'mp', label: 'Mountain Press cam', sky: [[0.23, 0.05, 0.82, 0.20], [0.0, 0.11, 0.23, 0.36], [0.23, 0.20, 0.50, 0.29]] },
-  { id: 'kpax', label: 'KPAX cam', sky: [[0.18, 0.02, 0.60, 0.18], [0.60, 0.02, 0.98, 0.24]] },
+  { id: 'mp', label: 'Mountain Press cam', sky: [[0.23, 0.05, 0.82, 0.20], [0.0, 0.11, 0.23, 0.36], [0.23, 0.20, 0.50, 0.29]], scene: [[0.05, 0.36, 0.80, 0.58]], fogTex: [2.5, 4.5] },
+  { id: 'kpax', label: 'KPAX cam', sky: [[0.18, 0.02, 0.60, 0.18], [0.60, 0.02, 0.98, 0.24]], scene: [[0.20, 0.30, 0.98, 0.95]], fogTex: [1.5, 5] },
 ];
 export const CAM_FRESH_MS = 30 * 60 * 1000;   // a reading older than this is not used
 const DEV = 18;      // luminance steps from the row's median that make a pixel cloud
@@ -73,6 +89,33 @@ export function cloudFraction(data, W, H, rects) {
   return { cloud: lum < DARK ? null : cloud / n, lum };
 }
 
+// The mean luminance spread within 8 px blocks over the rectangles: a fogged frame is smooth,
+// a clear hillside is not. Also the mean luminance, to know a dark frame.
+export function texture(data, W, H, rects) {
+  const px = data.data;
+  let blocks = 0, sdSum = 0, lumSum = 0, n = 0;
+  for (const [fx0, fy0, fx1, fy1] of rects) {
+    const x0 = Math.floor(fx0 * W), y0 = Math.floor(fy0 * H), x1 = Math.floor(fx1 * W), y1 = Math.floor(fy1 * H);
+    for (let by = y0; by + BLOCK <= y1; by += BLOCK) {
+      for (let bx = x0; bx + BLOCK <= x1; bx += BLOCK) {
+        let s = 0, s2 = 0;
+        for (let y = by; y < by + BLOCK; y++) {
+          for (let x = bx; x < bx + BLOCK; x++) {
+            const i = (y * W + x) * 4;
+            const l = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
+            s += l; s2 += l * l;
+          }
+        }
+        const m = s / (BLOCK * BLOCK);
+        sdSum += Math.sqrt(Math.max(0, s2 / (BLOCK * BLOCK) - m * m)); blocks++;
+        lumSum += s; n += BLOCK * BLOCK;
+      }
+    }
+  }
+  if (!blocks) return { tex: null, lum: 0 };
+  return { tex: sdSum / blocks, lum: lumSum / n };
+}
+
 async function readCam(cam, canvas) {
   const img = await loadImage('api/cam/' + cam.id + '?t=' + Math.floor(Date.now() / CAM_FRESH_MS));
   const W = img.naturalWidth, H = img.naturalHeight;
@@ -81,19 +124,26 @@ async function readCam(cam, canvas) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0);
   const data = ctx.getImageData(0, 0, W, H);
-  return cloudFraction(data, W, H, cam.sky);
+  const r = cloudFraction(data, W, H, cam.sky);
+  // fog: how far the scene's texture has dropped from clear toward a flat frame (null at night)
+  const t = cam.scene ? texture(data, W, H, cam.scene) : { tex: null, lum: 0 };
+  r.tex = t.tex;
+  r.fog = t.tex == null || t.lum < DARK ? null : Math.max(0, Math.min(1, (cam.fogTex[1] - t.tex) / (cam.fogTex[1] - cam.fogTex[0])));
+  return r;
 }
 
 // Reads every cam it can; the cumulus is the most any one of them sees. `ok` is false when none
 // answered (the dev server without the proxy, GitHub Pages, a cam down).
 export async function fetchCams() {
   const canvas = document.createElement('canvas');
-  const out = { ok: false, at: Date.now(), cumulus: 0, cams: {} };
+  // fog: the KPAX cam's reading (null when it is dark or down); fogHigh: the Mountain Press cam's
+  const out = { ok: false, at: Date.now(), cumulus: 0, fog: null, fogHigh: null, cams: {} };
   for (const cam of CAMS) {
     try {
       const r = await readCam(cam, canvas);
       out.cams[cam.id] = r;
       if (r.cloud != null) { out.ok = true; out.cumulus = Math.max(out.cumulus, r.cloud); }
+      if (r.fog != null) { out.ok = true; if (cam.id === 'kpax') out.fog = r.fog; else out.fogHigh = r.fog; }
     } catch (err) {
       out.cams[cam.id] = { error: String(err && err.message || err) };
     }
@@ -115,4 +165,26 @@ export function camCover(cams, w, now) {
   if (c <= low + 0.05) return null;
   const code = w.code <= 2 ? (c > 0.3 ? 2 : Math.max(w.code, 1)) : w.code;
   return { coverLow: c, cover: Math.max(w.cover ?? 0, c), code, camCumulus: c };
+}
+
+// The fog the cams see and the feed does not, or null: the weather code turned to fog when the
+// KPAX frame has gone flat, with how deep it is (`fogTop`, 0..1: the valley floor only, or up
+// the slopes when the Mountain Press cam on the South Hills is inside it too). Only a fresh
+// reading with the sun near up (the cams are lit from civil dawn; fog is a morning thing), when
+// the feed is not already saying fog or precipitation, and only in cold weather: a warm blank
+// frame is smoke, which is not drawn yet, and a smoke day must not come out as an inversion.
+export const FOG_MAX_TEMP = 50;   // °F
+export function camFog(cams, w, now) {
+  if (!cams || !cams.ok || !w || !w.ok || cams.fog == null) return null;
+  if (now.getTime() - cams.at > CAM_FRESH_MS) return null;
+  if (w.code >= 45) return null;
+  if (w.temp != null && w.temp >= FOG_MAX_TEMP) return null;
+  if (sunPosition(now, LAT, LON).altitude < -4) return null;
+  if (cams.fog < 0.5) return null;
+  // The sea is always drawn opaque. A reading of how thin the fog is was tried from the Mountain
+  // Press cam's residual texture and misread the classic inversion: that texture rises when the
+  // fog top drops below the cam and the hills come into view over a solid white floor, which is
+  // the opaque case, not the thin one (2026-10-15, the user: "most true inversion days they are
+  // pretty opaque"; "it's pretty heavy in the cams").
+  return { code: 45, camFog: cams.fog, fogTop: 0.35 + 0.65 * (cams.fogHigh ?? 0) };
 }

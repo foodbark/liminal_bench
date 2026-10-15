@@ -1,6 +1,6 @@
 import { createState, W, H, META, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
-import { fetchCams, camCover } from './cams.js';
+import { fetchCams, camCover, camFog } from './cams.js';
 import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { dustingTables, presetHours } from './dusting.js';
 import { skyPalette } from './palette.js';
@@ -63,7 +63,10 @@ function computeEnv() {
   let w = state.weather;
   if (o.enabled && o.weather !== 'live') w = { ...w, ok: true, ...WEATHER_PRESETS[o.weather] };
   else {
-    // the cumulus the webcams see and the feed does not (src/cams.js): the low cover raised to it
+    // the fog and the cumulus the webcams see and the feed does not (src/cams.js): a flat KPAX
+    // frame is fog in the valley, the low cover raised to the cloud the cams see
+    const fogC = camFog(state.cams, w, now);
+    if (fogC) w = { ...w, ...fogC };
     const cam = camCover(state.cams, w, now);
     if (cam) w = { ...w, ...cam };
   }
@@ -77,11 +80,16 @@ function computeEnv() {
   cond.shade = w.coverLow != null ? Math.min(1, (w.coverLow ?? 0) + (w.coverMid ?? 0) * 0.7 + (w.coverHigh ?? 0) * 0.25) : cover;
   if (o.enabled && o.cover >= 0) cond.shade = cover;
   if (cond.label === 'overcast' && (w.coverLow ?? 1) < 0.4 && (w.coverMid ?? 1) < 0.4) cond.label = 'high overcast';
-  // Inversion: fog in a cold month means the valley is a sea of fog with the ranges above it.
-  // Mountain fog: low cloud hanging on the slopes.
+  // Inversion: fog in a cold month means the valley is a sea of fog with the ranges above it
+  // and a clear sky over it; fogTop is how far up the slopes the sea reaches (0: the valley
+  // floor, as the feed's own fog code is taken; 1: the cams have it up the South Hills). A
+  // version that put the bench inside the fog (the hills into the cloud, the sky a veil, the
+  // meadow stippled) was tried on 2026-10-15 and was "much worse": the sea it is, clear sky.
+  // Mountain fog: low cloud on the slopes.
   const preset = o.enabled && o.weather !== 'live' ? WEATHER_PRESETS[o.weather] : null;
   const cold = month >= 10 || month <= 1 || (w.temp != null && w.temp < 36);
   const inversion = preset ? (preset.inversion || 0) : (cond.fog && cold ? 1 : 0);
+  const fogTop = inversion ? (preset ? (preset.fogTop || 0) : (w.fogTop || 0)) : 0;
   let mountainFog = preset ? (preset.lowcloud || 0) : Math.max(0, Math.min(1, ((w.coverLow ?? 0) - 0.5) / 0.35));
   if (!preset && cond.precip.intensity > 0) mountainFog = Math.max(mountainFog, cond.precip.intensity * 0.6);
   if (inversion) { cond.fog = false; cond.label = 'inversion'; }
@@ -142,10 +150,10 @@ function computeEnv() {
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
-    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, mountainFog, dusting, greenup, sky,
+    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, fogTop, mountainFog, dusting, greenup, sky,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
     sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}`,
     ambientKey,
   };
@@ -170,7 +178,8 @@ async function refreshCams() {
   try {
     state.cams = await fetchCams();
     const c = state.cams;
-    renderer.diag.cams = (c.ok ? `cumulus ${c.cumulus.toFixed(2)}` : 'none') + ' · ' + Object.entries(c.cams).map(([id, r]) => `${id} ${r.error ? 'failed' : r.cloud == null ? 'dark' : r.cloud.toFixed(2)}`).join(', ');
+    renderer.diag.cams = (c.ok ? `cumulus ${c.cumulus.toFixed(2)}, fog ${c.fog == null ? 'n/a' : c.fog.toFixed(2)}, high ${c.fogHigh == null ? 'n/a' : c.fogHigh.toFixed(2)}` : 'none') + ' · '
+      + Object.entries(c.cams).map(([id, r]) => `${id} ${r.error ? 'failed' : r.cloud == null ? 'dark' : `cloud ${r.cloud.toFixed(2)} tex ${r.tex == null ? '?' : r.tex.toFixed(1)}`}`).join(', ');
   }
   catch (err) { console.warn('cams failed', err); renderer.diag.cams = 'failed: ' + (err && err.message || err); }
 }

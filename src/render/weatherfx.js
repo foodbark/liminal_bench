@@ -192,11 +192,16 @@ export class WeatherFX {
   }
 
   drawFog(ctx, env) {
-    if (!env.cond.fog) return;
+    // the feed's own fog only. An inversion gets no foreground haze: the bench is above the
+    // sea, and a fog that reached it would gray the whole scene, not the foreground (the user,
+    // 2026-10-15). This stipple at half density over dark trees also read as paint sprayed on
+    // the lens, so any future haze goes in the terrain pass as a per-pixel blend.
+    const strength = env.cond.fog ? 1 : 0;
+    if (strength <= 0.01) return;
     const col = rgb(mulRGB([214, 219, 230], env.pal.ambient));
     // density through the fog's depth, row by row through the blue-noise grain: thickest a
     // little below the horizon, thinning up into the sky and down into the meadow
-    const knots = [[-110, 0.1], [-55, 0.3], [-25, 0.5], [10, 0.62], [55, 0.45], [110, 0.25], [200, 0.1]];
+    const knots = [[-110, 0.1], [-55, 0.3], [-25, 0.5], [10, 0.62], [55, 0.45], [110, 0.25], [200, 0.1]].map(([u, d]) => [u, d * strength]);
     const y0 = Math.round(HORIZON + knots[0][0] * SCALE), y1 = Math.round(HORIZON + knots[knots.length - 1][0] * SCALE);
     let k = 0;
     for (let y = y0; y < y1; y++) {
