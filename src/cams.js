@@ -116,6 +116,43 @@ export function texture(data, W, H, rects) {
   return { tex: sdSum / blocks, lum: lumSum / n };
 }
 
+// The median luminance over the rectangles, through a histogram (the rectangles are most of a
+// 1920 px frame; a sort would not do).
+export function medianLum(data, W, H, rects) {
+  const px = data.data, hist = new Uint32Array(256);
+  let n = 0;
+  for (const [fx0, fy0, fx1, fy1] of rects) {
+    const x0 = Math.floor(fx0 * W), y0 = Math.floor(fy0 * H), x1 = Math.floor(fx1 * W), y1 = Math.floor(fy1 * H);
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * W + x) * 4;
+        hist[Math.min(255, Math.round((px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000))]++; n++;
+      }
+    }
+  }
+  if (!n) return null;
+  let acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc * 2 >= n) return v; }
+  return 255;
+}
+
+// Is the cam on its usual view? The KPAX cam is a pan-tilt-zoom camera, and on a clear afternoon
+// (2026-10-16) it had been swung down onto the stadium: its sky rectangles were full of trees
+// and hillside, which read as 78% cloud, and the bench hung mountain fog under a blue sky. By
+// day the sky is brighter than the hills, so a frame counts only when every sky rectangle's
+// median luminance is above the hills' (the scene rectangle's); the margin is zero until a
+// clear frame has been measured (that day's panned frame: sky 98 and 127 against hills 110; the
+// Mountain Press frame: sky 193 to 207 against hills 149). An off frame adds nothing, cloud
+// or fog, which is the cams' rule anyway.
+function onView(data, W, H, cam) {
+  if (!cam.scene) return { on: true };
+  const hills = medianLum(data, W, H, cam.scene);
+  let sky = null;
+  for (const r of cam.sky) { const m = medianLum(data, W, H, [r]); if (m != null && (sky == null || m < sky)) sky = m; }
+  if (hills == null || sky == null) return { on: true, sky, hills };
+  return { on: sky > hills, sky, hills };
+}
+
 async function readCam(cam, canvas) {
   const img = await loadImage('api/cam/' + cam.id + '?t=' + Math.floor(Date.now() / CAM_FRESH_MS));
   const W = img.naturalWidth, H = img.naturalHeight;
@@ -129,6 +166,10 @@ async function readCam(cam, canvas) {
   const t = cam.scene ? texture(data, W, H, cam.scene) : { tex: null, lum: 0 };
   r.tex = t.tex;
   r.fog = t.tex == null || t.lum < DARK ? null : Math.max(0, Math.min(1, (cam.fogTex[1] - t.tex) / (cam.fogTex[1] - cam.fogTex[0])));
+  // a cam swung off its view says nothing, by day (at night both readings are null already)
+  const v = onView(data, W, H, cam);
+  r.sky = v.sky; r.hills = v.hills; r.off = false;
+  if (!v.on && r.lum >= DARK) { r.off = true; r.cloud = null; r.fog = null; }
   return r;
 }
 

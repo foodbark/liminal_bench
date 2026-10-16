@@ -179,7 +179,7 @@ async function refreshCams() {
     state.cams = await fetchCams();
     const c = state.cams;
     renderer.diag.cams = (c.ok ? `cumulus ${c.cumulus.toFixed(2)}, fog ${c.fog == null ? 'n/a' : c.fog.toFixed(2)}, high ${c.fogHigh == null ? 'n/a' : c.fogHigh.toFixed(2)}` : 'none') + ' · '
-      + Object.entries(c.cams).map(([id, r]) => `${id} ${r.error ? 'failed' : r.cloud == null ? 'dark' : `cloud ${r.cloud.toFixed(2)} tex ${r.tex == null ? '?' : r.tex.toFixed(1)}`}`).join(', ');
+      + Object.entries(c.cams).map(([id, r]) => `${id} ${r.error ? 'failed' : r.off ? `off its view (sky ${r.sky} < hills ${r.hills})` : r.cloud == null ? 'dark' : `cloud ${r.cloud.toFixed(2)} tex ${r.tex == null ? '?' : r.tex.toFixed(1)} sky ${r.sky}/hills ${r.hills}`}`).join(', ');
   }
   catch (err) { console.warn('cams failed', err); renderer.diag.cams = 'failed: ' + (err && err.message || err); }
 }

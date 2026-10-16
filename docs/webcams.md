@@ -4,7 +4,7 @@ Surveyed 2026-09-03. All are third-party cameras; check terms before anything pu
 
 ## In use (2026-10-13)
 
-The Mountain Press and KPAX stills feed the cumulus: `functions/api/cam/[name].js` proxies them (`/api/cam/mp`, `/api/cam/kpax`) with a ten-minute edge cache and a user agent naming the site, and `src/cams.js` measures the cloud in the sky above each cam's ridges. See CLAUDE.md. If either cam is re-aimed, re-measure the sky rectangles in `CAMS`.
+The Mountain Press and KPAX stills feed the cumulus: `functions/api/cam/[name].js` proxies them (`/api/cam/mp`, `/api/cam/kpax`) with a ten-minute edge cache and a user agent naming the site, and `src/cams.js` measures the cloud in the sky above each cam's ridges. See CLAUDE.md. If either cam is re-aimed for good, re-measure the sky rectangles in `CAMS`. The KPAX cam is a pan-tilt-zoom camera and is sometimes swung off its wide view of Sentinel (down onto the stadium, 2026-10-16); `onView` in `src/cams.js` drops a frame whose sky rectangles are darker than its hills, and `?diag` reports it as off its view.
 
 ## Worth using
 
