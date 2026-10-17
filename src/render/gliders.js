@@ -36,15 +36,19 @@ function crestY(x) {
 }
 
 // How likely wings are up right now, 0..1: daylight well into the day (the face thermals from
-// late morning), dry, no low cloud on the slopes, a light wind out of the west or southwest, so
-// the launch faces into it. Strong wind or a north wind keeps everyone on the ground.
+// late morning) and right up to sunset, since the evening glass-off keeps pilots on Sentinel's
+// face until the sun is gone (the user, 2026-10-16: wings up till sunset while the bench had
+// grounded them from 4° of sun), dry, no low cloud on the slopes, a light wind out of the west
+// or southwest, so the launch faces into it. Strong wind or a north wind keeps everyone on the
+// ground. The evening end is the sun, not the clock: a 19:30 cutoff grounded June's wings two
+// hours early and did nothing in December.
 export function gliderChance(env) {
-  if (env.sun.altitude < 4) return 0;
+  if (env.sun.altitude < 0) return 0;
   const c = env.cond;
   if (c.precip.intensity > 0 || c.fog || c.storm || env.inversion || env.mountainFog > 0.3) return 0;
   const { hour, minute } = localParts(env.now);
   const h = hour + minute / 60;
-  const day = clamp((h - 10) / 2, 0, 1) * clamp((19.5 - h) / 2, 0, 1);
+  const day = clamp((h - 10) / 2, 0, 1);
   if (day <= 0) return 0;
   const spd = env.wind.speed;
   const wind = spd > 16 ? 0 : spd > 10 ? (16 - spd) / 6 : 1;
