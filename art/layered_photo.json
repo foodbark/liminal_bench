@@ -624,6 +624,108 @@
    ],
    "scale": 0.8,
    "far": true
+  },
+  {
+   "photo": "clouds/cumulus_04.jpg",
+   "box": [
+    0.5,
+    0.64,
+    0.68,
+    0.81
+   ],
+   "clip": true,
+   "scale": 0.5,
+   "cloud": 0.18,
+   "sky": 0.42
+  },
+  {
+   "photo": "clouds/cumulus_04.jpg",
+   "box": [
+    0.72,
+    0.73,
+    0.95,
+    0.945
+   ],
+   "scale": 0.5,
+   "clip": true
+  },
+  {
+   "photo": "clouds/cumulus_04.jpg",
+   "box": [
+    0.18,
+    0.73,
+    0.37,
+    0.99
+   ],
+   "clip": true,
+   "scale": 0.5
+  },
+  {
+   "photo": "clouds/cumulus_03.jpg",
+   "box": [
+    0.3,
+    0.2,
+    0.72,
+    0.52
+   ],
+   "clip": true,
+   "scale": 0.4
+  },
+  {
+   "photo": "clouds/cumulus_03.jpg",
+   "box": [
+    0.14,
+    0.4,
+    0.31,
+    0.5
+   ],
+   "clip": true,
+   "scale": 0.6
+  },
+  {
+   "photo": "clouds/cumulus_02.jpg",
+   "box": [
+    0.17,
+    0.54,
+    0.3,
+    0.603
+   ],
+   "clip": true,
+   "scale": 0.6
+  },
+  {
+   "photo": "clouds/cumulus_02.jpg",
+   "box": [
+    0.4,
+    0.55,
+    0.73,
+    0.605
+   ],
+   "clip": true,
+   "scale": 0.45,
+   "far": true
+  },
+  {
+   "photo": "clouds/cumulus_02.jpg",
+   "box": [
+    0.855,
+    0.525,
+    0.94,
+    0.585
+   ],
+   "scale": 0.6,
+   "far": true
+  },
+  {
+   "photo": "clouds/cumulus_02.jpg",
+   "box": [
+    0.79,
+    0.535,
+    0.86,
+    0.59
+   ],
+   "scale": 0.6,
+   "far": true
   }
  ]
 }

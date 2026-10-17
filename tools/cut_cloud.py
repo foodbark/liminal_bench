@@ -10,6 +10,8 @@ translucent edge averages down into the cloud rather than snapping to a hard lin
   --sky S     blueness at and above which it is wholly sky (default: measured as the 90th
               percentile inside the box, less a margin; a thin veil over the sky sits between)
   --pad N     pixels of margin kept around the cloud's bounding box (default 8)
+  --list      no cut: print the separate clouds the key finds in the box, largest first, with
+              the box fractions to pass back in, for filling the config's clouds list
   --clip      the box also cuts. Cumulus join at their bases, and without this the whole joined
               mass comes along; with it the cut runs straight along the box edge, so put that
               edge where the join is narrow or in the gray of the base
@@ -55,6 +57,26 @@ def label_largest(mask, prefer=None):
     return full & mask
 
 
+def components(mask, y0, y1, x0, x1):
+    """Every 4-connected component of the mask inside the box, on a coarse grid: (pixels, x0, y0, x1, y1), largest first."""
+    s = 4
+    sub = mask[y0:y1, x0:x1]
+    small = sub[:sub.shape[0] // s * s, :sub.shape[1] // s * s].reshape(sub.shape[0] // s, s, sub.shape[1] // s, s).mean((1, 3)) > 0.5
+    seen = np.zeros_like(small); out = []
+    for sy, sx in zip(*np.nonzero(small)):
+        if seen[sy, sx]: continue
+        stack = [(sy, sx)]; seen[sy, sx] = True; comp = []
+        while stack:
+            y, x = stack.pop(); comp.append((y, x))
+            for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+                if 0 <= ny < small.shape[0] and 0 <= nx < small.shape[1] and small[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True; stack.append((ny, nx))
+        ys = [p[0] for p in comp]; xs = [p[1] for p in comp]
+        out.append((len(comp) * s * s, x0 + min(xs) * s, y0 + min(ys) * s, x0 + (max(xs) + 1) * s, y0 + (max(ys) + 1) * s))
+    out.sort(reverse=True)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('photo'); ap.add_argument('out')
@@ -63,6 +85,7 @@ def main():
     ap.add_argument('--sky', type=float)
     ap.add_argument('--pad', type=int, default=8)
     ap.add_argument('--clip', action='store_true', help='the box also cuts: for a cloud joined to its neighbors, which otherwise come with it')
+    ap.add_argument('--list', action='store_true', help='list the separate clouds in the box with their boxes, and cut nothing')
     a = ap.parse_args()
     im = ImageOps.exif_transpose(Image.open(a.photo)).convert('RGB')
     W, H = im.size
@@ -75,6 +98,10 @@ def main():
     if sky <= a.cloud + 0.05: sys.exit(f'no blue sky to key against in the box (sky blueness {sky:.2f}, cloud {a.cloud:.2f}): '
                                        'the sky near the horizon is as pale as a cloud base, so this key only works for clouds against blue')
     alpha = ((sky - blueness) / (sky - a.cloud)).clip(0, 1)
+    if a.list:
+        for n, bx0, by0, bx1, by1 in components(alpha >= 0.6, y0, y1, x0, x1)[:30]:
+            print(f'{n:8d} px  {bx1 - bx0}x{by1 - by0}  box [{bx0 / W:.3f}, {by0 / H:.3f}, {bx1 / W:.3f}, {by1 / H:.3f}]')
+        return
     # the box picks the cloud (the one with the most core inside it) and never clips it: the
     # whole frame is keyed, so a cloud that runs past the box edge keeps its far side
     inbox = np.zeros(alpha.shape, bool); inbox[y0:y1, x0:x1] = True
