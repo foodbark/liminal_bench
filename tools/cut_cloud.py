@@ -12,6 +12,8 @@ translucent edge averages down into the cloud rather than snapping to a hard lin
   --pad N     pixels of margin kept around the cloud's bounding box (default 8)
   --list      no cut: print the separate clouds the key finds in the box, largest first, with
               the box fractions to pass back in, for filling the config's clouds list
+  --all       keep every cloud in the box (a cluster, or one cloud the key sees as two pieces)
+              instead of the single one with the most core inside it
   --clip      the box also cuts. Cumulus join at their bases, and without this the whole joined
               mass comes along; with it the cut runs straight along the box edge, so put that
               edge where the join is narrow or in the gray of the base
@@ -77,6 +79,43 @@ def components(mask, y0, y1, x0, x1):
     return out
 
 
+def seam_cut(alpha, ln, axis, pos, d, B):
+    """Move a straight cut at `pos` (a column if axis == 1, a row if 0; d the direction into the
+    cloud) onto the darkest seam through the band of width B inside it, and clear what lies
+    between the cut and the seam."""
+    a = alpha if axis == 1 else alpha.T
+    L = ln if axis == 1 else ln.T
+    H, W = a.shape
+    lo, hi = (pos, min(W, pos + B)) if d > 0 else (max(0, pos - B + 1), pos + 1)
+    band = L[:, lo:hi]; cover = a[:, lo:hi] > 0.3
+    if band.shape[1] < 3 or not cover.any(): return alpha
+    # cost: the lightness where there is cloud, and more so the crease (how much darker a pixel is
+    # than its surroundings, so a seam finds the folds between lobes even where the whole band
+    # is bright), a middle value over sky, and a slight lean toward the cut so an even field is
+    # cut near its edge rather than deep in
+    n = band.shape[1]
+    k = 25
+    pad = np.pad(band, k // 2, mode='edge')
+    c = np.cumsum(np.cumsum(pad, 0), 1); c = np.pad(c, ((1, 0), (1, 0)))
+    H2, W2 = band.shape
+    local = (c[k:k + H2, k:k + W2] - c[:H2, k:k + W2] - c[k:k + H2, :W2] + c[:H2, :W2]) / (k * k)
+    crease = (band - local) * 3
+    lean = (np.arange(n) if d > 0 else np.arange(n)[::-1]) / max(n - 1, 1) * 0.08
+    cost = np.where(cover, band * 0.6 + crease, 0.45) + lean[None, :]
+    cum = cost.copy()
+    for y in range(1, H):
+        prev = cum[y - 1]
+        best = np.minimum(np.minimum(np.pad(prev[:-1], (1, 0), constant_values=np.inf), prev), np.pad(prev[1:], (0, 1), constant_values=np.inf))
+        cum[y] = cost[y] + best
+    seam = np.empty(H, int); seam[-1] = int(np.argmin(cum[-1]))
+    for y in range(H - 2, -1, -1):
+        x = seam[y + 1]; x0 = max(0, x - 1); seam[y] = x0 + int(np.argmin(cum[y, x0:x + 2]))
+    cols = np.arange(n)[None, :]
+    outside = cols < seam[:, None] if d > 0 else cols > seam[:, None]
+    a = a.copy(); a[:, lo:hi] = np.where(outside, 0, a[:, lo:hi])
+    return a if axis == 1 else a.T
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('photo'); ap.add_argument('out')
@@ -86,6 +125,7 @@ def main():
     ap.add_argument('--pad', type=int, default=8)
     ap.add_argument('--clip', action='store_true', help='the box also cuts: for a cloud joined to its neighbors, which otherwise come with it')
     ap.add_argument('--list', action='store_true', help='list the separate clouds in the box with their boxes, and cut nothing')
+    ap.add_argument('--all', action='store_true', help='keep every cloud in the box, not just the one with the most core in it: for a cluster, or a cloud in two pieces')
     a = ap.parse_args()
     im = ImageOps.exif_transpose(Image.open(a.photo)).convert('RGB')
     W, H = im.size
@@ -106,8 +146,8 @@ def main():
     # whole frame is keyed, so a cloud that runs past the box edge keeps its far side
     inbox = np.zeros(alpha.shape, bool); inbox[y0:y1, x0:x1] = True
     if a.clip: alpha[~inbox] = 0
-    core = label_largest((alpha >= 0.6), prefer=inbox)
-    if core is None: sys.exit('no cloud found in the box')
+    core = ((alpha >= 0.6) & inbox) if a.all else label_largest((alpha >= 0.6), prefer=inbox)
+    if core is None or not core.any(): sys.exit('no cloud found in the box')
     # the soft edge belongs to the chosen cloud only where it touches that cloud's core
     try:
         from scipy import ndimage
@@ -135,10 +175,11 @@ def main():
     # premultiplied average in the pixelate step weighs it by its alpha
     px = np.where(a3 >= 0.25, (px - skycol * (1 - a3)) / np.maximum(a3, 0.25), px).clip(0, 255)
     # Where the cloud runs into a cut (a clipped box edge, or the photo's own frame) the edge is
-    # a straight line. Over a band inside it the cloud is trimmed from the cut inward, each row
-    # or column eaten back until the first pixel lit enough for that depth: the lit lobes reach
-    # nearest the cut, the shaded base recedes, so the cut follows the photo's structure instead
-    # of a ruler, and nothing inside the cloud is touched. A mask on the photo's pixels, nothing drawn.
+    # a straight line. Inside a band along it the cut is moved onto the darkest path through the
+    # cloud (a seam: one pixel per row, stepping at most one column per row, the path of least
+    # lightness), which runs along the shaded creases between the lobes, so the cut follows the
+    # photo's own structure and only ever shows a lobe's edge. Trimming by a lightness threshold
+    # instead left a ruler line wherever a lobe was uniformly bright up to the cut. Nothing drawn.
     cy, cx = np.nonzero(core)
     cw, ch = cx.max() - cx.min() + 1, cy.max() - cy.min() + 1
     lum = px.mean(2); lo_l, hi_l = np.percentile(lum[core], [5, 95])
@@ -146,16 +187,12 @@ def main():
     edges = []   # (axis, position, direction into the cloud)
     for pos, axis, d, size in ((x0 if a.clip else 0, 1, 1, cw), ((x1 if a.clip else px.shape[1]) - 1, 1, -1, cw), (y0 if a.clip else 0, 0, 1, ch), ((y1 if a.clip else px.shape[0]) - 1, 0, -1, ch)):
         coord = cx if axis == 1 else cy
-        if np.abs(coord - pos).min() <= 2: edges.append((axis, pos, d, max(60, int(size * 0.12))))
+        if np.abs(coord - pos).min() <= 2: edges.append((axis, pos, d, max(100, int(size * 0.22))))
     for axis, pos, d, B in edges:
         idx = np.arange(px.shape[1] if axis == 1 else px.shape[0])
         dist = ((idx - pos) * d).clip(0, B) / B          # 0 at the cut, 1 a band's width in
         dist = dist[None, :] if axis == 1 else dist[:, None]
-        lit = ln >= (1 - dist)                           # lit enough to stand at this depth
-        if d < 0: lit = np.flip(lit, axis=1 - axis)     # accumulate from the cut inward
-        keep = np.maximum.accumulate(lit, axis=1 - axis)
-        if d < 0: keep = np.flip(keep, axis=1 - axis)
-        alpha = alpha * keep
+        alpha = seam_cut(alpha, ln, axis, pos, d, B)
     ys, xs = np.nonzero(alpha > 0)
     by0, by1 = max(ys.min() - a.pad, 0), min(ys.max() + a.pad + 1, alpha.shape[0])
     bx0, bx1 = max(xs.min() - a.pad, 0), min(xs.max() + a.pad + 1, alpha.shape[1])

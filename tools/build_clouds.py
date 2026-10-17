@@ -4,7 +4,7 @@
 Each entry of "clouds" in art/NAME.json names a photo under art/ and the cloud in it:
   {"photo": "clouds/cumulus_01.jpg", "box": [fx0, fy0, fx1, fy1], "clip": true, "scale": 0.4, "far": false}
 box picks the cloud (fractions of the frame), clip also cuts along the box for a cloud joined to
-its neighbors (tools/cut_cloud.py), scale is sprite pixels per photo pixel, far marks a small
+its neighbors, all keeps every cloud in the box (tools/cut_cloud.py), scale is sprite pixels per photo pixel, far marks a small
 cloud for the rows near the cloud horizon. Each cut-out goes through tools/pixelate.py as a
 cloud. Writes assets/clouds.png (the sprites stacked top to bottom) and assets/clouds.json
 (their rectangles), and the half-size copies in assets/small/. No drawing: every sprite pixel is
@@ -43,6 +43,7 @@ def main():
         cut, out = os.path.join(tmp, f'cut{i}.png'), os.path.join(tmp, f'sprite{i}.png')
         cmd = [sys.executable, '-I', os.path.join(ROOT, 'tools/cut_cloud.py'), os.path.join(ROOT, 'art', e['photo']), cut, '--box', ','.join(str(v) for v in e['box'])]
         if e.get('clip'): cmd.append('--clip')
+        if e.get('all'): cmd.append('--all')
         if 'sky' in e: cmd += ['--sky', str(e['sky'])]
         if 'cloud' in e: cmd += ['--cloud', str(e['cloud'])]
         if subprocess.run(cmd).returncode:

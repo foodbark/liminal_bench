@@ -703,6 +703,61 @@
    ],
    "scale": 0.6,
    "far": true
+  },
+  {
+   "photo": "clouds/cumulus_06.jpg",
+   "box": [
+    0.37,
+    0.33,
+    0.6,
+    0.43
+   ],
+   "scale": 0.5,
+   "all": true
+  },
+  {
+   "photo": "clouds/cumulus_05.jpg",
+   "box": [
+    0.03,
+    0.0,
+    0.72,
+    0.29
+   ],
+   "clip": true,
+   "scale": 0.25
+  },
+  {
+   "photo": "clouds/cumulus_05.jpg",
+   "box": [
+    0.28,
+    0.24,
+    0.355,
+    0.295
+   ],
+   "scale": 0.6,
+   "far": true
+  },
+  {
+   "photo": "clouds/cumulus_05.jpg",
+   "box": [
+    0.02,
+    0.14,
+    0.085,
+    0.185
+   ],
+   "scale": 0.6,
+   "far": true
+  },
+  {
+   "photo": "clouds/cumulus_05.jpg",
+   "box": [
+    0.825,
+    0.075,
+    0.885,
+    0.112
+   ],
+   "scale": 0.6,
+   "far": true
   }
  ]
 }
