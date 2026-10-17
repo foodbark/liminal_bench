@@ -302,16 +302,45 @@ export function drawMoon(ctx, env) {
   ctx.globalAlpha = 1;
 }
 
-export function drawSun(ctx, env) {
+// Whether the sun is drawn again over the cloud sheets: only high and middle cloud up there
+// (cirrus, a cirrostratus veil, altocumulus), nothing that truly hides the sun. A thick
+// altostratus veil or any low deck keeps it behind the sheet.
+export function sunOverSheets(sky) {
+  return !!sky && (sky.strato + sky.stratus + sky.nimbo) < 0.05 && (sky.veilMid || 0) < 0.3;
+}
+
+// A dithered ring: the 22° halo an ice veil puts round the sun.
+function fillRing(ctx, cx, cy, r0, r1) {
+  for (let dy = -r1; dy <= r1; dy++) {
+    const o = Math.floor(Math.sqrt(r1 * r1 - dy * dy));
+    const i = Math.abs(dy) < r0 ? Math.floor(Math.sqrt(r0 * r0 - dy * dy)) : -1;
+    if (i < 0) ctx.fillRect(cx - o, cy + dy, 2 * o + 1, 1);
+    else { ctx.fillRect(cx - o, cy + dy, o - i, 1); ctx.fillRect(cx + i + 1, cy + dy, o - i, 1); }
+  }
+}
+
+// `over`: the second drawing, on the page over the high sheets (sunOverSheets), so the disc
+// shows through a cirrostratus veil the way it does in life, with a faint halo when the veil
+// is there to make one (the user, 2026-10-17: the sun was gone under a 100% high veil on an
+// afternoon of hard shadows). The base pass still draws it under the sheets for the low decks.
+export function drawSun(ctx, env, over = false) {
   const alt = env.sun.altitude;
   if (alt < -1.5) return;
   const p = skyXY(env.sun.azimuth, alt);
-  const cover = env.cond.shade ?? env.cond.cover;   // the sheets in front do the hiding; a veil leaves a pale disc
+  const cover = over ? 0 : (env.cond.shade ?? env.cond.cover);   // the sheets in front do the hiding; a veil leaves a pale disc
+  const sk = env.sky;
+  const haloK = over && sk ? clamp((sk.veilHigh || 0) * 1.0 + (sk.veilMid || 0) * 0.6, 0, 1) : 0;
   const col = rgb(env.pal.sunColor);
   const bright = rgb(lerpRGB(env.pal.sunColor, [255, 255, 245], clamp(alt / 12, 0, 0.8)));
   const dim = clamp(1 - cover * 1.1, 0, 1);
   const swell = 1 + 0.45 * smooth(clamp(1 - (alt - RIDGE_DEG) / 14, 0, 1));   // a fat sun just over the ridge
   const r = (v) => Math.max(1, Math.round(v * SCALE * swell));
+  if (haloK > 0.15) {
+    // the halo: a pale ring well out from the disc, denser at its inner edge, fading outward
+    const haloCol = rgb(lerpRGB(env.pal.sunColor, [255, 248, 236], 0.6));
+    ctx.fillStyle = ditherPattern(ctx, haloCol, haloK > 0.6 ? 2 : 1); fillRing(ctx, p.x, p.y, r(44), r(48));
+    ctx.fillStyle = ditherPattern(ctx, haloCol, 1); fillRing(ctx, p.x, p.y, r(48), r(53));
+  }
   // a solid disc; only the corona is graded, in rings that thin out through the dither
   if (dim > 0.05) {
     const rings = [[32, 2], [26, 4], [20, 7], [16, 10]];

@@ -1,6 +1,6 @@
 import { W, H, SMALL, SCALE, ASSET_DIR } from '../state.js';
 import { makeCanvas, rgb, clamp } from '../util/pixel.js';
-import { drawStars, drawMoon, drawSun, setStarMask, renderSkyGradient } from './sky.js';
+import { drawStars, drawMoon, drawSun, sunOverSheets, setStarMask, renderSkyGradient } from './sky.js';
 import { renderTerrain } from './terrain.js';
 import { renderSheets } from './sheets.js';
 
@@ -222,6 +222,8 @@ export class Renderer {
     const thin = sheets && (sk.strato + sk.stratus + sk.nimbo) < 0.05;
     const drawSheets = () => { const ox = Math.round(this.sheetX); c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0); lap('sheets'); };
     if (thin) drawSheets();
+    // the sun comes back over the high sheets: a cirrostratus veil leaves the disc, with a halo
+    if (thin && sunOverSheets(sk)) { drawSun(c, env, true); lap('sun'); }
     drawStars(c, env, t); lap('stars');
     const meteors = this.fx.meteors.length > 0;
     if (meteors) { this.fx.drawMeteors(c); lap('meteors'); }
