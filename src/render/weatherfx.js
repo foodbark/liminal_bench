@@ -2,6 +2,7 @@ import { W, H, HORIZON, SCALE } from '../state.js';
 import { fillCircle, ditherPattern, grainPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine, makeCanvas } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
+import { photoClouds, photoCloudSprite } from './photoclouds.js';
 import { starAltAz } from '../util/solar.js';
 import { skyXY, PX_PER_DEG } from './sky.js';
 import { LAT } from '../state.js';
@@ -52,7 +53,10 @@ export class WeatherFX {
     this.t += dt;
     this.gliders.update(env, dt, gliders);
     const cover = env.sky ? env.sky.cumulus : env.cond.cover;
-    const target = Math.round(cover * 18 + (cover > 0.02 ? 1 : 0));
+    // the photo sprites are whole clouds, so far fewer of them than the drawn puffs
+    const target = photoClouds() ? Math.round(cover * 11 + (cover > 0.02 ? 1 : 0)) : Math.round(cover * 18 + (cover > 0.02 ? 1 : 0));
+    // the photo sprites arrive after the scene is up: the drawn stand-ins go when they do
+    if (photoClouds() && this.clouds.some((c) => !c.photo)) this.clouds.length = 0;
     while (this.clouds.length < target) this.clouds.push(this.makeCloud(true));
     while (this.clouds.length > target) this.clouds.pop();
     // a storm has one cumulonimbus, kept apart from the fair-weather field
@@ -92,7 +96,23 @@ export class WeatherFX {
     const r = this.rnd;
     // a third of the clouds are far rows near the cloud horizon, small and flat; the rest ride
     // high and large; a storm gets one cumulonimbus
-    const far = r() < 0.35;
+    const ph = photoClouds();
+    const far = r() < (ph ? 0.65 : 0.35);
+    if (ph) {
+      // a cumulus from the user's photos, at the size it was cut: the big ones are the near
+      // clouds, the small ones the far rows. One cloud deck: every base sits at one height, so
+      // the near clouds hang high in the frame and the far rows sink toward the ridge
+      const all = ph.sprites.filter((s) => s.far === far);
+      const fresh = all.filter((s) => !this.clouds.some((c) => c.photo === s));   // not the same cloud twice while there are others
+      const pool = fresh.length ? fresh : all.length ? all : ph.sprites;
+      const pick = pool[Math.floor(r() * pool.length)];
+      const depth = far ? 0.18 + r() * 0.22 : 0.45 + 0.95 * clamp((pick.w - 200 * SCALE) / (600 * SCALE), 0, 1);
+      const c = { photo: pick, w: pick.w, h: pick.h, depth, sprite: null, spriteKey: '' };
+      const baseY = far ? HORIZON * (0.40 + r() * 0.10) : HORIZON * (0.36 + (1.4 - depth) * 0.1 + r() * 0.05);
+      c.y = Math.floor(baseY - c.h);
+      c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;
+      return c;
+    }
     const depth = far ? 0.18 + r() * 0.22 : 0.45 + r() * 0.95;
     const c = layoutCloud(r, depth, { tower: !far });
     // far rows sit above where the mountains hide the cloud horizon
@@ -186,7 +206,7 @@ export class WeatherFX {
         near = clamp(1 - dist / (Math.max(c.w, c.h) * 1.2 + 120 * SCALE), 0, 1);
       }
       const { tones, key } = cloudTones(env, c.depth, near);
-      const sprite = cloudSprite(c, tones, key, lightX, lightY);
+      const sprite = c.photo ? photoCloudSprite(c, tones, key, env) : cloudSprite(c, tones, key, lightX, lightY);
       ctx.drawImage(sprite, Math.round(c.x), c.y);
     }
   }

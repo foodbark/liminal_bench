@@ -1,0 +1,82 @@
+import { ASSET_DIR } from '../state.js';
+import { makeCanvas, clamp } from '../util/pixel.js';
+import { cloudTones } from './clouds.js';
+
+// Cumulus cut from the user's photographs (tools/build_clouds.py: assets/clouds.png and
+// clouds.json, from the config's "clouds" list), in place of the drawn puffs. Each sprite is the
+// photo's own pixels averaged and snapped to a short palette; on the page it is recolored by
+// lightness through the hour's cloud tones, the way the moon keeps its maria under a new
+// color: each pixel's place on the light-to-dark ramp picks how much that step of the ramp has
+// changed from plain daylight (cloudTones against the same tones on a clear noon), and the
+// pixel is scaled by it,
+// so the sprite's own white and blue-gray take the sunset's ember and the moon's silver.
+// Loaded on the page only, after the scene is up; until it arrives, the drawn clouds stand in.
+
+let sheet = null;   // { sprites: [{ x, y, w, h, far, data }], lo, hi }
+export function photoClouds() { return sheet; }
+
+if (typeof Image !== 'undefined') {
+  (async () => {
+    try {
+      const r = await fetch(new URL('../../' + ASSET_DIR + '/clouds.json', import.meta.url));
+      if (!r.ok) return;
+      const meta = await r.json();
+      const im = new Image();
+      im.src = new URL('../../' + ASSET_DIR + '/clouds.png', import.meta.url);
+      await im.decode();
+      const [, g] = makeCanvas(im.width, im.height);
+      g.drawImage(im, 0, 0);
+      let lo = 255, hi = 0;
+      const sprites = meta.sprites.map((s) => {
+        const data = g.getImageData(s.x, s.y, s.w, s.h);
+        const d = data.data;
+        for (let i = 0; i < d.length; i += 4) {
+          if (!d[i + 3]) continue;
+          const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          if (L < lo) lo = L; if (L > hi) hi = L;
+        }
+        return { ...s, data };
+      });
+      sheet = { sprites, lo, hi: Math.max(hi, lo + 1) };
+    } catch (e) { console.warn('photo clouds not loaded', e); }
+  })();
+}
+
+// the tones of a clear noon: what the sprites' own colors stand for
+let dayTones = null;
+function daylight(depth) {
+  if (!dayTones) {
+    const env = { pal: { ambient: [1, 1, 1], horizon: [205, 220, 240], sunColor: [255, 250, 225] }, sun: { altitude: 50 }, moon: { phase: 0, altitude: -20 }, cond: { cover: 0, shade: 0, storm: false } };
+    dayTones = cloudTones(env, depth).tones;
+  }
+  return dayTones;
+}
+
+export function photoCloudSprite(c, tones, key, env) {
+  if (c.sprite && c.spriteKey === key) return c.sprite;
+  const { w, h, data } = c.photo;
+  if (!c.sprite) { const [cv, g] = makeCanvas(w, h); c.sprite = cv; c.spriteCtx = g; c.img = g.createImageData(w, h); }
+  // how this hour's light changed each step of the ramp, against a clear noon
+  // The cover's dimming of the valley's light is taken back out: a cumulus top is in full sun
+  // above whatever shades the ground, and the photos were taken under partly cloudy skies
+  // already. Only the sun's height, the sunset and the moon change the sprite.
+  const day = daylight(1);
+  const lift = 1 / (1 - 0.32 * (env ? (env.cond.shade ?? env.cond.cover) : 0));
+  const ratio = day.slice(0, 5).map((b, i) => [tones[i][0] / b[0] * lift, tones[i][1] / b[1] * lift, tones[i][2] / b[2] * lift]);
+  const last = ratio.length - 1;
+  const src = data.data, out = c.img.data, { lo, hi } = sheet;
+  for (let i = 0; i < src.length; i += 4) {
+    if (!src[i + 3]) { out[i + 3] = 0; continue; }
+    const L = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
+    const t = clamp((hi - L) / (hi - lo), 0, 1) * last;
+    const k = Math.min(last - 1, Math.floor(t)), f = t - k;
+    for (let ch = 0; ch < 3; ch++) {
+      const q = ratio[k][ch] + (ratio[k + 1][ch] - ratio[k][ch]) * f;
+      out[i + ch] = clamp(Math.round(src[i + ch] * q), 0, 255);
+    }
+    out[i + 3] = 255;
+  }
+  c.spriteCtx.putImageData(c.img, 0, 0);
+  c.spriteKey = key;
+  return c.sprite;
+}

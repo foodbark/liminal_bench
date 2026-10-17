@@ -517,5 +517,113 @@
    2752,
    1095
   ]
+ ],
+ "clouds": [
+  {
+   "photo": "clouds/cumulus_01.jpg",
+   "box": [
+    0.12,
+    0.03,
+    0.545,
+    0.36
+   ],
+   "clip": true,
+   "scale": 0.4
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.855,
+    0.435,
+    1.0,
+    0.53
+   ],
+   "scale": 1.0
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.14,
+    0.49,
+    0.32,
+    0.565
+   ],
+   "scale": 1.0
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.135,
+    0.565,
+    0.31,
+    0.625
+   ],
+   "scale": 1.0
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.58,
+    0.385,
+    0.68,
+    0.44
+   ],
+   "scale": 1.0
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.395,
+    0.51,
+    0.485,
+    0.565
+   ],
+   "scale": 0.6,
+   "far": true
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.285,
+    0.535,
+    0.38,
+    0.585
+   ],
+   "scale": 0.6,
+   "far": true
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.74,
+    0.52,
+    0.815,
+    0.565
+   ],
+   "scale": 0.6,
+   "far": true
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.365,
+    0.595,
+    0.44,
+    0.628
+   ],
+   "scale": 0.6,
+   "far": true
+  },
+  {
+   "photo": "clouds/alto_cummulus.jpg",
+   "box": [
+    0.68,
+    0.42,
+    0.725,
+    0.46
+   ],
+   "scale": 0.8,
+   "far": true
+  }
  ]
 }

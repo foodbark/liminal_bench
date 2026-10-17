@@ -2,7 +2,7 @@
 """Turn a photograph into shaded pixel art for the scene. No model, no generated pixels: every
 output pixel is an average of the photo's own pixels, snapped to a palette taken from the photo.
 
-  python3 tools/pixelate.py PHOTO OUT.png [--as mountain|trees|prop|photo] [--size WxH | --width W]
+  python3 tools/pixelate.py PHOTO OUT.png [--as mountain|trees|prop|photo|cloud] [--size WxH | --width W]
                             [--pixel N] [--flatten N] [--hues N] [--steps N] [--shift K] [--ink K]
                             [--dither K] [--pop K] [--colors N]
                             [--crop x0,y0,x1,y1] [--focus fx,fy] [--matte r,g,b]
@@ -21,6 +21,10 @@ from flat shapes and short color ramps, not from bigger pixels.
   prop       built things: barely flattened so thin parts and lettering survive, more hues,
              inked, no dither
   photo      no drawing at all: a free palette of --colors and dither everywhere
+  cloud      a cut-out cloud (tools/cut_cloud.py): two hue families (the lit white and the
+             blue-gray shade), six tones each, flattened a little, no ink, no dither, and no
+             pop (the stretch to full range made its palest shadow black), the mids lifted and
+             the brightest tone set at white (a cloud is exposed for the sky and comes out gray)
 
   --size WxH   output size; the photo is cropped to that aspect around --focus. Default: the
                "ref" size of the config named in art/current (the scene's size).
@@ -36,7 +40,7 @@ from flat shapes and short color ramps, not from bigger pixels.
   --ink K      a darker line of the same hue on the dark side of every strong edge; bigger K inks
                weaker edges (0 = none). Trees and props always get the line around a cut-out's silhouette.
   --dither K   ordered 4x4 Bayer dither between neighboring tones, held back from edges (0 = flat).
-  --pop K      contrast and saturation lift, 0 = the photo as shot (default 1).
+  --pop K      contrast and saturation lift, 0 = the photo as shot (default 1; 0 for a cloud).
   --crop       box in the photo's pixels, applied before anything else.
   --focus      where the aspect crop sits, as fractions of the spare room (default 0.5,0.5).
   --matte      a cut-out photo (PNG with alpha) keeps a hard-edged alpha; this flattens it onto a
@@ -53,6 +57,7 @@ PRESETS = {
     'trees':    dict(flatten=3, hues=4, steps=5, shift=1.0, ink=0.0, dither=0.0, rim=True),
     'prop':     dict(flatten=1, hues=8, steps=4, shift=0.5, ink=1.0, dither=0.0, rim=True),
     'photo':    dict(flatten=0, hues=0, steps=0, shift=0.0, ink=0.0, dither=0.4, rim=False),
+    'cloud':    dict(flatten=1, hues=2, steps=6, shift=0.0, ink=0.0, dither=0.0, rim=False, pop=0.0, lift=1.0),
 }
 
 
@@ -103,6 +108,17 @@ def neighbors(a, r=1, mode='edge'):
     for dy in range(-r, r + 1):
         for dx in range(-r, r + 1):
             if dy or dx: yield dy, dx, p[r + dy:r + dy + H, r + dx:r + dx + W]
+
+
+def lift(lab, k):
+    """A cloud in a photo is exposed for the sky, so its sunlit top sits short of white and its
+    shaded bulk comes out dark gray. Bend the lightness up through the mids and set the
+    brightest tones at white; the shade keeps its place below the light, only nearer it."""
+    L = lab[..., 0].clip(0, 1) ** (1 - 0.3 * k)
+    hi = np.percentile(L, 97)
+    if hi > 0: L = L * min(0.97 / hi, 1.25)
+    out = lab.copy(); out[..., 0] = L.clip(0, 1)
+    return out
 
 
 def flatten(lab, solid, passes, r=2, tol=0.025):
@@ -213,13 +229,16 @@ def main():
     for k in ('flatten', 'hues', 'steps'): ap.add_argument('--' + k, type=int)
     for k in ('shift', 'ink', 'dither'): ap.add_argument('--' + k, type=float)
     ap.add_argument('--colors', type=int, default=48)
-    ap.add_argument('--pop', type=float, default=1.0)
+    ap.add_argument('--pop', type=float, help='default 1, except 0 for a cloud: its palest shadow is not black')
+    ap.add_argument('--lift', type=float, help='for a cloud: lift the mids and put the brightest tone at white (default 1 for a cloud, 0 otherwise)')
     ap.add_argument('--crop', help='x0,y0,x1,y1 in photo pixels')
     ap.add_argument('--focus', default='0.5,0.5')
     ap.add_argument('--matte', help='r,g,b to flatten a cut-out onto')
     a = ap.parse_args()
     for k, v in PRESETS[a.kind].items():
         if getattr(a, k, None) is None: setattr(a, k, v)
+    if a.pop is None: a.pop = 1.0
+    if a.lift is None: a.lift = 0.0
 
     im = ImageOps.exif_transpose(Image.open(a.photo)).convert('RGBA')
     if a.crop: im = im.crop(tuple(int(v) for v in a.crop.split(',')))
@@ -249,6 +268,7 @@ def main():
 
     lab = to_oklab(rgb)
     lab[solid] = pop(lab[solid], a.pop)
+    if a.lift > 0: lab[solid] = lift(lab[solid], a.lift)
     lab = flatten(lab, solid, a.flatten)
     far, darker, rim = edges(lab, solid)
     calm = 1 - ((far - 0.02) / 0.04).clip(0, 1)
