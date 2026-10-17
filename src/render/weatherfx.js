@@ -2,7 +2,7 @@ import { W, H, HORIZON, SCALE } from '../state.js';
 import { fillCircle, ditherPattern, grainPattern, rgb, mulRGB, lerpRGB, scaleRGB, clamp, plotLine, makeCanvas } from '../util/pixel.js';
 import { mulberry32 } from '../util/noise.js';
 import { layoutCloud, cloudTones, cloudSprite } from './clouds.js';
-import { photoClouds, photoCloudSprite } from './photoclouds.js';
+import { photoClouds, photoCloudSprite, assembleCloud, assemblyBounds } from './photoclouds.js';
 import { starAltAz } from '../util/solar.js';
 import { skyXY, PX_PER_DEG } from './sky.js';
 import { LAT } from '../state.js';
@@ -102,14 +102,16 @@ export class WeatherFX {
       // a cumulus from the user's photos, at the size it was cut: the big ones are the near
       // clouds, the small ones the far rows. One cloud deck: every base sits at one height, so
       // the near clouds hang high in the frame and the far rows sink toward the ridge
-      const all = ph.sprites.filter((s) => s.far === far);
-      const fresh = all.filter((s) => !this.clouds.some((c) => c.photo === s));   // not the same cloud twice while there are others
-      const pool = fresh.length ? fresh : all.length ? all : ph.sprites;
-      const pick = pool[Math.floor(r() * pool.length)];
-      const depth = far ? 0.18 + r() * 0.22 : 0.45 + 0.95 * clamp((pick.w - 200 * SCALE) / (600 * SCALE), 0, 1);
-      const c = { photo: pick, w: pick.w, h: pick.h, depth, sprite: null, spriteKey: '' };
+      // a near cloud is assembled from several sprites by the old grammar (assembleCloud), a far
+      // one is a single puff; the base is not one already up while there are others
+      let built = assembleCloud(r, ph, far), base = built.parts[built.parts.length - 1].photo;
+      for (let tries = 0; tries < 6 && this.clouds.some((c) => c.photo === base); tries++) { built = assembleCloud(r, ph, far); base = built.parts[built.parts.length - 1].photo; }
+      const { w, h } = assemblyBounds(built.parts);
+      const depth = far ? 0.18 + r() * 0.22 : 0.45 + 0.95 * clamp((base.w - 200 * SCALE) / (600 * SCALE), 0, 1);
+      const c = { photo: base, parts: built.parts, w, h, depth, sprite: null, spriteKey: '' };
       const baseY = far ? HORIZON * (0.40 + r() * 0.10) : HORIZON * (0.36 + (1.4 - depth) * 0.1 + r() * 0.05);
-      c.y = Math.floor(baseY - c.h);
+      const bp = built.parts[built.parts.length - 1];   // the deck is where the base cloud's bottom sits; a tower rises above it
+      c.y = Math.floor(baseY - (bp.y + base.h));
       c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;
       return c;
     }
