@@ -35,7 +35,7 @@ export function skyPalette(alt, cond, sky = null) {
   }
   // A cirrostratus or altostratus veil is a milky shift of the whole sky, not a texture over it:
   // pale by day, and with the sun low it is the sky itself going pink end to end.
-  const veil = sky ? Math.min(1, (sky.veilHigh || 0) * 0.5 + (sky.veilMid || 0) * 0.75) : 0;
+  const veil = sky ? Math.min(1, (sky.veilHigh || 0) * 0.18 + (sky.veilMid || 0) * 0.75) : 0;
   if (veil > 0) {
     const low = clamp(1 - Math.abs(alt - 1) / 9, 0, 1);
     const milk = lerpRGB([222, 226, 236], lerpRGB(sunColor, [255, 170, 150], 0.5), low);

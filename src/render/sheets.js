@@ -44,7 +44,7 @@ export function renderSheets(img, env) {
   // combed noise runs high, with a thin grain only at their edges. Everything in this pass is
   // shapes, never a field of single pixels: the sheet scrolls with the wind, and a stipple that
   // scrolls is a dance of pixels however evenly it is spread (the user, 2026-10-11).
-  const veils = [[sky.veilHigh, 1, 0.64, 0.14], [sky.veilMid, 2, 0.58, 0.18]];   // [amount, tone, threshold at k=0, how far it drops by k=1]
+  const veils = [[sky.veilHigh, 1, 0.70, 0.08], [sky.veilMid, 2, 0.58, 0.18]];   // [amount, tone, threshold at k=0, how far it drops by k=1]
   for (const [k, tone, t0, drop] of veils) {
     if (k <= 0) continue;
     for (let y = 0; y < VANISH; y++) {

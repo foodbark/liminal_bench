@@ -77,9 +77,9 @@ function computeEnv() {
   // How much the clouds actually take out of the light: a low deck shades the valley, a middle
   // one most of the way, a high veil hardly at all (and at sunset it is the sky that goes pink
   // end to end). `cover` stays the total for what a veil does hide: stars, the Milky Way, meteors.
-  cond.shade = w.coverLow != null ? Math.min(1, (w.coverLow ?? 0) + (w.coverMid ?? 0) * 0.7 + (w.coverHigh ?? 0) * 0.25) : cover;
+  cond.shade = w.coverLow != null ? Math.min(1, (w.coverLow ?? 0) + (w.coverMid ?? 0) * 0.7 + (w.coverHigh ?? 0) * 0.08) : cover;
   if (o.enabled && o.cover >= 0) cond.shade = cover;
-  if (cond.label === 'overcast' && (w.coverLow ?? 1) < 0.4 && (w.coverMid ?? 1) < 0.4) cond.label = 'high overcast';
+  if (cond.label === 'overcast' && (w.coverLow ?? 1) < 0.4 && (w.coverMid ?? 1) < 0.4) cond.label = 'thin high cloud';
   // Inversion: fog in a cold month means the valley is a sea of fog with the ranges above it
   // and a clear sky over it; fogTop is how far up the slopes the sea reaches (0: the valley
   // floor, as the feed's own fog code is taken; 1: the cams have it up the South Hills). A
@@ -121,7 +121,8 @@ function computeEnv() {
   const veilHigh = Math.max(0, Math.min(1, (high - 0.6) / 0.4)), veilMid = Math.max(0, Math.min(1, (mid - 0.7) / 0.3));
   const wet = cond.precip.intensity > 0 || cond.storm;
   const sky = {
-    cirrus: high * (1 - veilHigh), veilHigh, alto: mid * (1 - veilMid), veilMid,
+    // wisps stay under the high veil's bands, so a veiled sky is never one flat sheet
+    cirrus: high * (1 - veilHigh * 0.6), veilHigh, alto: mid * (1 - veilMid), veilMid,
     nimbo: cond.storm ? 0.45 : wet ? Math.max(0.7, low) : 0,   // a storm's sheet is broken so the cell shows against sky
     stratus: !wet && (cond.fog || preset?.stratus) ? Math.max(0.8, low) : 0,
     strato: !wet && !cond.fog && !preset?.stratus ? Math.max(0, Math.min(1, (low - 0.55) / 0.3)) : 0,
