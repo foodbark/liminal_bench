@@ -180,6 +180,17 @@ export class WeatherFX {
   makeCumulonimbus(env) {
     const r = mulberry32(1234 + Math.floor(env.wind.dir));
     const dir = Math.sin(env.wind.dir * RAD) >= 0 ? 1 : -1;   // the anvil streams downwind
+    const ph = photoClouds();
+    if (ph && ph.cb) {
+      // the user's photographed cell (cumulonimbus_02: a mature cell, its anvil streaming to the
+      // left), drawn mirrored when the wind runs the other way; its base sits over the ranges
+      const s = ph.cb;
+      const c = { photo: s, w: s.w, h: s.h, depth: 1.3, cb: true, flip: dir > 0, sprite: null, spriteKey: '' };
+      // over Dean Stone, its cut base behind the crest, the anvil streaming out over the valley
+      c.x = Math.floor(W * (dir > 0 ? 0.2 : 0.4) + r() * W * 0.1);
+      c.y = Math.floor(HORIZON * 0.47 - c.h);
+      return c;
+    }
     const c = layoutCloud(r, 1.75, { tower: true, anvil: true, anvilDir: dir });
     c.depth = 1.3; c.cb = true;
     c.x = Math.floor(W * (dir > 0 ? 0.08 : 0.4) + r() * W * 0.15);
@@ -209,7 +220,8 @@ export class WeatherFX {
       }
       const { tones, key } = cloudTones(env, c.depth, near);
       const sprite = c.photo ? photoCloudSprite(c, tones, key, env) : cloudSprite(c, tones, key, lightX, lightY);
-      ctx.drawImage(sprite, Math.round(c.x), c.y);
+      if (c.flip) { ctx.save(); ctx.translate(Math.round(c.x) + c.w, c.y); ctx.scale(-1, 1); ctx.drawImage(sprite, 0, 0); ctx.restore(); }
+      else ctx.drawImage(sprite, Math.round(c.x), c.y);
     }
   }
 

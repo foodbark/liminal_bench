@@ -37,7 +37,7 @@ if (typeof Image !== 'undefined') {
         }
         return { ...s, data };
       });
-      sheet = { sprites, lo, hi: Math.max(hi, lo + 1) };
+      sheet = { sprites, lo, hi: Math.max(hi, lo + 1), cb: sprites.find((s) => s.cb) || null };
     } catch (e) { console.warn('photo clouds not loaded', e); }
   })();
 }
@@ -67,7 +67,7 @@ function topContour(s) {
 // the pieces, the grammar is the code's. Parts are listed back to front, the base last; a
 // cloud that builds through an afternoon will add to this list.
 export function assembleCloud(r, sheet, far) {
-  const near = sheet.sprites.filter((s) => !s.far), small = sheet.sprites.filter((s) => s.far);
+  const near = sheet.sprites.filter((s) => !s.far && !s.cb), small = sheet.sprites.filter((s) => s.far);
   const pick = (pool) => pool[Math.floor(r() * pool.length)];
   if (far || near.length < 2) return { parts: [{ photo: pick(far ? small : near), x: 0, y: 0 }] };
   const base = pick(near);
@@ -107,7 +107,7 @@ function recolored(s, tones, key, env) {
   if (s.cache && s.cacheKey === key) return s.cache;
   const { w, h, data } = s;
   if (!s.cache) { const [cv, g] = makeCanvas(w, h); s.cache = cv; s.cacheCtx = g; s.img = g.createImageData(w, h); }
-  paint(data, s.img, tones, env);
+  paint(data, s.img, tones, env, !!s.cb);
   s.cacheCtx.putImageData(s.img, 0, 0);
   s.cacheKey = key;
   return s.cache;
@@ -124,14 +124,14 @@ export function photoCloudSprite(c, tones, key, env) {
   }
   const { w, h, data } = c.photo;
   if (!c.sprite) { const [cv, g] = makeCanvas(w, h); c.sprite = cv; c.spriteCtx = g; c.img = g.createImageData(w, h); }
-  paint(data, c.img, tones, env);
+  paint(data, c.img, tones, env, !!c.cb);
   c.spriteCtx.putImageData(c.img, 0, 0);
   c.spriteKey = key;
   return c.sprite;
 }
 
 // Recolor one sprite's pixels (data) into img through the hour's tones.
-function paint(data, img, tones, env) {
+function paint(data, img, tones, env, cb = false) {
   // how this hour's light changed each step of the ramp, against a clear noon
   // The cover's dimming of the valley's light is taken back out: a cumulus top is in full sun
   // above whatever shades the ground, and the photos were taken under partly cloudy skies
@@ -140,8 +140,11 @@ function paint(data, img, tones, env) {
   // is taken out as well, since a sunlit cumulus top is white whenever the sun is up; the
   // correction fades through dusk so the clouds still dim into the night
   const day = daylight(1);
-  let lift = 1 / (1 - 0.32 * (env ? (env.cond.shade ?? env.cond.cover) : 0));
-  if (env) {
+  // (not under a storm: the cell is the cover, and the light really is down; the cell itself
+  // keeps some, since its anvil stands in sun above the sheet and a lit anvil over a dark
+  // valley is the storm's beauty)
+  let lift = env && env.cond.storm ? (cb ? 1.3 : 1) : 1 / (1 - 0.32 * (env ? (env.cond.shade ?? env.cond.cover) : 0));
+  if (env && !(env.cond.storm)) {
     const amb = env.pal.ambient, lum = Math.max(0.4, (0.299 * amb[0] + 0.587 * amb[1] + 0.114 * amb[2]));
     lift *= 1 + clamp(env.sun.altitude / 10, 0, 1) * (1 / lum - 1);
   }

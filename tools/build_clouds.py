@@ -5,7 +5,7 @@ Each entry of "clouds" in art/NAME.json names a photo under art/ and the cloud i
   {"photo": "clouds/cumulus_01.jpg", "box": [fx0, fy0, fx1, fy1], "clip": true, "scale": 0.4, "far": false}
 box picks the cloud (fractions of the frame), clip also cuts along the box for a cloud joined to
 its neighbors, all keeps every cloud in the box (tools/cut_cloud.py), scale is sprite pixels per photo pixel, far marks a small
-cloud for the rows near the cloud horizon. Each cut-out goes through tools/pixelate.py as a
+cloud for the rows near the cloud horizon, cb a cumulonimbus (the storm's cell, never in the cumulus pools). Each cut-out goes through tools/pixelate.py as a
 cloud. Writes assets/clouds.png (the sprites stacked top to bottom) and assets/clouds.json
 (their rectangles), and the half-size copies in assets/small/. No drawing: every sprite pixel is
 an average of the photo's own pixels.
@@ -59,7 +59,7 @@ def main():
     for im, e in sprites:
         h, w = im.shape[:2]
         sheet[y:y + h, :w] = im
-        rects.append({'x': 0, 'y': y, 'w': w, 'h': h, 'far': bool(e.get('far')), 'photo': e['photo']})
+        rects.append({'x': 0, 'y': y, 'w': w, 'h': h, 'far': bool(e.get('far')), 'cb': bool(e.get('cb')), 'photo': e['photo']})
         y += h + 2
     Image.fromarray(sheet, 'RGBA').save(os.path.join(ROOT, 'assets/clouds.png'), optimize=True)
     with open(os.path.join(ROOT, 'assets/clouds.json'), 'w') as f: json.dump({'sprites': rects}, f)

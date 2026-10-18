@@ -119,6 +119,7 @@ def lift(lab, k):
     if hi > 0: L = L * min(0.97 / hi, 1.25)
     L = 0.97 + (L - 0.97) * (1 + 0.35 * k)                      # the shade deepened against the white, for depth
     out = lab.copy(); out[..., 0] = L.clip(0, 1)
+    out[..., 1:] *= 1 - 0.4 * k                                  # and the photo's cast (an evening's warmth, a lens's blue) eased toward neutral: the page adds the hour's color
     return out
 
 

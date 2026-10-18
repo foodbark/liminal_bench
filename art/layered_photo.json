@@ -781,6 +781,18 @@
    ],
    "scale": 0.6,
    "far": true
+  },
+  {
+   "photo": "clouds/cumulonimbus_02.jpg",
+   "box": [
+    0.42,
+    0.25,
+    0.94,
+    0.7
+   ],
+   "clip": true,
+   "scale": 0.4,
+   "cb": true
   }
  ]
 }
