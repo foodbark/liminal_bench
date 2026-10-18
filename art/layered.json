@@ -505,7 +505,8 @@
     0.36
    ],
    "clip": true,
-   "scale": 0.4
+   "scale": 0.4,
+   "lobes": true
   },
   {
    "photo": "clouds/alto_cummulus.jpg",
@@ -515,7 +516,8 @@
     1.0,
     0.53
    ],
-   "scale": 1.0
+   "scale": 1.0,
+   "lobes": true
   },
   {
    "photo": "clouds/alto_cummulus.jpg",
@@ -525,7 +527,8 @@
     0.32,
     0.565
    ],
-   "scale": 1.0
+   "scale": 1.0,
+   "lobes": true
   },
   {
    "photo": "clouds/alto_cummulus.jpg",
@@ -535,7 +538,8 @@
     0.31,
     0.625
    ],
-   "scale": 1.0
+   "scale": 1.0,
+   "lobes": true
   },
   {
    "photo": "clouds/alto_cummulus.jpg",
@@ -545,7 +549,8 @@
     0.68,
     0.44
    ],
-   "scale": 1.0
+   "scale": 1.0,
+   "lobes": true
   },
   {
    "photo": "clouds/alto_cummulus.jpg",
@@ -613,7 +618,8 @@
    "clip": true,
    "scale": 0.5,
    "cloud": 0.18,
-   "sky": 0.42
+   "sky": 0.42,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_04.jpg",
@@ -624,7 +630,8 @@
     0.945
    ],
    "scale": 0.5,
-   "clip": true
+   "clip": true,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_04.jpg",
@@ -635,7 +642,8 @@
     0.99
    ],
    "clip": true,
-   "scale": 0.5
+   "scale": 0.5,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_03.jpg",
@@ -646,7 +654,8 @@
     0.52
    ],
    "clip": true,
-   "scale": 0.4
+   "scale": 0.4,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_03.jpg",
@@ -657,7 +666,8 @@
     0.5
    ],
    "clip": true,
-   "scale": 0.6
+   "scale": 0.6,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_02.jpg",
@@ -668,7 +678,8 @@
     0.603
    ],
    "clip": true,
-   "scale": 0.6
+   "scale": 0.6,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_02.jpg",
@@ -713,7 +724,8 @@
     0.43
    ],
    "scale": 0.5,
-   "all": true
+   "all": true,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_05.jpg",
@@ -724,7 +736,8 @@
     0.29
    ],
    "clip": true,
-   "scale": 0.25
+   "scale": 0.25,
+   "lobes": true
   },
   {
    "photo": "clouds/cumulus_05.jpg",

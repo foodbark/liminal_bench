@@ -1,4 +1,4 @@
-import { ASSET_DIR } from '../state.js';
+import { ASSET_DIR, SCALE } from '../state.js';
 import { makeCanvas, clamp } from '../util/pixel.js';
 import { cloudTones } from './clouds.js';
 
@@ -14,18 +14,28 @@ import { cloudTones } from './clouds.js';
 
 let sheet = null;   // { sprites: [{ x, y, w, h, far, data }], lo, hi }
 export function photoClouds() { return sheet; }
+// the lobe library (assets/lobes.png, lobes.json): the near clouds split along their creases
+let lobes = null;   // { list: [{ x, y, w, h, data, cloud, freeTop, freeBottom, onBase }] }
+export function lobeLibrary() { return lobes; }
+
+async function loadSheet(name) {
+  const r = await fetch(new URL('../../' + ASSET_DIR + '/' + name + '.json', import.meta.url));
+  if (!r.ok) return null;
+  const meta = await r.json();
+  const im = new Image();
+  im.src = new URL('../../' + ASSET_DIR + '/' + name + '.png', import.meta.url);
+  await im.decode();
+  const [, g] = makeCanvas(im.width, im.height);
+  g.drawImage(im, 0, 0);
+  return { meta, g };
+}
 
 if (typeof Image !== 'undefined') {
   (async () => {
     try {
-      const r = await fetch(new URL('../../' + ASSET_DIR + '/clouds.json', import.meta.url));
-      if (!r.ok) return;
-      const meta = await r.json();
-      const im = new Image();
-      im.src = new URL('../../' + ASSET_DIR + '/clouds.png', import.meta.url);
-      await im.decode();
-      const [, g] = makeCanvas(im.width, im.height);
-      g.drawImage(im, 0, 0);
+      const loaded = await loadSheet('clouds');
+      if (!loaded) return;
+      const { meta, g } = loaded;
       let lo = 255, hi = 0;
       const sprites = meta.sprites.map((s) => {
         const data = g.getImageData(s.x, s.y, s.w, s.h);
@@ -38,6 +48,8 @@ if (typeof Image !== 'undefined') {
         return { ...s, data };
       });
       sheet = { sprites, lo, hi: Math.max(hi, lo + 1), cb: sprites.find((s) => s.cb) || null };
+      const lb = await loadSheet('lobes');
+      if (lb) lobes = { list: lb.meta.lobes.map((l) => ({ ...l, data: lb.g.getImageData(l.x, l.y, l.w, l.h) })) };
     } catch (e) { console.warn('photo clouds not loaded', e); }
   })();
 }
@@ -90,6 +102,59 @@ export function assembleCloud(r, sheet, far) {
     const edge = top[Math.min(base.w - 1, Math.max(0, cx))];
     parts.push({ photo: s, x: cx - (s.w >> 1), y: edge - Math.floor(s.h * (0.35 + r() * 0.3)) });
   }
+  parts.push({ photo: base, x: 0, y: 0 });
+  return { parts };
+}
+
+// A cumulus built on a photographed base with the lobe library, by the drawn clouds' grammar
+// (layoutCloud in clouds.js): a whole cloud from the sheet is the base mass, a tower of three
+// lobes stacks up out of its top, smaller lobes sit on the tower's shoulders, and a few more
+// scallop the base's upper edge. Every lobe shows only the edge that was free sky in its photo:
+// the parts are listed from the top of the tower down to the base and drawn in that order, so
+// each lobe's crease cut lies behind the lobe below it and the base's own edge is the last join.
+// A cloud that builds through an afternoon adds to this list from the base up.
+export function buildCloud(r, sheet, far) {
+  const near = sheet.sprites.filter((s) => !s.far && !s.cb), small = sheet.sprites.filter((s) => s.far);
+  const pick = (pool) => pool[Math.floor(r() * pool.length)];
+  if (far || !near.length) return { parts: [{ photo: pick(far ? small : near), x: 0, y: 0 }] };
+  const base = pick(near);
+  if (!lobes) return assembleCloud(r, sheet, far);
+  const crowns = lobes.list.filter((l) => l.freeTop > 0.4);
+  const want = (w) => {
+    const ok = crowns.filter((l) => l.w >= w * 0.7 && l.w <= w * 1.4);
+    if (ok.length) return ok[Math.floor(r() * ok.length)];
+    const by = [...crowns].sort((a, b) => Math.abs(a.w - w) - Math.abs(b.w - w));
+    return by[Math.floor(r() * Math.min(3, by.length))];
+  };
+  const top = topContour(base);
+  const edgeAt = (x) => top[Math.min(base.w - 1, Math.max(0, Math.round(x)))];
+  const above = [];   // [lobe, cx, bottomY] from the base upward
+  // the tower: three lobes, each a little narrower, each standing most of its height above the one below
+  const tx = base.w * (0.3 + r() * 0.4);
+  let w = base.w * (0.4 + r() * 0.15), cx = tx, bottom = edgeAt(tx) + 0;
+  for (let t = 0; t < 3; t++) {
+    const l = want(w);
+    const showing = t === 0 ? 0.55 + r() * 0.15 : 0.6 + r() * 0.15;
+    const y = bottom - l.h * showing;              // the lobe's bottom sits this far below the join
+    above.push({ photo: l, x: cx - l.w / 2, y: y, level: t });
+    // the shoulders: a small lobe on each side of this one, behind it
+    for (const side of [-1, 1]) if (r() < 0.7) {
+      const k = want(l.w * (0.4 + r() * 0.2));
+      above.push({ photo: k, x: cx + side * l.w * 0.42 - k.w / 2, y: y + l.h * (0.25 + r() * 0.2) - k.h * 0.6, level: t + 0.5 });
+    }
+    bottom = y; cx += (r() - 0.5) * l.w * 0.4; w *= 0.8;
+  }
+  // the scallops along the base's upper edge, away from the tower
+  const n = 2 + Math.floor(r() * 3);
+  for (let i = 0; i < n; i++) {
+    const sx = base.w * (0.06 + r() * 0.88);
+    if (Math.abs(sx - tx) < base.w * 0.2) continue;
+    const l = want(base.w * (0.18 + r() * 0.14));
+    above.push({ photo: l, x: sx - l.w / 2, y: edgeAt(sx) - l.h * (0.4 + r() * 0.25), level: -1 });
+  }
+  // drawn from the top of the tower down: higher levels first, then the scallops, then the base
+  above.sort((a, b) => b.level - a.level);
+  const parts = above.map((p) => ({ photo: p.photo, x: Math.round(p.x), y: Math.round(p.y) }));
   parts.push({ photo: base, x: 0, y: 0 });
   return { parts };
 }

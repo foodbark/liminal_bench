@@ -5,7 +5,10 @@ Each entry of "clouds" in art/NAME.json names a photo under art/ and the cloud i
   {"photo": "clouds/cumulus_01.jpg", "box": [fx0, fy0, fx1, fy1], "clip": true, "scale": 0.4, "far": false}
 box picks the cloud (fractions of the frame), clip also cuts along the box for a cloud joined to
 its neighbors, all keeps every cloud in the box (tools/cut_cloud.py), scale is sprite pixels per photo pixel, far marks a small
-cloud for the rows near the cloud horizon, cb a cumulonimbus (the storm's cell, never in the cumulus pools). Each cut-out goes through tools/pixelate.py as a
+cloud for the rows near the cloud horizon, cb a cumulonimbus (the storm's cell, never in the cumulus pools),
+lobes that the cloud also feeds the lobe library: its pixelated sprite is split along its creases
+(tools/lobes.py) into lobes that share its palette, packed into assets/lobes.png and lobes.json,
+for the page to build cumulus from by the drawn clouds' grammar. Each cut-out goes through tools/pixelate.py as a
 cloud. Writes assets/clouds.png (the sprites stacked top to bottom) and assets/clouds.json
 (their rectangles), and the half-size copies in assets/small/. No drawing: every sprite pixel is
 an average of the photo's own pixels.
@@ -13,6 +16,8 @@ an average of the photo's own pixels.
 import argparse, json, os, subprocess, sys, tempfile
 import numpy as np
 from PIL import Image
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lobes import segment
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -38,7 +43,7 @@ def main():
     entries = cfg.get('clouds')
     if not entries: sys.exit(f'no "clouds" in art/{name}.json')
     tmp = tempfile.mkdtemp(prefix='clouds-')
-    sprites = []
+    sprites = []; lobes = []
     for i, e in enumerate(entries):
         cut, out = os.path.join(tmp, f'cut{i}.png'), os.path.join(tmp, f'sprite{i}.png')
         cmd = [sys.executable, '-I', os.path.join(ROOT, 'tools/cut_cloud.py'), os.path.join(ROOT, 'art', e['photo']), cut, '--box', ','.join(str(v) for v in e['box'])]
@@ -51,6 +56,23 @@ def main():
         width = max(16, round(Image.open(cut).width * e.get('scale', 0.4) / 4) * 4)
         subprocess.run([sys.executable, os.path.join(ROOT, 'tools/pixelate.py'), cut, out, '--as', 'cloud', '--width', str(width)], check=True)
         im = np.asarray(Image.open(out).convert('RGBA'))
+        if e.get('lobes'):
+            # the lobes, from the cut-out's creases, mapped onto the sprite's art pixels
+            cutim = np.asarray(Image.open(cut).convert('RGBA'), np.float64)
+            labels, recs = segment(cutim[..., 3] / 255, cutim[..., :3])
+            gh, gw = im.shape[0] // 4, im.shape[1] // 4
+            ch, cw = cutim.shape[:2]
+            ay, ax = np.mgrid[0:gh, 0:gw]
+            ly = ((ay + 0.5) * ch / gh / 4).astype(int).clip(0, labels.shape[0] - 1); lx = ((ax + 0.5) * cw / gw / 4).astype(int).clip(0, labels.shape[1] - 1)
+            art = labels[ly, lx].repeat(4, 0).repeat(4, 1)
+            for rec in recs:
+                mask = (art == rec['id']) & (im[..., 3] > 0)
+                if mask.sum() < 16 * 6: continue
+                ys, xs = np.nonzero(mask)
+                piece = im[ys.min():ys.max() + 1, xs.min():xs.max() + 1].copy()
+                piece[~mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1]] = 0
+                if piece.shape[1] < 8 or piece.shape[0] < 8: continue
+                lobes.append((piece, {'cloud': len(sprites), 'freeTop': round(rec['freeTop'], 2), 'freeBottom': round(rec['freeBottom'], 2), 'onBase': rec['onBase']}))
         ys, xs = np.nonzero(im[..., 3] > 0)
         im = im[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
         sprites.append((im, e))
@@ -69,6 +91,30 @@ def main():
         json.dump({'sprites': [{**r, 'x': r['x'] // 2, 'y': r['y'] // 2, 'w': (r['w'] + 1) // 2, 'h': (r['h'] + 1) // 2} for r in rects]}, f)
     for r in rects: print(f"  {r['photo']}: {r['w']}x{r['h']}{' far' if r['far'] else ''}")
     print(f'assets/clouds.png {W}x{H}, {len(rects)} clouds')
+    if lobes:
+        # shelf-packed: rows of lobes, tallest first, up to 1024 wide
+        lobes.sort(key=lambda t: -t[0].shape[0])
+        MAXW = 1024; rows = []; row = []; rw = 0
+        for piece, meta in lobes:
+            if rw + piece.shape[1] + 2 > MAXW and row: rows.append(row); row = []; rw = 0
+            row.append((piece, meta)); rw += piece.shape[1] + 2
+        if row: rows.append(row)
+        LW = max(sum(p.shape[1] + 2 for p, _ in rw_) for rw_ in rows); LH = sum(max(p.shape[0] for p, _ in rw_) + 2 for rw_ in rows)
+        lsheet = np.zeros((LH, LW, 4), np.uint8); lrects = []; y = 0
+        for rw_ in rows:
+            x = 0; rh = max(p.shape[0] for p, _ in rw_)
+            for piece, meta in rw_:
+                h, w = piece.shape[:2]
+                lsheet[y:y + h, x:x + w] = piece
+                lrects.append({**meta, 'x': x, 'y': y, 'w': w, 'h': h})
+                x += w + 2
+            y += rh + 2
+        Image.fromarray(lsheet, 'RGBA').save(os.path.join(ROOT, 'assets/lobes.png'), optimize=True)
+        with open(os.path.join(ROOT, 'assets/lobes.json'), 'w') as f: json.dump({'lobes': lrects}, f)
+        Image.fromarray(halve(lsheet), 'RGBA').save(os.path.join(small, 'lobes.png'), optimize=True)
+        with open(os.path.join(small, 'lobes.json'), 'w') as f:
+            json.dump({'lobes': [{**r, 'x': r['x'] // 2, 'y': r['y'] // 2, 'w': (r['w'] + 1) // 2, 'h': (r['h'] + 1) // 2} for r in lrects]}, f)
+        print(f'assets/lobes.png {LW}x{LH}, {len(lrects)} lobes from {len({m["cloud"] for _, m in lobes})} clouds')
 
 
 if __name__ == '__main__':
