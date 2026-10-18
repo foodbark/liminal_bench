@@ -117,6 +117,7 @@ def lift(lab, k):
     L = lab[..., 0].clip(0, 1) ** (1 - 0.3 * k)
     hi = np.percentile(L, 97)
     if hi > 0: L = L * min(0.97 / hi, 1.25)
+    L = 0.97 + (L - 0.97) * (1 + 0.35 * k)                      # the shade deepened against the white, for depth
     out = lab.copy(); out[..., 0] = L.clip(0, 1)
     return out
 

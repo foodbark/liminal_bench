@@ -113,6 +113,8 @@ export function conditionsFromCode(code) {
 export const WEATHER_PRESETS = {
   clear:    { code: 0,  cover: 0.05, coverLow: 0.05, coverMid: 0, coverHigh: 0, temp: 62, wind: 4,  snowDepth: 0 },
   partly:   { code: 2,  cover: 0.45, coverLow: 0.45, coverMid: 0.1, coverHigh: 0.2, temp: 58, wind: 7,  snowDepth: 0 },
+  cumulus:  { code: 2,  cover: 0.5,  coverLow: 0.5,  coverMid: 0, coverHigh: 0, temp: 74, wind: 6, snowDepth: 0 },   // a summer afternoon of fair cumulus and nothing else, for the photo clouds
+  cumulonimbus: { code: 2, cover: 0.6, coverLow: 0.55, coverMid: 0.1, coverHigh: 0.1, temp: 82, wind: 9, snowDepth: 0, cb: 1 },   // a cell building over the ranges, no storm yet
   cirrus:   { code: 1,  cover: 0.4,  coverLow: 0.05, coverMid: 0, coverHigh: 0.5, temp: 60, wind: 9, snowDepth: 0 },
   altocumulus: { code: 2, cover: 0.6, coverLow: 0.15, coverMid: 0.6, coverHigh: 0.1, temp: 56, wind: 6, snowDepth: 0 },
   stratocumulus: { code: 3, cover: 0.9, coverLow: 0.85, coverMid: 0.3, coverHigh: 0, temp: 50, wind: 8, snowDepth: 0 },

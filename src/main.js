@@ -126,7 +126,7 @@ function computeEnv() {
     nimbo: cond.storm ? 0.45 : wet ? Math.max(0.7, low) : 0,   // a storm's sheet is broken so the cell shows against sky
     stratus: !wet && (cond.fog || preset?.stratus) ? Math.max(0.8, low) : 0,
     strato: !wet && !cond.fog && !preset?.stratus ? Math.max(0, Math.min(1, (low - 0.55) / 0.3)) : 0,
-    cumulus: 0, cb: cond.storm ? 1 : 0,
+    cumulus: 0, cb: cond.storm || preset?.cb ? 1 : 0,
   };
   sky.cumulus = wet || cond.fog || preset?.stratus ? 0 : low * (1 - sky.strato * 0.75);
   const sun = sunPosition(now, LAT, LON);

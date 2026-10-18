@@ -136,8 +136,15 @@ function paint(data, img, tones, env) {
   // The cover's dimming of the valley's light is taken back out: a cumulus top is in full sun
   // above whatever shades the ground, and the photos were taken under partly cloudy skies
   // already. Only the sun's height, the sunset and the moon change the sprite.
+  // and by day the palette's own ambient (0.83 in a Missoula afternoon, set for the terrain)
+  // is taken out as well, since a sunlit cumulus top is white whenever the sun is up; the
+  // correction fades through dusk so the clouds still dim into the night
   const day = daylight(1);
-  const lift = 1 / (1 - 0.32 * (env ? (env.cond.shade ?? env.cond.cover) : 0));
+  let lift = 1 / (1 - 0.32 * (env ? (env.cond.shade ?? env.cond.cover) : 0));
+  if (env) {
+    const amb = env.pal.ambient, lum = Math.max(0.4, (0.299 * amb[0] + 0.587 * amb[1] + 0.114 * amb[2]));
+    lift *= 1 + clamp(env.sun.altitude / 10, 0, 1) * (1 / lum - 1);
+  }
   const ratio = day.slice(0, 5).map((b, i) => [tones[i][0] / b[0] * lift, tones[i][1] / b[1] * lift, tones[i][2] / b[2] * lift]);
   const last = ratio.length - 1;
   const src = data.data, out = img.data, { lo, hi } = sheet;

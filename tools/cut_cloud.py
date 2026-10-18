@@ -10,6 +10,8 @@ translucent edge averages down into the cloud rather than snapping to a hard lin
   --sky S     blueness at and above which it is wholly sky (default: measured as the 90th
               percentile inside the box, less a margin; a thin veil over the sky sits between)
   --pad N     pixels of margin kept around the cloud's bounding box (default 8)
+  --open N    wisps and fingers thinner than 2N photo pixels are dropped (default 48, less on a
+              small cloud; 0 keeps them)
   --list      no cut: print the separate clouds the key finds in the box, largest first, with
               the box fractions to pass back in, for filling the config's clouds list
   --all       keep every cloud in the box (a cluster, or one cloud the key sees as two pieces)
@@ -116,6 +118,30 @@ def seam_cut(alpha, ln, axis, pos, d, B):
     return a if axis == 1 else a.T
 
 
+def opened(mask, radius):
+    """Morphological opening (erode then dilate by radius, on a coarse grid): drops fingers and
+    wisps thinner than twice the radius, keeps every lobe. The element alternates the 4- and
+    8-neighborhoods so it is an octagon, near a disc; a plain 4-neighborhood element is a
+    diamond, and a wisp eroded to a point grew back as a diamond on the bench. Done on the
+    photo's own mask."""
+    s = 4; r = max(1, radius // s)
+    H, W = mask.shape
+    small = mask[:H // s * s, :W // s * s].reshape(H // s, s, W // s, s).mean((1, 3)) > 0.5
+    def grow(m, keep):
+        out = m.copy()
+        for i in range(r):
+            n = out.copy()
+            n[1:] = keep(n[1:], out[:-1]); n[:-1] = keep(n[:-1], out[1:]); n[:, 1:] = keep(n[:, 1:], out[:, :-1]); n[:, :-1] = keep(n[:, :-1], out[:, 1:])
+            if i % 2:   # the diagonals every other step
+                n[1:, 1:] = keep(n[1:, 1:], out[:-1, :-1]); n[:-1, :-1] = keep(n[:-1, :-1], out[1:, 1:])
+                n[1:, :-1] = keep(n[1:, :-1], out[:-1, 1:]); n[:-1, 1:] = keep(n[:-1, 1:], out[1:, :-1])
+            out = n
+        return out
+    o = grow(grow(small, np.logical_and), np.logical_or)
+    full = np.zeros_like(mask); full[:o.shape[0] * s, :o.shape[1] * s] = o.repeat(s, 0).repeat(s, 1)
+    return mask & full
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('photo'); ap.add_argument('out')
@@ -123,6 +149,7 @@ def main():
     ap.add_argument('--cloud', type=float, default=0.28)
     ap.add_argument('--sky', type=float)
     ap.add_argument('--pad', type=int, default=8)
+    ap.add_argument('--open', type=int, default=48, help='drop wisps and fingers thinner than twice this many photo pixels (0 keeps them)')
     ap.add_argument('--clip', action='store_true', help='the box also cuts: for a cloud joined to its neighbors, which otherwise come with it')
     ap.add_argument('--list', action='store_true', help='list the separate clouds in the box with their boxes, and cut nothing')
     ap.add_argument('--all', action='store_true', help='keep every cloud in the box, not just the one with the most core in it: for a cluster, or a cloud in two pieces')
@@ -148,6 +175,10 @@ def main():
     if a.clip: alpha[~inbox] = 0
     core = ((alpha >= 0.6) & inbox) if a.all else label_largest((alpha >= 0.6), prefer=inbox)
     if core is None or not core.any(): sys.exit('no cloud found in the box')
+    if a.open > 0:   # a thin wisp off a lobe read as a finger on the bench (the user, 2026-10-17); the radius scales with the cloud, so a small puff is not eroded away
+        cy, cx = np.nonzero(core)
+        core = opened(core, int(min(a.open, max(6, min(cx.max() - cx.min(), cy.max() - cy.min()) * 0.05))))
+        if not a.all: core = label_largest(core, prefer=inbox)   # the opening can leave crumbs where a wisp was
     # the soft edge belongs to the chosen cloud only where it touches that cloud's core
     try:
         from scipy import ndimage
