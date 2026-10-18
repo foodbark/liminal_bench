@@ -68,7 +68,10 @@ export class WeatherFX {
     // old 0.4 per mph had the field whizzing past on a windy evening (2026-10-10, 19 mph)
     const speed = (0.8 + env.wind.speed * 0.12) * sign * SCALE;
     for (const c of this.clouds) {
-      c.x += speed * c.depth * dt;
+      // the photo clouds at half the pace: a sprite can only sit on whole pixels, and a drift
+      // of a few pixels a second reads as hopping (the user, 2026-10-17); slower, a cloud is
+      // still and then elsewhere, which is how a cumulus a few miles off moves
+      c.x += speed * c.depth * dt * (c.photo || c.parts ? 0.45 : 1);
       if (c.x > W + 40) c.x = -c.w - 40; else if (c.x < -c.w - 40) c.x = W + 40;
     }
     if (this.cb) { this.cb.x += speed * 2.2 * dt; if (this.cb.x > W + 60) this.cb.x = -this.cb.w - 60; else if (this.cb.x < -this.cb.w - 60) this.cb.x = W + 60; }   // valley storms move fast
@@ -109,7 +112,11 @@ export class WeatherFX {
       const { w, h } = assemblyBounds(built.parts);
       const depth = far ? 0.18 + r() * 0.22 : 0.45 + 0.95 * clamp((base.w - 200 * SCALE) / (600 * SCALE), 0, 1);
       const c = { photo: base, parts: built.parts, w, h, depth, sprite: null, spriteKey: '' };
-      const baseY = far ? HORIZON * (0.40 + r() * 0.10) : HORIZON * (0.36 + (1.4 - depth) * 0.1 + r() * 0.05);
+      // the deck sits low: in the Missoula valley the cloud base is often behind the ridgeline,
+      // only the crowns showing over Dean Stone (the user, 2026-10-17), and the terrain is drawn
+      // back over the clouds, so a base below the crest simply disappears behind it; the
+      // biggest, nearest clouds ride a little higher, the far rows and the small ones lower
+      const baseY = far ? HORIZON * (0.46 + r() * 0.12) : HORIZON * (0.40 + (1.4 - depth) * 0.1 + r() * 0.06);
       const bp = built.parts[built.parts.length - 1];   // the deck is where the base cloud's bottom sits; a tower rises above it
       c.y = Math.floor(baseY - (bp.y + base.h));
       c.x = anywhere ? r() * (W + c.w) - c.w : -c.w;

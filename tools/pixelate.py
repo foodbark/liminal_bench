@@ -117,7 +117,7 @@ def lift(lab, k):
     L = lab[..., 0].clip(0, 1) ** (1 - 0.3 * k)
     hi = np.percentile(L, 97)
     if hi > 0: L = L * min(0.97 / hi, 1.25)
-    L = 0.97 + (L - 0.97) * (1 + 0.35 * k)                      # the shade deepened against the white, for depth
+    L = 0.97 + (L - 0.97) * (1 + 0.1 * k)                       # the shade a touch deeper against the white; more took the gray bulk, the cloud's weight, away (the user, 2026-10-17)
     out = lab.copy(); out[..., 0] = L.clip(0, 1)
     out[..., 1:] *= 1 - 0.4 * k                                  # and the photo's cast (an evening's warmth, a lens's blue) eased toward neutral: the page adds the hour's color
     return out

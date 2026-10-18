@@ -107,12 +107,14 @@ export function assembleCloud(r, sheet, far) {
 }
 
 // A cumulus built on a photographed base with the lobe library, by the drawn clouds' grammar
-// (layoutCloud in clouds.js): a whole cloud from the sheet is the base mass, a tower of three
-// lobes stacks up out of its top, smaller lobes sit on the tower's shoulders, and a few more
-// scallop the base's upper edge. Every lobe shows only the edge that was free sky in its photo:
-// the parts are listed from the top of the tower down to the base and drawn in that order, so
-// each lobe's crease cut lies behind the lobe below it and the base's own edge is the last join.
-// A cloud that builds through an afternoon adds to this list from the base up.
+// (layoutCloud in clouds.js) kept wide and low: a whole cloud from the sheet is the base mass,
+// a tower of one or two broad lobes stands out of its top seated deep into it, and one or two
+// big lobes scallop the base's upper edge. Every lobe shows only the edge that was free sky in
+// its photo: the parts are listed from the top of the tower down to the base and drawn in that
+// order, so each lobe's crease cut lies behind the lobe below it and the base's own edge is the
+// last join. The look to shoot for is cumulus_01.jpg, a heavy horizontal mass with white
+// crowns; three stacked lobes with shoulders and scallops read as vertical popcorn (the user,
+// 2026-10-17). A cloud that builds through an afternoon adds to this list from the base up.
 export function buildCloud(r, sheet, far) {
   const near = sheet.sprites.filter((s) => !s.far && !s.cb), small = sheet.sprites.filter((s) => s.far);
   const pick = (pool) => pool[Math.floor(r() * pool.length)];
@@ -131,26 +133,22 @@ export function buildCloud(r, sheet, far) {
   const above = [];   // [lobe, cx, bottomY] from the base upward
   // the tower: three lobes, each a little narrower, each standing most of its height above the one below
   const tx = base.w * (0.3 + r() * 0.4);
-  let w = base.w * (0.4 + r() * 0.15), cx = tx, bottom = edgeAt(tx) + 0;
-  for (let t = 0; t < 3; t++) {
+  const levels = r() < 0.6 ? 2 : 1;
+  let w = base.w * (0.5 + r() * 0.15), cx = tx, bottom = edgeAt(tx) + 0;
+  for (let t = 0; t < levels; t++) {
     const l = want(w);
-    const showing = t === 0 ? 0.55 + r() * 0.15 : 0.6 + r() * 0.15;
-    const y = bottom - l.h * showing;              // the lobe's bottom sits this far below the join
+    const showing = 0.38 + r() * 0.12;             // seated deep: most of the lobe is behind the mass below
+    const y = bottom - l.h * showing;
     above.push({ photo: l, x: cx - l.w / 2, y: y, level: t });
-    // the shoulders: a small lobe on each side of this one, behind it
-    for (const side of [-1, 1]) if (r() < 0.7) {
-      const k = want(l.w * (0.4 + r() * 0.2));
-      above.push({ photo: k, x: cx + side * l.w * 0.42 - k.w / 2, y: y + l.h * (0.25 + r() * 0.2) - k.h * 0.6, level: t + 0.5 });
-    }
-    bottom = y; cx += (r() - 0.5) * l.w * 0.4; w *= 0.8;
+    bottom = y; cx += (r() - 0.5) * l.w * 0.3; w *= 0.72;
   }
-  // the scallops along the base's upper edge, away from the tower
-  const n = 2 + Math.floor(r() * 3);
+  // one or two big scallops along the base's upper edge, away from the tower, seated deep
+  const n = 1 + Math.floor(r() * 2);
   for (let i = 0; i < n; i++) {
-    const sx = base.w * (0.06 + r() * 0.88);
-    if (Math.abs(sx - tx) < base.w * 0.2) continue;
-    const l = want(base.w * (0.18 + r() * 0.14));
-    above.push({ photo: l, x: sx - l.w / 2, y: edgeAt(sx) - l.h * (0.4 + r() * 0.25), level: -1 });
+    const sx = base.w * (0.1 + r() * 0.8);
+    if (Math.abs(sx - tx) < base.w * 0.25) continue;
+    const l = want(base.w * (0.28 + r() * 0.14));
+    above.push({ photo: l, x: sx - l.w / 2, y: edgeAt(sx) - l.h * (0.3 + r() * 0.15), level: -1 });
   }
   // drawn from the top of the tower down: higher levels first, then the scallops, then the base
   above.sort((a, b) => b.level - a.level);
@@ -168,11 +166,11 @@ export function assemblyBounds(parts) {
 }
 
 // One sprite recolored for the hour, cached on the sprite (clouds sharing it share the work).
-function recolored(s, tones, key, env) {
+function recolored(s, tones, key, env, dark) {
   if (s.cache && s.cacheKey === key) return s.cache;
   const { w, h, data } = s;
   if (!s.cache) { const [cv, g] = makeCanvas(w, h); s.cache = cv; s.cacheCtx = g; s.img = g.createImageData(w, h); }
-  paint(data, s.img, tones, env, !!s.cb);
+  paint(data, s.img, tones, env, !!s.cb, dark);
   s.cacheCtx.putImageData(s.img, 0, 0);
   s.cacheKey = key;
   return s.cache;
@@ -180,23 +178,36 @@ function recolored(s, tones, key, env) {
 
 export function photoCloudSprite(c, tones, key, env) {
   if (c.sprite && c.spriteKey === key) return c.sprite;
+  // the same hour's tones with the moon down: what the cloud's bulk is at night, the moon's
+  // silver being kept for the crowns (paint)
+  const dark = env && env.sun.altitude < -3 && env.moon.altitude > 0 ? cloudTones({ ...env, moon: { ...env.moon, altitude: -20 } }, c.depth || 1).tones : null;
   if (c.parts) {
     if (!c.sprite) { const [cv, g] = makeCanvas(c.w, c.h); c.sprite = cv; c.spriteCtx = g; }
-    c.spriteCtx.clearRect(0, 0, c.w, c.h);
-    for (const p of c.parts) c.spriteCtx.drawImage(recolored(p.photo, tones, key, env), p.x, p.y);
+    const g = c.spriteCtx;
+    g.clearRect(0, 0, c.w, c.h);
+    // (a band of shade cast from each lobe onto the one behind was tried for the joins and
+    // read as a pencil outline; the lobes stay as the photos' pixels, the joins hidden by order)
+    for (const p of c.parts) g.drawImage(recolored(p.photo, tones, key, env, dark), p.x, p.y);
     c.spriteKey = key;
     return c.sprite;
   }
   const { w, h, data } = c.photo;
   if (!c.sprite) { const [cv, g] = makeCanvas(w, h); c.sprite = cv; c.spriteCtx = g; c.img = g.createImageData(w, h); }
-  paint(data, c.img, tones, env, !!c.cb);
+  paint(data, c.img, tones, env, !!c.cb, dark);
   c.spriteCtx.putImageData(c.img, 0, 0);
   c.spriteKey = key;
   return c.sprite;
 }
 
-// Recolor one sprite's pixels (data) into img through the hour's tones.
-function paint(data, img, tones, env, cb = false) {
+// Recolor one sprite's pixels (data) into img through the hour's tones. At night the bulk is
+// the dark night ambient, the moon's silver goes only on the lit crowns (the top third of the
+// sprite's own lightness, scaled by how near the moon the cloud is, through `dark`: the tones
+// with the moon down), and the town's glow warms the bases from below, since a cumulus over
+// Missoula on a moonless night is a dark shape that blots out stars with an orange underside
+// (the user, 2026-10-17: there are still cumulus at night).
+function paint(data, img, tones, env, cb = false, dark = null) {
+  const nightK = env ? clamp((-env.sun.altitude - 3) / 5, 0, 1) : 0;
+  const body = dark || tones;
   // how this hour's light changed each step of the ramp, against a clear noon
   // The cover's dimming of the valley's light is taken back out: a cumulus top is in full sun
   // above whatever shades the ground, and the photos were taken under partly cloudy skies
@@ -213,17 +224,31 @@ function paint(data, img, tones, env, cb = false) {
     const amb = env.pal.ambient, lum = Math.max(0.4, (0.299 * amb[0] + 0.587 * amb[1] + 0.114 * amb[2]));
     lift *= 1 + clamp(env.sun.altitude / 10, 0, 1) * (1 / lum - 1);
   }
-  const ratio = day.slice(0, 5).map((b, i) => [tones[i][0] / b[0] * lift, tones[i][1] / b[1] * lift, tones[i][2] / b[2] * lift]);
+  lift = 1 + (lift - 1) * (1 - nightK);   // a sunlit top's lift has no sun at night
+  const ratio = day.slice(0, 5).map((b, i) => [body[i][0] / b[0] * lift, body[i][1] / b[1] * lift, body[i][2] / b[2] * lift]);
+  // the moon's silver: what the moon adds to the lightest tone, for the crowns only
+  const silver = dark ? [tones[0][0] - dark[0][0], tones[0][1] - dark[0][1], tones[0][2] - dark[0][2]] : null;
+  // the town's glow on the bases, warm, strongest when there is no moon to compete
+  const glowK = nightK * (dark ? 0.1 : 0.22) * (env && env.cond.fog ? 0.3 : 1);
+  const glowCol = [255, 150, 70];
+  const w = img.width, h = img.height;
   const last = ratio.length - 1;
   const src = data.data, out = img.data, { lo, hi } = sheet;
   for (let i = 0; i < src.length; i += 4) {
     if (!src[i + 3]) { out[i + 3] = 0; continue; }
     const L = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
-    const t = clamp((hi - L) / (hi - lo), 0, 1) * last;
+    const ln = clamp((L - lo) / (hi - lo), 0, 1);
+    const t = (1 - ln) * last;
     const k = Math.min(last - 1, Math.floor(t)), f = t - k;
+    const lit = silver ? clamp((ln - 0.6) / 0.35, 0, 1) : 0;                 // the crowns
+    const yF = ((i >> 2) / w | 0) / h;
+    const glow = glowK > 0 ? glowK * yF * yF * (1 - ln * 0.7) : 0;         // the bases, from below
     for (let ch = 0; ch < 3; ch++) {
       const q = ratio[k][ch] + (ratio[k + 1][ch] - ratio[k][ch]) * f;
-      out[i + ch] = clamp(Math.round(src[i + ch] * q), 0, 255);
+      let v = src[i + ch] * q;
+      if (lit > 0) v += silver[ch] * lit * (src[i + ch] / 255);
+      if (glow > 0) v += glowCol[ch] * glow;
+      out[i + ch] = clamp(Math.round(v), 0, 255);
     }
     out[i + 3] = 255;
   }
