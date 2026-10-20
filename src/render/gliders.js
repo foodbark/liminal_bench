@@ -42,6 +42,20 @@ function crestY(x) {
 // or southwest, so the launch faces into it. Strong wind or a north wind keeps everyone on the
 // ground. The evening end is the sun, not the clock: a 19:30 cutoff grounded June's wings two
 // hours early and did nothing in December.
+// And who is free: the weather says whether the face works, the week says who can be there.
+// Weekday business hours put few wings up (they still happen, way less likely), the after-work
+// evening and the weekend afternoon put many: on a Sunday the user found a whole club on the
+// mountain, about ten people (2026-10-18, the user's note of 2026-10-20). `people` is that
+// weight, and the crowd it allows (gliderCrowd) runs from three wings midweek to a club.
+function people(env) {
+  const { weekday, hour, minute } = localParts(env.now);
+  const h = hour + minute / 60;
+  const weekend = weekday === 0 || weekday === 6;
+  if (weekend) return clamp((h - 10) / 2, 0, 1) * (h < 12 ? 0.6 : 1);          // a late start, then the whole afternoon
+  const work = h >= 9 && h < 17 ? 0.28 : 1;                                     // business hours; lunch does not count
+  const evening = clamp((h - 16.5) / 1, 0, 1);                                  // off work, out to the glass-off
+  return Math.max(work, evening * 0.9);
+}
 export function gliderChance(env) {
   if (env.sun.altitude < 0) return 0;
   const c = env.cond;
@@ -54,7 +68,15 @@ export function gliderChance(env) {
   const wind = spd > 16 ? 0 : spd > 10 ? (16 - spd) / 6 : 1;
   const into = spd < 5 || (env.wind.dir >= 190 && env.wind.dir <= 300) ? 1 : 0.25;
   const sky = c.cover > 0.9 ? 0.35 : 1;
-  return day * wind * into * sky;
+  return day * wind * into * sky * people(env);
+}
+// How many wings the day allows at once: three on a working day, up to a club of ten on a
+// weekend afternoon when the face is working and the chance is high.
+export function gliderCrowd(env) {
+  const { weekday } = localParts(env.now);
+  const weekend = weekday === 0 || weekday === 6;
+  const chance = gliderChance(env);
+  return weekend ? Math.round(3 + 7 * clamp((chance - 0.3) / 0.7, 0, 1)) : 3;
 }
 
 export class Gliders {
@@ -84,11 +106,14 @@ export class Gliders {
     if (!GLIDER) return;
     const chance = force === 'none' ? 0 : force === 'up' ? 1 : gliderChance(env);
     const flying = this.list.filter((g) => !g.landing).length;
+    const crowd = force === 'up' ? 3 : gliderCrowd(env);
     if (force === 'up') { while (this.list.filter((g) => !g.landing).length < 3) this.spawn(Math.random() * 120); }
-    else if (chance > 0 && flying < 3) {
+    else if (chance > 0 && flying < crowd) {
       this.next -= dt * chance;
-      if (this.next <= 0) { this.spawn(); this.next = 150 + Math.random() * 240; }
+      // launches come closer together when the hill is busy: a club lines up and goes one after another
+      if (this.next <= 0) { this.spawn(); this.next = (150 + Math.random() * 240) * (3 / crowd); }
     }
+    if (flying > crowd) for (const g of this.list.slice(crowd)) g.landing = true;   // the day's crowd thins as people head home
     if (chance === 0) for (const g of this.list) g.landing = true;   // the day is done, or the weather turned
     const windX = env.wind.speed * 0.12 * (Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1) * SCALE;
     const a = GLIDER.air;

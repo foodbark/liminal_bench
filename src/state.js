@@ -45,11 +45,12 @@ export function createState() {
   };
 }
 
-const partsFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'numeric', hour: 'numeric', minute: 'numeric', hour12: false });
+const partsFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'numeric', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false });
+const WEEKDAYS = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 export function localParts(date) {
   const p = {};
   for (const { type, value } of partsFmt.formatToParts(date)) p[type] = value;
-  return { month: (+p.month) - 1, hour: (+p.hour) % 24, minute: +p.minute };
+  return { month: (+p.month) - 1, weekday: WEEKDAYS[p.weekday] ?? 0, hour: (+p.hour) % 24, minute: +p.minute };
 }
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
 export const formatTime = (date) => timeFmt.format(date);
