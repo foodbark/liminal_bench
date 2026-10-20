@@ -9,14 +9,14 @@ function envForWorker(env) {
   return {
     pal: env.pal, sun: env.sun, moon: env.moon, lst: env.lst, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
     groundSnow: env.groundSnow, inversion: env.inversion, fogTop: env.fogTop, mountainFog: env.mountainFog, dusting: env.dusting, greenup: env.greenup,
-    photoAlto: !!photoField(),
+    photoAlto: !!photoField(), photoCirrus: !!photoCirrus(),
   };
 }
 import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
-import { photoField, drawField } from './photoclouds.js';
+import { photoField, photoCirrus, drawField } from './photoclouds.js';
 
 export class Renderer {
   constructor(canvas, assets) {
@@ -223,7 +223,7 @@ export class Renderer {
     // stars; cumulus, which are solid, still pass in front of them.
     // A low deck (stratocumulus, stratus, nimbostratus) is solid enough that it stays in front.
     const thin = sheets && (sk.strato + sk.stratus + sk.nimbo) < 0.05;
-    const fieldOn = sheets && sk.alto > 0.01 && !!photoField();
+    const fieldOn = sheets && ((sk.alto > 0.01 && !!photoField()) || (sk.cirrus > 0.01 && !!photoCirrus()));
     if (fieldOn && env.sheetKey !== this.fieldKey) { drawField(this.fieldCtx, env); this.fieldKey = env.sheetKey; }
     const drawSheets = () => {
       const ox = Math.round(this.sheetX);

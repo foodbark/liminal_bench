@@ -21,6 +21,9 @@ export function lobeLibrary() { return lobes; }
 // field with where it sat in the photo's sky, laid out on the page by the photo's own arrangement
 let field = null;   // { fields: [{ photo, type, scale, width }], cloudlets: [{ x, y, w, h, u, v, rank, density, data }], lo, hi }
 export function photoField() { return field; }
+// the cirrus tiles (assets/cirrus.png, cirrus.json): a photographed cirrus sheet keyed to a density per cell
+let cirrus = null;   // { tiles: [{ x, y, w, h, scale, data }] }
+export function photoCirrus() { return cirrus; }
 
 async function loadSheet(name) {
   const r = await fetch(new URL('../../' + ASSET_DIR + '/' + name + '.json', import.meta.url));
@@ -68,6 +71,8 @@ if (typeof Image !== 'undefined') {
         });
         field = { fields: fd.meta.fields, cloudlets, lo: flo, hi: Math.max(fhi, flo + 1) };
       }
+      const ci = await loadSheet('cirrus');
+      if (ci) cirrus = { tiles: ci.meta.tiles.map((t) => ({ ...t, data: ci.g.getImageData(t.x, t.y, t.w, t.h) })) };
     } catch (e) { console.warn('photo clouds not loaded', e); }
   })();
 }
@@ -300,6 +305,7 @@ const VANISH = Math.round(HORIZON * 0.62);
 const fhash = (a, b) => { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 export function drawField(g, env) {
   g.clearRect(0, 0, W, VANISH);
+  if (cirrus && env.sky && env.sky.cirrus > 0) drawCirrus(g, env);
   const amount = env.sky ? env.sky.alto : 0;
   if (!field || amount <= 0) return;
   const f = field.fields[0];
@@ -337,4 +343,69 @@ export function drawField(g, env) {
       }
     }
   }
+}
+
+// The cirrus from the user's photograph (cirrus_02: a band of hooked cirrus): the tile's alpha is
+// the cirrus density per cell, and the sheet is that tile repeated across the sky, every other
+// copy mirrored, wrapped so it scrolls with the sheets. The feed's high cover says how thin a
+// density still shows: a little cirrus is the dense cores only, a few hooks and streaks, full
+// cover brings in the body and the haze. Each density is one solid tone (the hour's veil tones,
+// the haze mixed toward the sky, all hazed toward the horizon with depth), never a stipple,
+// since the sheet scrolls and a scrolling stipple dances (the user, 2026-10-11). The drawn
+// filaments (sheets.js) stand in until the tile is loaded.
+let cirrusImg = null;
+function drawCirrus(g, env) {
+  const t = cirrus.tiles[0];
+  const k = env.sky.cirrus;
+  const { tones } = cloudTones(env, 1);
+  const { horizon, top } = env.pal;
+  const sky = top || horizon;
+  const cut = 0.55 - 0.43 * k;                       // the thinnest density that shows
+  const levels = [[0.55, tones[0], 0.0], [0.3, tones[1], 0.25], [0.12, tones[1], 0.55]];   // [density, tone, how far toward the sky]
+  if (!cirrusImg) cirrusImg = g.createImageData(W, VANISH);
+  const out = cirrusImg.data; out.fill(0);
+  const td = t.data.data, tw = t.w, th = t.h;
+  // copies of the tile across the frame at its own scale, cropped at the join (never squeezed),
+  // every other one mirrored; the tile's top set by its dy (a photo shot looking up has its
+  // band low in the frame, and the cirrus hugged the ridge)
+  // the join is the column with the least cirrus in the last sixth of a copy's width, so the
+  // copies meet through sky and not through a cut hook (a fixed width left a vertical line)
+  if (!t.join) {
+    const n0 = Math.max(1, Math.round(W / tw)), full = Math.floor(Math.min(tw, W / n0));
+    let best = full - 1, least = Infinity;
+    for (let x = Math.floor(full * 0.84); x < full; x++) {
+      let s = 0; for (let y = 0; y < th; y++) s += td[(y * tw + x) * 4 + 3];
+      if (s < least) { least = s; best = x; }
+    }
+    t.join = best + 1;
+  }
+  const Pp = t.join;
+  const oy = Math.round((t.dy || 0) * th);
+  const colorAt = (level, d) => {
+    const [, tone, toSky] = level;
+    const c = [0, 1, 2].map((i) => tone[i] + (sky[i] - tone[i]) * toSky);
+    const hz = Math.min(0.55, (1 - 1 / d) * 0.55);
+    return c.map((v, i) => Math.round(v + (horizon[i] - v) * hz));
+  };
+  const cache = new Map();
+  // (the mirrored copies also sit a little lower, or the hooks either side of the join paired
+  // into a butterfly)
+  const drop = Math.round(th * 0.18);
+  for (let y = 0; y < VANISH; y++) {
+    const d = VANISH / Math.max(1, VANISH - y);
+    const band = Math.min(7, Math.floor((1 - 1 / d) * 8));
+    for (let x = 0; x < W; x++) {
+      const copy = Math.floor(x / Pp), u = x - copy * Pp;
+      let tx = Math.floor(u); if (copy % 2) tx = Pp - 1 - tx;   // mirrored about the join, so the seam column meets itself
+      const ty = y - oy - (copy % 2 ? drop : 0); if (ty < 0 || ty >= th) continue;
+      const a = td[(ty * tw + Math.min(tw - 1, Math.max(0, tx))) * 4 + 3] / 255;
+      if (a < cut || a < 0.12) continue;
+      const li = a >= 0.55 ? 0 : a >= 0.3 ? 1 : 2;
+      const key = li * 8 + band;
+      let c = cache.get(key); if (!c) { c = colorAt(levels[li], d); cache.set(key, c); }
+      const o = (y * W + x) * 4;
+      out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255;
+    }
+  }
+  g.putImageData(cirrusImg, 0, 0);
 }

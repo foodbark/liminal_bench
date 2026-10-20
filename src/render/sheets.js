@@ -60,8 +60,9 @@ export function renderSheets(img, env) {
     }
   }
 
-  // --- cirrus: wisps combed along the wind, fading at their ends
-  if (sky.cirrus > 0) {
+  // --- cirrus: wisps combed along the wind, fading at their ends; the stand-in until the
+  // photographed cirrus tile is loaded (env.photoCirrus; drawCirrus in photoclouds.js)
+  if (sky.cirrus > 0 && !env.photoCirrus) {
     const rnd = mulberry32(77);
     const count = Math.round(6 + sky.cirrus * 34);
     for (let s = 0; s < count; s++) {

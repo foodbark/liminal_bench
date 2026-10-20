@@ -52,6 +52,57 @@ def label_cells(mask, s=4):
     return labels, sizes
 
 
+def build_cirrus(cfg, small):
+    """Cirrus tiles from photographs (the config's "fields" entries of type "cirrus"): the whole
+    frame keyed against the sky's own blueness row by row (cirrus is thin, and the clouds' key,
+    set for a cumulus against blue, left all of it as sky), the key's soft alpha averaged onto
+    the art grid and kept as the tile's alpha: how dense the cirrus is in each cell, from haze
+    to core. The page (drawField in src/render/photoclouds.js) repeats the tile across the sky
+    and turns density into the hour's veil tones, the feed's high cover deciding how thin a
+    density still shows. No color is kept: cirrus is white, its only color the sky's and the
+    sun's, which the page puts on. assets/cirrus.png and cirrus.json, halved by averaging for
+    assets/small (the clouds' halve snaps alpha, which a translucent tile cannot take)."""
+    entries = [e for e in (cfg.get('fields') or []) if e.get('type') == 'cirrus']
+    if not entries: return
+    tiles = []; rects = []
+    for e in entries:
+        im = ImageOps.exif_transpose(Image.open(os.path.join(ROOT, 'art', e['photo']))).convert('RGB')
+        W, H = im.size
+        fx0, fy0, fx1, fy1 = e.get('box', [0, 0, 1, 1])
+        x0, y0, x1, y1 = int(fx0 * W), int(fy0 * H), int(fx1 * W), int(fy1 * H)
+        px = np.asarray(im, np.float64)[y0:y1, x0:x1]
+        r, b = px[..., 0], px[..., 2]
+        bl = (b - r) / np.maximum(b, 1)
+        # the sky behind the cirrus, row by row: the upper end of each row's blueness, smoothed
+        rows = np.percentile(bl, 80, axis=1)
+        k = 201; bg = np.convolve(np.pad(rows, k // 2, mode='edge'), np.ones(k) / k, mode='valid')
+        span = e.get('span', 0.2)   # how far below the sky's blueness a cell is wholly cirrus
+        a = np.clip((bg[:, None] - bl) / span, 0, 1)
+        scale = e.get('scale', 0.25)
+        cs = max(2, round(4 / scale))   # photo pixels per art cell: a cell is 4 page pixels
+        gh, gw = a.shape[0] // cs, a.shape[1] // cs
+        A = a[:gh * cs, :gw * cs].reshape(gh, cs, gw, cs).mean((1, 3))
+        tile = np.zeros((gh * 4, gw * 4, 4), np.uint8); tile[..., :3] = 255
+        tile[..., 3] = (A * 255 + 0.5).astype(np.uint8).repeat(4, 0).repeat(4, 1)
+        tiles.append(tile)
+        print(f"  cirrus {e['photo']}: {gw}x{gh} cells, {round(float((A >= 0.12).mean()) * 100)}% of the sky has cirrus at or over haze density")
+    Wt = max(t.shape[1] for t in tiles); Ht = sum(t.shape[0] for t in tiles) + 2 * (len(tiles) - 1)
+    sheet = np.zeros((Ht, Wt, 4), np.uint8); y = 0
+    for t, e in zip(tiles, entries):
+        h, w = t.shape[:2]; sheet[y:y + h, :w] = t
+        rects.append({'x': 0, 'y': y, 'w': w, 'h': h, 'photo': e['photo'], 'scale': e.get('scale', 0.25), 'dy': e.get('dy', 0)}); y += h + 2   # dy: where the tile's top goes, as a fraction of its height (a photo shot looking up has its band low in the frame)
+    Image.fromarray(sheet, 'RGBA').save(os.path.join(ROOT, 'assets/cirrus.png'), optimize=True)
+    with open(os.path.join(ROOT, 'assets/cirrus.json'), 'w') as f: json.dump({'tiles': rects}, f)
+    # the half-size copy averages 2x2 blocks (the sheet's rows and columns are even: cells of 4)
+    h2, w2 = sheet.shape[0] // 2 * 2, sheet.shape[1] // 2 * 2
+    sm = sheet[:h2, :w2].reshape(h2 // 2, 2, w2 // 2, 2, 4).astype(np.float64).mean((1, 3))
+    sm[..., :3] = 255
+    Image.fromarray((sm + 0.5).astype(np.uint8), 'RGBA').save(os.path.join(small, 'cirrus.png'), optimize=True)
+    with open(os.path.join(small, 'cirrus.json'), 'w') as f:
+        json.dump({'tiles': [{**r, 'x': r['x'] // 2, 'y': r['y'] // 2, 'w': r['w'] // 2, 'h': r['h'] // 2} for r in rects]}, f)
+    print(f'assets/cirrus.png {Wt}x{Ht}, {len(rects)} cirrus tile(s)')
+
+
 def build_fields(cfg, tmp, small):
     """A cloud field from one photograph (the config's "fields": a photo, the box of sky that holds
     the field, the photo's horizon as a fraction of its height, and the sprite scale): every
@@ -61,7 +112,7 @@ def build_fields(cfg, tmp, small):
     field out by the photo's own arrangement and thin it by the feed's cover (src/render/photoclouds.js).
     The drawn altocumulus was identical ovals on a grid; a real field is cloudlets of every size
     in irregular rippled rows with open sky between them, which is what the photo has."""
-    fields = cfg.get('fields') or []
+    fields = [e for e in (cfg.get('fields') or []) if e.get('type', 'alto') != 'cirrus']
     pieces = []
     for fi, e in enumerate(fields):
         im = ImageOps.exif_transpose(Image.open(os.path.join(ROOT, 'art', e['photo']))).convert('RGB')
@@ -241,6 +292,7 @@ def main():
             json.dump({'lobes': [{**r, 'x': r['x'] // 2, 'y': r['y'] // 2, 'w': (r['w'] + 1) // 2, 'h': (r['h'] + 1) // 2} for r in lrects]}, f)
         print(f'assets/lobes.png {LW}x{LH}, {len(lrects)} lobes from {len({m["cloud"] for _, m in lobes})} clouds')
     build_fields(cfg, tmp, small)
+    build_cirrus(cfg, small)
 
 
 if __name__ == '__main__':

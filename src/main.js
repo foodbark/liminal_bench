@@ -5,7 +5,7 @@ import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { dustingTables, presetHours } from './dusting.js';
 import { skyPalette } from './palette.js';
 import { Renderer } from './render/renderer.js';
-import { photoField } from './render/photoclouds.js';
+import { photoField, photoCirrus } from './render/photoclouds.js';
 import { setupUI } from './ui.js';
 import { loadBackdrop } from './assets.js';
 import { peakSnowAmount, updatePeakSnowLatch, PEAK_BARE, PEAK_FIRST } from './season.js';
@@ -71,6 +71,17 @@ function computeEnv() {
     const cam = camCover(state.cams, w, now);
     if (cam) w = { ...w, ...cam };
   }
+  // the debug cover slider scales the three bands with the total, so a preset's sky thins and
+  // thickens under it (it used to set only the total and the shade, and all it did was darken
+  // the scene; the user, 2026-10-20); a sky with no bands at all gets the slider as low cover
+  if (o.enabled && o.cover >= 0) {
+    const want = o.cover / 100, have = Math.max(w.coverLow ?? 0, 0) + Math.max(w.coverMid ?? 0, 0) + Math.max(w.coverHigh ?? 0, 0);
+    const bands = w.coverLow != null || w.coverMid != null || w.coverHigh != null;
+    if (bands && have > 0.001) {
+      const f = want / have;   // each band in proportion, their sum the slider's value
+      w = { ...w, cover: want, coverLow: Math.min(1, (w.coverLow ?? 0) * f), coverMid: Math.min(1, (w.coverMid ?? 0) * f), coverHigh: Math.min(1, (w.coverHigh ?? 0) * f) };
+    } else w = { ...w, cover: want, coverLow: want, coverMid: 0, coverHigh: 0 };
+  }
   state.weatherShown = w;
   let cover = w.cover;
   if (o.enabled && o.cover >= 0) cover = o.cover / 100;
@@ -79,7 +90,6 @@ function computeEnv() {
   // one most of the way, a high veil hardly at all (and at sunset it is the sky that goes pink
   // end to end). `cover` stays the total for what a veil does hide: stars, the Milky Way, meteors.
   cond.shade = w.coverLow != null ? Math.min(1, (w.coverLow ?? 0) + (w.coverMid ?? 0) * 0.7 + (w.coverHigh ?? 0) * 0.08) : cover;
-  if (o.enabled && o.cover >= 0) cond.shade = cover;
   if (cond.label === 'overcast' && (w.coverLow ?? 1) < 0.4 && (w.coverMid ?? 1) < 0.4) cond.label = 'thin high cloud';
   // Inversion: fog in a cold month means the valley is a sea of fog with the ranges above it
   // and a clear sky over it; fogTop is how far up the slopes the sea reaches (0: the valley
@@ -156,7 +166,7 @@ function computeEnv() {
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
     terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
-    sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}|${photoField() ? 'pf' : ''}`,
+    sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}|${photoField() ? 'pf' : ''}${photoCirrus() ? 'pc' : ''}`,
     ambientKey,
   };
 }
