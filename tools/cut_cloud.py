@@ -142,6 +142,37 @@ def opened(mask, radius):
     return mask & full
 
 
+def key_sky(px, x0, y0, x1, y1, cloud=0.28, sky=None):
+    """Alpha (1 cloud, 0 sky) for the whole frame from how blue each pixel is against the cloud,
+    the sky's blueness measured inside the box when not given. Returns (alpha, blueness, sky)."""
+    r, b = px[..., 0], px[..., 2]
+    blueness = (b - r) / np.maximum(b, 1)
+    if sky is None: sky = float(np.percentile(blueness[y0:y1, x0:x1], 90)) - 0.14
+    if sky <= cloud + 0.05: sys.exit(f'no blue sky to key against in the box (sky blueness {sky:.2f}, cloud {cloud:.2f}): '
+                                     'the sky near the horizon is as pale as a cloud base, so this key only works for clouds against blue')
+    return ((sky - blueness) / (sky - cloud)).clip(0, 1), blueness, sky
+
+
+def despill(px, alpha, blueness, sky):
+    """A translucent edge pixel is cloud over sky, so take the sky's share back out (color =
+    cloud * a + sky * (1 - a)), or every edge averages down to a dark blue rim. The sky darkens
+    toward the top of a frame, so its color is taken row by row (the median of that row's sky
+    pixels, rows without sky filled from their neighbors, then smoothed); one color for the
+    whole frame over-subtracted at the top and left black edges. Only where the pixel is mostly
+    cloud; thinner fringe keeps its mixed color and the premultiplied average in the pixelate
+    step weighs it by its alpha."""
+    issky = blueness >= sky
+    rows = np.array([np.median(px[y][issky[y]], 0) if issky[y].sum() > 20 else [np.nan] * 3 for y in range(px.shape[0])])
+    for i in range(3):
+        col = rows[:, i]; ok = ~np.isnan(col)
+        if not ok.any(): col[:] = (80., 120., 180.)[i]
+        else: col[~ok] = np.interp(np.nonzero(~ok)[0], np.nonzero(ok)[0], col[ok])
+        k = 31; rows[:, i] = np.convolve(np.pad(col, k // 2, mode='edge'), np.ones(k) / k, mode='valid')
+    skycol = rows[:, None, :]
+    a3 = alpha[..., None]
+    return np.where(a3 >= 0.25, (px - skycol * (1 - a3)) / np.maximum(a3, 0.25), px).clip(0, 255)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('photo'); ap.add_argument('out')
@@ -159,12 +190,7 @@ def main():
     fx0, fy0, fx1, fy1 = (float(v) for v in a.box.split(','))
     x0, y0, x1, y1 = int(fx0 * W), int(fy0 * H), int(fx1 * W), int(fy1 * H)
     px = np.asarray(im, np.float64)
-    r, b = px[..., 0], px[..., 2]
-    blueness = (b - r) / np.maximum(b, 1)
-    sky = a.sky if a.sky is not None else float(np.percentile(blueness[y0:y1, x0:x1], 90)) - 0.14
-    if sky <= a.cloud + 0.05: sys.exit(f'no blue sky to key against in the box (sky blueness {sky:.2f}, cloud {a.cloud:.2f}): '
-                                       'the sky near the horizon is as pale as a cloud base, so this key only works for clouds against blue')
-    alpha = ((sky - blueness) / (sky - a.cloud)).clip(0, 1)
+    alpha, blueness, sky = key_sky(px, x0, y0, x1, y1, a.cloud, a.sky)
     if a.list:
         for n, bx0, by0, bx1, by1 in components(alpha >= 0.6, y0, y1, x0, x1)[:30]:
             print(f'{n:8d} px  {bx1 - bx0}x{by1 - by0}  box [{bx0 / W:.3f}, {by0 / H:.3f}, {bx1 / W:.3f}, {by1 / H:.3f}]')
@@ -188,23 +214,7 @@ def main():
         for _ in range(a.pad):
             n2 = near.copy(); n2[1:] |= near[:-1]; n2[:-1] |= near[1:]; n2[:, 1:] |= near[:, :-1]; n2[:, :-1] |= near[:, 1:]; near = n2
     alpha = np.where(near, alpha, 0)
-    # despill: a translucent edge pixel is cloud over sky, so take the sky's share back out
-    # (color = cloud * a + sky * (1 - a)), or every edge averages down to a dark blue rim
-    # The sky darkens toward the top of a frame, so its color is taken row by row (the median
-    # of that row's sky pixels, rows without sky filled from their neighbors, then smoothed);
-    # one color for the whole frame over-subtracted at the top and left black edges.
-    issky = blueness >= sky
-    rows = np.array([np.median(px[y][issky[y]], 0) if issky[y].sum() > 20 else [np.nan] * 3 for y in range(px.shape[0])])
-    for i in range(3):
-        col = rows[:, i]; ok = ~np.isnan(col)
-        if not ok.any(): col[:] = (80., 120., 180.)[i]
-        else: col[~ok] = np.interp(np.nonzero(~ok)[0], np.nonzero(ok)[0], col[ok])
-        k = 31; rows[:, i] = np.convolve(np.pad(col, k // 2, mode='edge'), np.ones(k) / k, mode='valid')
-    skycol = rows[:, None, :]
-    a3 = alpha[..., None]
-    # only where the pixel is mostly cloud; thinner fringe keeps its mixed color and the
-    # premultiplied average in the pixelate step weighs it by its alpha
-    px = np.where(a3 >= 0.25, (px - skycol * (1 - a3)) / np.maximum(a3, 0.25), px).clip(0, 255)
+    px = despill(px, alpha, blueness, sky)
     # Where the cloud runs into a cut (a clipped box edge, or the photo's own frame) the edge is
     # a straight line. Inside a band along it the cut is moved onto the darkest path through the
     # cloud (a seam: one pixel per row, stepping at most one column per row, the path of least

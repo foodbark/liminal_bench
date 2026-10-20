@@ -88,8 +88,10 @@ export function renderSheets(img, env) {
   }
 
   // --- altocumulus: fields of ragged little patches in rippled rows, shrinking and flattening
-  // toward the horizon; each patch is a few overlapping ellipses, gaps come in clusters
-  if (sky.alto > 0) {
+  // toward the horizon; each patch is a few overlapping ellipses, gaps come in clusters.
+  // The stand-in: once the photographed field is loaded (env.photoAlto) the page lays the
+  // cloudlets of the user's photo on this deck instead (drawField in photoclouds.js)
+  if (sky.alto > 0 && !env.photoAlto) {
     const rnd = mulberry32(91);
     for (let r = 0; r < 48; r++) {
       const d = Math.pow(1.13, r);

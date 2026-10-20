@@ -9,12 +9,14 @@ function envForWorker(env) {
   return {
     pal: env.pal, sun: env.sun, moon: env.moon, lst: env.lst, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
     groundSnow: env.groundSnow, inversion: env.inversion, fogTop: env.fogTop, mountainFog: env.mountainFog, dusting: env.dusting, greenup: env.greenup,
+    photoAlto: !!photoField(),
   };
 }
 import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
+import { photoField, drawField } from './photoclouds.js';
 
 export class Renderer {
   constructor(canvas, assets) {
@@ -76,6 +78,7 @@ export class Renderer {
     [this.props, this.propsCtx] = makeCanvas(W, H);
     [this.sheets, this.sheetsCtx] = makeCanvas(W, H);
     this.sheetKey = ''; this.pendingSheetKey = ''; this.sheetX = 0;
+    [this.field, this.fieldCtx] = makeCanvas(W, H); this.fieldKey = '';   // the photographed altocumulus field, scrolled with the sheets
     [this.propsLit, this.propsLitCtx] = makeCanvas(W, H);
     // Show the painting at once, in its own daylight colors, so the scene is never empty while
     // the first lighting pass runs (seconds on a big painting, much longer on a phone).
@@ -220,7 +223,14 @@ export class Renderer {
     // stars; cumulus, which are solid, still pass in front of them.
     // A low deck (stratocumulus, stratus, nimbostratus) is solid enough that it stays in front.
     const thin = sheets && (sk.strato + sk.stratus + sk.nimbo) < 0.05;
-    const drawSheets = () => { const ox = Math.round(this.sheetX); c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0); lap('sheets'); };
+    const fieldOn = sheets && sk.alto > 0.01 && !!photoField();
+    if (fieldOn && env.sheetKey !== this.fieldKey) { drawField(this.fieldCtx, env); this.fieldKey = env.sheetKey; }
+    const drawSheets = () => {
+      const ox = Math.round(this.sheetX);
+      c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0);
+      if (fieldOn) { c.drawImage(this.field, ox, 0); c.drawImage(this.field, ox - W, 0); }
+      lap('sheets');
+    };
     if (thin) drawSheets();
     // the sun comes back over the high sheets: a cirrostratus veil leaves the disc, with a halo
     if (thin && sunOverSheets(sk)) { drawSun(c, env, true); lap('sun'); }

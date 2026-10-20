@@ -1,4 +1,4 @@
-import { ASSET_DIR, SCALE } from '../state.js';
+import { ASSET_DIR, SCALE, W, HORIZON } from '../state.js';
 import { makeCanvas, clamp } from '../util/pixel.js';
 import { cloudTones } from './clouds.js';
 
@@ -15,8 +15,12 @@ import { cloudTones } from './clouds.js';
 let sheet = null;   // { sprites: [{ x, y, w, h, far, data }], lo, hi }
 export function photoClouds() { return sheet; }
 // the lobe library (assets/lobes.png, lobes.json): the near clouds split along their creases
-let lobes = null;   // { list: [{ x, y, w, h, data, cloud, freeTop, freeBottom, onBase }] }
+let lobes = null;   // { list: [{ x, y, w, h, data, cloud, freeTop, freeBottom, freeSides, onBase, seam }] }: bumps cut along their shadow seams (tools/lobes.py)
 export function lobeLibrary() { return lobes; }
+// the cloud field (assets/field.png, field.json): every cloudlet of a photographed altocumulus
+// field with where it sat in the photo's sky, laid out on the page by the photo's own arrangement
+let field = null;   // { fields: [{ photo, type, scale, width }], cloudlets: [{ x, y, w, h, u, v, rank, density, data }], lo, hi }
+export function photoField() { return field; }
 
 async function loadSheet(name) {
   const r = await fetch(new URL('../../' + ASSET_DIR + '/' + name + '.json', import.meta.url));
@@ -50,6 +54,20 @@ if (typeof Image !== 'undefined') {
       sheet = { sprites, lo, hi: Math.max(hi, lo + 1), cb: sprites.find((s) => s.cb) || null };
       const lb = await loadSheet('lobes');
       if (lb) lobes = { list: lb.meta.lobes.map((l) => ({ ...l, data: lb.g.getImageData(l.x, l.y, l.w, l.h) })) };
+      const fd = await loadSheet('field');
+      if (fd) {
+        let flo = 255, fhi = 0;
+        const cloudlets = fd.meta.cloudlets.map((c) => {
+          const data = fd.g.getImageData(c.x, c.y, c.w, c.h), d = data.data;
+          for (let i = 0; i < d.length; i += 4) {
+            if (!d[i + 3]) continue;
+            const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            if (L < flo) flo = L; if (L > fhi) fhi = L;
+          }
+          return { ...c, data, bands: [] };
+        });
+        field = { fields: fd.meta.fields, cloudlets, lo: flo, hi: Math.max(fhi, flo + 1) };
+      }
     } catch (e) { console.warn('photo clouds not loaded', e); }
   })();
 }
@@ -121,7 +139,10 @@ export function buildCloud(r, sheet, far) {
   if (far || !near.length) return { parts: [{ photo: pick(far ? small : near), x: 0, y: 0 }] };
   const base = pick(near);
   if (!lobes) return assembleCloud(r, sheet, far);
-  const crowns = lobes.list.filter((l) => l.freeTop > 0.4);
+  // a crown is a bump whose top edge and upper flanks were sky in its photo: what stands out of
+  // the mass is then the photo's own outline, never a seam cut (a mass piece with a flat seam on
+  // top and sky down its sides stood on the bench with a ruler-straight top, 2026-10-20)
+  const crowns = lobes.list.filter((l) => l.freeTop > 0.85 && l.freeSides > 0.7);
   const want = (w) => {
     const ok = crowns.filter((l) => l.w >= w * 0.7 && l.w <= w * 1.4);
     if (ok.length) return ok[Math.floor(r() * ok.length)];
@@ -166,11 +187,11 @@ export function assemblyBounds(parts) {
 }
 
 // One sprite recolored for the hour, cached on the sprite (clouds sharing it share the work).
-function recolored(s, tones, key, env, dark) {
+function recolored(s, tones, key, env, dark, range = sheet, sunlit = 1) {
   if (s.cache && s.cacheKey === key) return s.cache;
   const { w, h, data } = s;
   if (!s.cache) { const [cv, g] = makeCanvas(w, h); s.cache = cv; s.cacheCtx = g; s.img = g.createImageData(w, h); }
-  paint(data, s.img, tones, env, !!s.cb, dark);
+  paint(data, s.img, tones, env, !!s.cb, dark, range, sunlit);
   s.cacheCtx.putImageData(s.img, 0, 0);
   s.cacheKey = key;
   return s.cache;
@@ -205,7 +226,7 @@ export function photoCloudSprite(c, tones, key, env) {
 // with the moon down), and the town's glow warms the bases from below, since a cumulus over
 // Missoula on a moonless night is a dark shape that blots out stars with an orange underside
 // (the user, 2026-10-17: there are still cumulus at night).
-function paint(data, img, tones, env, cb = false, dark = null) {
+function paint(data, img, tones, env, cb = false, dark = null, range = sheet, sunlit = 1) {
   const nightK = env ? clamp((-env.sun.altitude - 3) / 5, 0, 1) : 0;
   const body = dark || tones;
   // how this hour's light changed each step of the ramp, against a clear noon
@@ -219,12 +240,15 @@ function paint(data, img, tones, env, cb = false, dark = null) {
   // (not under a storm: the cell is the cover, and the light really is down; the cell itself
   // keeps some, since its anvil stands in sun above the sheet and a lit anvil over a dark
   // valley is the storm's beauty)
+  // (the altocumulus field takes half of it, `sunlit`: with the whole lift the cloudlets were
+  // white blobs again, with none they sat dull gray beside the white cumulus; their mass is
+  // the shaded undersides, kept by pixelating the field as one image; the user, 2026-10-20)
   let lift = env && env.cond.storm ? (cb ? 1.3 : 1) : 1 / (1 - 0.32 * (env ? (env.cond.shade ?? env.cond.cover) : 0));
   if (env && !(env.cond.storm)) {
     const amb = env.pal.ambient, lum = Math.max(0.4, (0.299 * amb[0] + 0.587 * amb[1] + 0.114 * amb[2]));
     lift *= 1 + clamp(env.sun.altitude / 10, 0, 1) * (1 / lum - 1);
   }
-  lift = 1 + (lift - 1) * (1 - nightK);   // a sunlit top's lift has no sun at night
+  lift = 1 + (lift - 1) * (1 - nightK) * sunlit;   // a sunlit top's lift has no sun at night
   const ratio = day.slice(0, 5).map((b, i) => [body[i][0] / b[0] * lift, body[i][1] / b[1] * lift, body[i][2] / b[2] * lift]);
   // the moon's silver: what the moon adds to the lightest tone, for the crowns only
   const silver = dark ? [tones[0][0] - dark[0][0], tones[0][1] - dark[0][1], tones[0][2] - dark[0][2]] : null;
@@ -233,7 +257,7 @@ function paint(data, img, tones, env, cb = false, dark = null) {
   const glowCol = [255, 150, 70];
   const w = img.width, h = img.height;
   const last = ratio.length - 1;
-  const src = data.data, out = img.data, { lo, hi } = sheet;
+  const src = data.data, out = img.data, { lo, hi } = range;
   for (let i = 0; i < src.length; i += 4) {
     if (!src[i + 3]) { out[i + 3] = 0; continue; }
     const L = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
@@ -251,5 +275,58 @@ function paint(data, img, tones, env, cb = false, dark = null) {
       out[i + ch] = clamp(Math.round(v), 0, 255);
     }
     out[i + 3] = 255;
+  }
+}
+
+// The altocumulus field, laid out on the sheet deck (W wide, down to the sheets' vanishing line)
+// by the photo's own arrangement: each cloudlet at its photo position, the photo's horizon on
+// the deck's vanishing line, the photo repeated across the frame (every other copy mirrored)
+// and around the wrap so the field scrolls with the sheets. The feed's mid cover thins it: a
+// cloudlet stays while its crowding rank beats the cover's cut, so a thin field is the photo's
+// densest patches in an otherwise clear sky and the strays go first; past half (the mix never
+// hands the field more than 0.7: above that the mid cover becomes the altostratus veil) a
+// second copy, offset by half a period, fills the gaps with more of the same cloudlets. Each row's depth
+// picks its tones (farther rows hazier, as cloudTones does for the cumulus), and the recolor
+// is the cumulus sprites' own (paint), so the sunset and the moon land on the field too.
+const VANISH = Math.round(HORIZON * 0.62);
+const fhash = (a, b) => { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+export function drawField(g, env) {
+  g.clearRect(0, 0, W, VANISH);
+  const amount = env.sky ? env.sky.alto : 0;
+  if (!field || amount <= 0) return;
+  const f = field.fields[0];
+  const P = f.width * f.scale;                       // one copy of the photo's field, in page pixels
+  const n = Math.max(1, Math.round(W / P)), Pp = W / n;
+  const dark = env.sun.altitude < -3 && env.moon.altitude > 0 ? (d) => cloudTones({ ...env, moon: { ...env.moon, altitude: -20 } }, d).tones : null;
+  const bands = 5, toneOf = [];
+  for (let b = 0; b < bands; b++) {
+    const depth = 1.2 - (b + 0.5) / bands;           // the top of the frame near, the vanishing line far
+    const { tones, key } = cloudTones(env, depth);
+    toneOf.push({ tones, key, dark: dark ? dark(depth) : null });
+  }
+  const layers = amount > 0.5 ? [[0, amount], [0.5, (amount - 0.5) / 0.2]] : [[0, amount]];
+  for (const [shift, t] of layers) {
+    for (let k = 0; k < n; k++) {
+      const mirror = k % 2 === 1;
+      for (let i = 0; i < field.cloudlets.length; i++) {
+        const c = field.cloudlets[i];
+        const jitter = fhash(i, k * 7 + (shift ? 3 : 0));
+        if (c.rank + (jitter - 0.5) * 0.2 < 1 - t) continue;   // thinned out
+        const u = mirror ? 1 - c.u : c.u;
+        const x = Math.round((k + shift) * Pp + u * Pp - c.w / 2 + (shift ? (fhash(i, 11) - 0.5) * c.w : 0));
+        const y = Math.round(c.v * VANISH - c.h / 2 + (shift ? (fhash(i, 13) - 0.5) * c.h * 0.6 : 0));
+        if (y + c.h <= 0 || y >= VANISH) continue;
+        const b = Math.min(bands - 1, Math.max(0, Math.floor(c.v * bands)));
+        const t0 = toneOf[b];
+        if (!c.bands[b]) c.bands[b] = { w: c.w, h: c.h, data: c.data };
+        const img = recolored(c.bands[b], t0.tones, t0.key, env, t0.dark, field, 0.5);
+        for (const dx of [-W, 0, W]) {
+          const xx = x + dx;
+          if (xx + c.w <= 0 || xx >= W) continue;
+          if (mirror) { g.save(); g.translate(xx + c.w, y); g.scale(-1, 1); g.drawImage(img, 0, 0); g.restore(); }
+          else g.drawImage(img, xx, y);
+        }
+      }
+    }
   }
 }
