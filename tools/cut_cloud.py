@@ -16,9 +16,13 @@ translucent edge averages down into the cloud rather than snapping to a hard lin
               the box fractions to pass back in, for filling the config's clouds list
   --all       keep every cloud in the box (a cluster, or one cloud the key sees as two pieces)
               instead of the single one with the most core inside it
-  --clip      the box also cuts. Cumulus join at their bases, and without this the whole joined
-              mass comes along; with it the cut runs straight along the box edge, so put that
-              edge where the join is narrow or in the gray of the base
+  --fill B    fx0,fy0,fx1,fy1: a thing in the cloud that is not cloud (a pole) is filled with
+              the cloud mirrored from just left of it; may repeat
+  --clip [S]  the box also cuts, on the sides named (letters of lrtb; bare, all four). Cumulus
+              join at their bases, and without this the whole joined mass comes along; with it
+              the cut runs straight along the box edge, so put that edge where the join is
+              narrow or in the gray of the base. A side left open lets the cloud run on to the
+              photo's frame, the way a cumulonimbus anvil does
 """
 import argparse, sys
 import numpy as np
@@ -181,7 +185,8 @@ def main():
     ap.add_argument('--sky', type=float)
     ap.add_argument('--pad', type=int, default=8)
     ap.add_argument('--open', type=int, default=48, help='drop wisps and fingers thinner than twice this many photo pixels (0 keeps them)')
-    ap.add_argument('--clip', action='store_true', help='the box also cuts: for a cloud joined to its neighbors, which otherwise come with it')
+    ap.add_argument('--clip', nargs='?', const='lrtb', default='', help='the box also cuts, on these sides (letters of lrtb; bare: all four): for a cloud joined to its neighbors, which otherwise come with it; a side left open lets the cloud run on to the photo\'s frame there, the way a cumulonimbus anvil does')
+    ap.add_argument('--fill', action='append', default=[], help='fx0,fy0,fx1,fy1: a thing that is not cloud (a pole, a wire) standing in the cloud, filled with the cloud mirrored from just left of it; may repeat')
     ap.add_argument('--list', action='store_true', help='list the separate clouds in the box with their boxes, and cut nothing')
     ap.add_argument('--all', action='store_true', help='keep every cloud in the box, not just the one with the most core in it: for a cluster, or a cloud in two pieces')
     a = ap.parse_args()
@@ -190,6 +195,15 @@ def main():
     fx0, fy0, fx1, fy1 = (float(v) for v in a.box.split(','))
     x0, y0, x1, y1 = int(fx0 * W), int(fy0 * H), int(fx1 * W), int(fy1 * H)
     px = np.asarray(im, np.float64)
+    # what is not cloud but stands in it (a streetlight pole up through the anvil of
+    # cumulonimbus_02) is filled with the cloud mirrored from just left of it, the way the
+    # backdrop build fills the one sky channel in Dean Stone: the photo's own pixels, nothing drawn
+    for f in a.fill:
+        ex0, ey0, ex1, ey1 = (float(v) for v in f.split(','))
+        ex0, ey0, ex1, ey1 = int(ex0 * W), int(ey0 * H), int(ex1 * W), int(ey1 * H)
+        w = ex1 - ex0
+        if ex0 - w < 0: sys.exit('--fill rectangle too close to the left edge to mirror from')
+        px[ey0:ey1, ex0:ex1] = px[ey0:ey1, ex0 - w:ex0][:, ::-1]
     alpha, blueness, sky = key_sky(px, x0, y0, x1, y1, a.cloud, a.sky)
     if a.list:
         for n, bx0, by0, bx1, by1 in components(alpha >= 0.6, y0, y1, x0, x1)[:30]:
@@ -198,7 +212,12 @@ def main():
     # the box picks the cloud (the one with the most core inside it) and never clips it: the
     # whole frame is keyed, so a cloud that runs past the box edge keeps its far side
     inbox = np.zeros(alpha.shape, bool); inbox[y0:y1, x0:x1] = True
-    if a.clip: alpha[~inbox] = 0
+    clipped = np.ones(alpha.shape, bool)
+    if 'l' in a.clip: clipped[:, :x0] = False
+    if 'r' in a.clip: clipped[:, x1:] = False
+    if 't' in a.clip: clipped[:y0] = False
+    if 'b' in a.clip: clipped[y1:] = False
+    alpha[~clipped] = 0
     core = ((alpha >= 0.6) & inbox) if a.all else label_largest((alpha >= 0.6), prefer=inbox)
     if core is None or not core.any(): sys.exit('no cloud found in the box')
     if a.open > 0:   # a thin wisp off a lobe read as a finger on the bench (the user, 2026-10-17); the radius scales with the cloud, so a small puff is not eroded away
@@ -226,7 +245,7 @@ def main():
     lum = px.mean(2); lo_l, hi_l = np.percentile(lum[core], [5, 95])
     ln = ((lum - lo_l) / max(hi_l - lo_l, 1)).clip(0, 1)
     edges = []   # (axis, position, direction into the cloud)
-    for pos, axis, d, size in ((x0 if a.clip else 0, 1, 1, cw), ((x1 if a.clip else px.shape[1]) - 1, 1, -1, cw), (y0 if a.clip else 0, 0, 1, ch), ((y1 if a.clip else px.shape[0]) - 1, 0, -1, ch)):
+    for pos, axis, d, size in ((x0 if 'l' in a.clip else 0, 1, 1, cw), ((x1 if 'r' in a.clip else px.shape[1]) - 1, 1, -1, cw), (y0 if 't' in a.clip else 0, 0, 1, ch), ((y1 if 'b' in a.clip else px.shape[0]) - 1, 0, -1, ch)):
         coord = cx if axis == 1 else cy
         if np.abs(coord - pos).min() <= 2: edges.append((axis, pos, d, max(100, int(size * 0.22))))
     for axis, pos, d, B in edges:

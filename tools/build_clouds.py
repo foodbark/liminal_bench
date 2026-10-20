@@ -171,8 +171,9 @@ def main():
     for i, e in enumerate(entries):
         cut, out = os.path.join(tmp, f'cut{i}.png'), os.path.join(tmp, f'sprite{i}.png')
         cmd = [sys.executable, '-I', os.path.join(ROOT, 'tools/cut_cloud.py'), os.path.join(ROOT, 'art', e['photo']), cut, '--box', ','.join(str(v) for v in e['box'])]
-        if e.get('clip'): cmd.append('--clip')
+        if e.get('clip'): cmd.append('--clip'); cmd.append(e['clip'] if isinstance(e['clip'], str) else 'lrtb')
         if e.get('all'): cmd.append('--all')
+        for f in e.get('fill', []): cmd += ['--fill', ','.join(str(v) for v in f)]
         if 'sky' in e: cmd += ['--sky', str(e['sky'])]
         if 'cloud' in e: cmd += ['--cloud', str(e['cloud'])]
         if subprocess.run(cmd).returncode:

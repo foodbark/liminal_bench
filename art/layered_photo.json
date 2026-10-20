@@ -798,14 +798,22 @@
   {
    "photo": "clouds/cumulonimbus_02.jpg",
    "box": [
-    0.42,
-    0.25,
-    0.94,
-    0.7
+    0.0,
+    0.22,
+    0.95,
+    0.68
    ],
-   "clip": true,
-   "scale": 0.4,
-   "cb": true
+   "clip": "rb",
+   "scale": 0.5,
+   "cb": true,
+   "fill": [
+    [
+     0.388,
+     0.5,
+     0.414,
+     0.69
+    ]
+   ]
   }
  ],
  "fields": [

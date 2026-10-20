@@ -82,7 +82,7 @@ export class WeatherFX {
     // lightning
     if (env.cond.storm) {
       this.nextFlash -= dt;
-      if (this.nextFlash <= 0) { this.strike(); this.nextFlash = 4 + Math.random() * 10; }
+      if (this.nextFlash <= 0 && !this.holdBolt) { this.strike(); this.nextFlash = 4 + Math.random() * 10; }   // (a held bolt is not replaced)
     }
     if (this.flash > 0 && !this.holdBolt) this.flash -= dt;
     // shooting stars: on dark clear nights, one every minute or two, many more during a shower
@@ -164,7 +164,9 @@ export class WeatherFX {
     this.flash = 0.16 + Math.random() * 0.12; this.holdBolt = !!hold;
     const cb = this.cb;
     const x0 = cb ? cb.x + cb.w * (0.35 + Math.random() * 0.3) : Math.random() * W;
-    const y0 = cb ? cb.y + cb.h - 6 * SCALE : HORIZON * 0.25;
+    // from the cell's underside, which sits behind the ridge now that the photographed cell is
+    // seated low (its base cut hidden): the bolt leaves the cloud's visible lower front
+    const y0 = cb ? Math.min(cb.y + cb.h - 6 * SCALE, HORIZON * 0.4) : HORIZON * 0.25;
     const y1 = HORIZON * (0.52 + Math.random() * 0.12);   // down to the ridge line
     const walk = (x, y, yEnd, spread) => {
       const pts = [[x, y]];
@@ -193,9 +195,10 @@ export class WeatherFX {
       // left), drawn mirrored when the wind runs the other way; its base sits over the ranges
       const s = ph.cb;
       const c = { photo: s, w: s.w, h: s.h, depth: 1.3, cb: true, flip: dir > 0, sprite: null, spriteKey: '' };
-      // over Dean Stone, its cut base behind the crest, the anvil streaming out over the valley
-      c.x = Math.floor(W * (dir > 0 ? 0.2 : 0.4) + r() * W * 0.1);
-      c.y = Math.floor(HORIZON * 0.47 - c.h);
+      // the tower over Dean Stone, its cut base behind the crest, the anvil streaming out over
+      // the valley and off the edge of the frame, since its far end is the photo's own frame cut
+      c.x = Math.floor(dir > 0 ? W * 0.3 + r() * W * 0.06 : W * 0.7 - c.w - r() * W * 0.06);
+      c.y = Math.floor(HORIZON * 0.68 - c.h);
       return c;
     }
     const c = layoutCloud(r, 1.75, { tower: true, anvil: true, anvilDir: dir });

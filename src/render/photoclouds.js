@@ -248,6 +248,10 @@ function paint(data, img, tones, env, cb = false, dark = null, range = sheet, su
     const amb = env.pal.ambient, lum = Math.max(0.4, (0.299 * amb[0] + 0.587 * amb[1] + 0.114 * amb[2]));
     lift *= 1 + clamp(env.sun.altitude / 10, 0, 1) * (1 / lum - 1);
   }
+  // the cell outside a storm (the cumulonimbus preset, or a cell the feed shows on a dry
+  // afternoon) keeps most of its gray: with the full lift the anvil and the tower were one
+  // white slab (2026-10-20), and a cell's shape is its shade
+  if (cb && !(env && env.cond.storm)) sunlit = Math.min(sunlit, 0.35);
   lift = 1 + (lift - 1) * (1 - nightK) * sunlit;   // a sunlit top's lift has no sun at night
   const ratio = day.slice(0, 5).map((b, i) => [body[i][0] / b[0] * lift, body[i][1] / b[1] * lift, body[i][2] / b[2] * lift]);
   // the moon's silver: what the moon adds to the lightest tone, for the crowns only
