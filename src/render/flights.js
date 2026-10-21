@@ -112,23 +112,41 @@ export class Flights {
       return c;
     };
     for (const f of this.list) {
-      // the contrail first, so the speck sits on its head
+      // the contrail first, so the speck sits on its head. The sky mapping lays azimuth and
+      // elevation out on a grid, so a straight flight path bows across it the way a great
+      // circle bows on a map, and the eye sees a contrail dead straight (the user, 2026-10-21:
+      // "too much curve"); so the trail is drawn as the straight line from its tail to the
+      // speck, each point set along it by the distance flown, the ages and the spread kept
       const tr = f.trail;
       if (tr.length > 1 && nightK < 1) {
-        let prev = null;
+        const pts = [];
+        let dist = 0, last = null;
         for (let i = 0; i < tr.length; i++) {
           const p = tr[i];
+          if (last) dist += Math.hypot((p.lat - last.lat) * M_PER_DEG, (p.lon - last.lon) * M_PER_DEG * 0.68);
           const lk = lookAt(p.lat, p.lon, p.alt);
-          const xy = lk.az > 88 && lk.az < 272 && lk.el > -1 ? skyXY(lk.az, lk.el) : null;
-          if (xy && prev && xy.y > -4 && prev.y > -4 && xy.y < H && prev.y < H) {
-            const age = clamp((now - p.t) / life, 0, 1);
-            const b = Math.min(7, Math.floor(age * 8));
-            c.fillStyle = trailTone(b, (xy.y + prev.y) / 2);
-            // the trail spreads as it ages: thicker and fainter
-            const w = th + (age > 0.3 ? 1 : 0) + (age > 0.65 ? 1 : 0);
-            segment(c, prev.x, prev.y, xy.x, xy.y, w);
+          pts.push({ xy: lk.az > 88 && lk.az < 272 && lk.el > -1 ? skyXY(lk.az, lk.el) : null, age: clamp((now - p.t) / life, 0, 1), s: dist });
+          last = p;
+        }
+        if (f.pos) { dist += Math.hypot((f.pos.lat - last.lat) * M_PER_DEG, (f.pos.lon - last.lon) * M_PER_DEG * 0.68); pts.push({ xy: f.xy, age: 0, s: dist }); }
+        let a = 0; while (a < pts.length && !pts[a].xy) a++;
+        let b = pts.length - 1; while (b > a && !pts[b].xy) b--;
+        if (b > a) {
+          const A = pts[a].xy, B = pts[b].xy, span = Math.max(1, pts[b].s - pts[a].s);
+          let prev = null;
+          for (let i = a; i <= b; i++) {
+            const k = (pts[i].s - pts[a].s) / span;
+            const x = A.x + (B.x - A.x) * k, y = A.y + (B.y - A.y) * k;
+            if (prev && y > -4 && prev.y > -4 && y < H && prev.y < H) {
+              const age = pts[i].age;
+              const bk = Math.min(7, Math.floor(age * 8));
+              c.fillStyle = trailTone(bk, (y + prev.y) / 2);
+              // the trail spreads as it ages: thicker and fainter
+              const w = th + (age > 0.3 ? 1 : 0) + (age > 0.65 ? 1 : 0);
+              segment(c, prev.x, prev.y, x, y, w);
+            }
+            prev = { x, y };
           }
-          prev = xy;
         }
       }
       if (!f.xy) continue;
