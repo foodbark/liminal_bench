@@ -144,7 +144,7 @@ export class Renderer {
   render(state, t, dt) {
     const env = state.env;
     this.refreshCaches(state);
-    this.fx.update(env, dt, state.override.enabled ? state.override.gliders : 'live');
+    this.fx.update(env, dt, state.override.enabled ? state.override.gliders : 'live', state.flights);
     // Two static layers, rebuilt only when a cache key changes: `base` (sky, moon, sun, terrain,
     // fog bands, shadows, props) and `fg` (the same without the sky, so it can go back over the
     // clouds). Each frame draws straight to the visible canvas under the camera transform:
@@ -203,9 +203,12 @@ export class Renderer {
     const sgn = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
     this.sheetX = ((this.sheetX + (0.25 + env.wind.speed * 0.07) * SCALE * sgn * dt) % W + W) % W;
     const gliders = this.fx.gliders.list.length > 0;
+    // an aircraft counts only when it is up in the sky: the ones under the ridge line are hidden
+    // by the terrain, and thirty of them a day would otherwise keep a clear still scene redrawing
+    const flights = this.fx.flights.list.some((f) => f.xy && f.look.el > 5);
     const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}` : '';
     if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
-    const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0 || gliders;
+    const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0 || gliders || flights;
     if (!this.dirty && !animated && camKey === this.camKey) return;
     this.dirty = false; this.camKey = camKey;
 
@@ -238,9 +241,11 @@ export class Renderer {
     const meteors = this.fx.meteors.length > 0;
     if (meteors) { this.fx.drawMeteors(c); lap('meteors'); }
     if (sheets && !thin) drawSheets();
+    // the aircraft: specks and contrails by day, lights by night, behind the cumulus
+    if (flights) { this.fx.flights.draw(c, env, t); lap('flights'); }
     if (clouds) { this.fx.drawClouds(c, env); lap('clouds'); }
-    // the terrain goes back over the clouds, and over a meteor so it passes behind the ridges
-    if (clouds || meteors) { c.drawImage(this.fg, 0, 0); lap('fg'); }
+    // the terrain goes back over the clouds, and over a meteor or an aircraft so it passes behind the ridges
+    if (clouds || meteors || flights) { c.drawImage(this.fg, 0, 0); lap('fg'); }
     // wings fly in front of the clouds and the far ranges, behind Sentinel, the trees and the props
     if (gliders) { this.fx.gliders.draw(c, env); c.drawImage(this.near, 0, 0); lap('gliders'); }
     // the red beacons on the masts, in front of the mountain and the fog on it, behind the rain

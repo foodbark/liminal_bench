@@ -1,6 +1,7 @@
 import { createState, W, H, META, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
 import { fetchCams, camCover, camFog } from './cams.js';
+import { fetchFlights, contrailLife as contrailLifeS, REFRESH_MS as FLIGHTS_MS } from './flights.js';
 import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { dustingTables, presetHours } from './dusting.js';
 import { skyPalette } from './palette.js';
@@ -49,6 +50,7 @@ if (/[?&]diag\b/.test(location.search)) {
     frames++;
     box.textContent = `liminal bench diag  ${W}x${H}  worker=${renderer.useWorker} ready=${renderer.workerReady}  frames=${frameCount}\n`
       + `weather: ${d.weather || 'pending'}  cover=${state.env.cond.cover}  ${state.env.cond.label}  cams: ${d.cams || 'pending'}\n`
+      + `flights: ${d.flights || 'pending'}  in frame: ${renderer.fx.flights.list.filter((f) => f.xy).length}  contrail life ${state.env.upper ? Math.round(contrailLifeS(state.env.upper)) + ' s' : 'n/a'}\n`
       + d.stages.map(([n, t]) => `${String(t).padStart(6)}ms  ${n}`).join('\n')
       + (d.errors.length ? '\nERRORS:\n' + d.errors.join('\n') : '\nno errors')
       + `\n${navigator.userAgent}`;
@@ -164,6 +166,7 @@ function computeEnv() {
   state.env = {
     now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, fogTop, mountainFog, dusting, greenup, sky,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
+    upper: w.upper || null,   // the air at contrail height (weather.js): humidity, temperature, wind
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
     terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
     sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}|${photoField() ? 'pf' : ''}${photoCirrus() ? 'pc' : ''}`,
@@ -197,6 +200,18 @@ async function refreshCams() {
 }
 refreshCams();
 setInterval(refreshCams, 10 * 60 * 1000);
+
+// The aircraft overhead (src/flights.js), every half minute, in the background like the cams:
+// nothing waits on it, and without the proxy (GitHub Pages, the feed down) the sky has no planes.
+async function refreshFlights() {
+  try {
+    state.flights = await fetchFlights();
+    renderer.diag.flights = `${state.flights.list.length} aircraft within 120 nm`;
+  }
+  catch (err) { console.warn('flights failed', err); renderer.diag.flights = 'failed: ' + (err && err.message || err); }
+}
+refreshFlights();
+setInterval(refreshFlights, FLIGHTS_MS);
 
 // The loading screen stays up until the first frame that has everything: the weather answered
 // (or failed), the pinned notes in, and the sky, the cloud sheets and the terrain all rendered for

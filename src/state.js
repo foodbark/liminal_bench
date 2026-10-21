@@ -18,7 +18,12 @@ export const META = await (await fetch(new URL('../' + ASSET_DIR + '/backdrop.js
 export const W = META.w, H = META.h, HORIZON = META.horizon;
 // Procedural pixel sizes (clouds, rain, glow, rim widths) were tuned on a 1024-wide painting.
 export const SCALE = W / 1024;
-export const LAT = 46.872, LON = -113.994, TZ = 'America/Denver';
+// The bench: on the valley floor just south of the university at Mount Sentinel's foot, between
+// 46.8551, -113.9869 and the UM golf course (the user, 2026-10-21, going back to the photo the
+// scene came from). Sentinel's summit bears 130 degrees from here at under a kilometre, Dean
+// Stone 137 degrees at twelve, the airport 313 degrees behind us. The sun, moon, stars, the
+// weather cell and the aircraft overhead are all placed from this point (ELEV in metres).
+export const LAT = 46.852, LON = -113.988, ELEV = 975, TZ = 'America/Denver';
 // Dean Stone's summit (6,730 ft), a thousand metres above the valley station: where the snow on
 // the peaks is actually decided. Located on Open-Meteo's elevation grid, 2026-09-28.
 export const RIDGE = { lat: 46.771, lon: -113.879, elevation: 2050 };

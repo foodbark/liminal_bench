@@ -3,7 +3,7 @@ import { LAT, LON, RIDGE, localHourKey } from './state.js';
 const URL = 'https://api.open-meteo.com/v1/forecast'
   + `?latitude=${LAT}&longitude=${LON}`
   + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
-  + '&hourly=snow_depth,snowfall,temperature_2m,precipitation&past_days=7&forecast_days=1&timezone=America%2FDenver'
+  + '&hourly=snow_depth,snowfall,temperature_2m,precipitation,relative_humidity_250hPa,temperature_250hPa,wind_speed_250hPa,wind_direction_250hPa&past_days=7&forecast_days=1&timezone=America%2FDenver'
   + '&temperature_unit=fahrenheit&wind_speed_unit=mph';
 // A week back: the grass greens up again after a few days of rain in warm weather, and that is
 // read off the week's hourly rain and temperature, not the current hour.
@@ -53,8 +53,15 @@ export async function fetchWeather() {
   const c = j.current;
   let snowDepth = 0, freshSnow = 0, rainWeek = 0, warmWeek = 0, greenup = 0;
   const feedHours = [];
+  // The air at contrail height, 250 hPa (about 34,000 ft): whether a jet's contrail lasts
+  // seconds or hangs for an hour is the humidity up there, and the wind up there is what drifts
+  // it (src/flights.js). Taken at the current hour; null when the feed lacks it.
+  let upper = null;
   if (j.hourly && j.hourly.time) {
     const idx = j.hourly.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13));
+    if (idx >= 0 && j.hourly.relative_humidity_250hPa && j.hourly.relative_humidity_250hPa[idx] != null) {
+      upper = { rh: j.hourly.relative_humidity_250hPa[idx], temp: j.hourly.temperature_250hPa[idx], wind: j.hourly.wind_speed_250hPa[idx] ?? 0, windDir: j.hourly.wind_direction_250hPa[idx] ?? 270 };
+    }
     if (idx >= 0 && j.hourly.snow_depth[idx] != null) snowDepth = j.hourly.snow_depth[idx];
     // Loose snow for the wind: snowfall (cm) in the 18 hours before now. The dusting itself is
     // budgeted by elevation from the last three days of the feed (src/dusting.js), since the
@@ -88,7 +95,7 @@ export async function fetchWeather() {
     temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100, coverMid: (c.cloud_cover_mid ?? 0) / 100, coverHigh: (c.cloud_cover_high ?? 0) / 100,
     wind: c.wind_speed_10m, windDir: c.wind_direction_10m,
     precip: c.precipitation, snowfall: c.snowfall, snowDepth, freshSnow, hours: feedHours,
-    rainWeek, warmWeek, greenup,
+    rainWeek, warmWeek, greenup, upper,
     ridge,
   };
 }

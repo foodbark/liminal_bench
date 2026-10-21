@@ -7,6 +7,7 @@ import { starAltAz } from '../util/solar.js';
 import { skyXY, PX_PER_DEG } from './sky.js';
 import { LAT } from '../state.js';
 import { Gliders } from './gliders.js';
+import { Flights } from './flights.js';
 
 const RAD = Math.PI / 180;
 
@@ -46,12 +47,14 @@ export class WeatherFX {
     this.flash = 0; this.nextFlash = 4;
     this.meteors = []; this.nextMeteor = 20 + Math.random() * 60;
     this.gliders = new Gliders();
+    this.flights = new Flights();
     this.t = 0;
   }
 
-  update(env, dt, gliders = 'live') {
+  update(env, dt, gliders = 'live', flights = null) {
     this.t += dt;
     this.gliders.update(env, dt, gliders);
+    this.flights.update(env, dt, flights, Date.now());
     const cover = env.sky ? env.sky.cumulus : env.cond.cover;
     // the photo sprites are whole clouds, so far fewer of them than the drawn puffs
     const target = photoClouds() ? Math.round(cover * 11 + (cover > 0.02 ? 1 : 0)) : Math.round(cover * 18 + (cover > 0.02 ? 1 : 0));

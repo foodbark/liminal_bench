@@ -49,6 +49,7 @@ export function setupUI(state, canvas) {
     // a wing over Sentinel gets a caption but is nowhere to go
     const fx = window.__liminal && window.__liminal.renderer && window.__liminal.renderer.fx;
     if (fx && fx.gliders.list.length && fx.gliders.hit(p)) return { id: 'glider', label: fx.gliders.label };
+    if (fx && fx.flights.list.length && fx.flights.hit(p)) return { id: 'flight', label: fx.flights.label };
     const r = 10 * (W / 1024);
     for (const s of planetSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) return { id: 'planet', label: s.label };
     for (const s of starSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) return { id: 'star', label: s.label };

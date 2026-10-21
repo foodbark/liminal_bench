@@ -54,6 +54,8 @@ node tools/screenshot.mjs out.png "<js run on the page first>"
 
 **The weather.** Rain and snow as scrolling tiles, rain darkening the ground, fog bands, an inversion that fills the far valley with a flat-topped sea in a cold month (and, when the cams have the fog deep, up the lower slopes and across Sentinel's flank), mountain fog that hangs banks on the slopes and, when the low cloud is solid, a ceiling the crests go up into. Blowing snow from 15 mph over loose snow, a blizzard by 30: streaks in the wind, a drift off the meadow, the mountains whited out. Wind drifts the clouds and the paragliders. Paragliders work Sentinel's ridge on fair days with a light west wind (inferred from the weather, no feed, and weighted by the week since 2026-10-20: few during weekday business hours, many after work and on a weekend afternoon, when a whole club of ten can be up): the user's photographed wings, two or three times true scale the way the moon is, in front of Dean Stone and behind Sentinel and the trees.
 
+**The planes.** The aircraft over the valley are real, from adsb.lol (a community ADS-B feed, no key), proxied by a Pages Function with a 30-second edge cache and read every half minute: the east-west corridor at cruise, a dozen jets at a time, the small aircraft on the approach over Sentinel, the airliners in from Denver and Salt Lake over Dean Stone and straight overhead. Each is dead-reckoned between fetches and placed in the sky from the bench by its real azimuth and elevation, through the same mapping as the sun. By day a speck and a contrail laid along its own path and carried on the upper wind, lasting what the 250 hPa humidity allows (a dash in dry air, a streak across the sky in moist), in the hour's cloud tones; by night the lights, a white strobe, a red beacon, each on its own clock, crossing the stars. Behind the cumulus, hidden by the ridges, dimmed by a deck. Hover one for its callsign, airframe, altitude and heading. Built 2026-10-21 on the `worktree-flights` branch.
+
 **The snow.** None of it is on a calendar. A second Open-Meteo query lapsed to Dean Stone's summit latches the season's first real accumulation (5 cm held for half a day) in the browser for one snow year; until it fires, fall is bare whatever the month table says, and after it the table and the live summit depth decide how white the peaks are. A first snow whitens Dean Stone's top and nothing nearer, and when the summit model goes bare again it fades off over a few days and the latch lets go, so a melted October snow does not rim the crest until the next one. The overnight dusting is a budget: the valley feed's last three days lapsed to each plane's elevations and walked hour by hour, what fell as snow up there against what melted since, each plane melting at its own rate by aspect, since the bench looks south and every face it sees of Dean Stone is a shaded north face that holds a dusting for days while Sentinel's open west face is bare by the next afternoon. The ground goes white when the station says there is snow on it.
 
 **The grass.** Sentinel's slope and the meadow follow the grass year relative to the painting's September, green in spring and gold by August, and green back up some after a week with rain in it and two warm days since.
@@ -94,13 +96,14 @@ Materials in use: grass, foliage, dirt, shrub, prop. There is no painted summit 
 6. Stars and planets, redrawn ten times a second.
 7. Meteors, behind the ridges.
 8. Thick cloud sheets (stratocumulus, stratus, nimbostratus).
-9. Cumulus, the cumulonimbus, the lightning.
-10. `fg` again, so the clouds sit behind the mountains.
-11. Paragliders, then the near planes back over them.
-12. The beacons on the masts, the lamp glow.
-13. The close-up painting when standing at a prop.
-14. Precipitation, blowing snow, the lightning's flash.
-15. A poster held up, over everything.
+9. The aircraft: specks and contrails by day, lights by night, dimmed by a deck in front.
+10. Cumulus, the cumulonimbus, the lightning.
+11. `fg` again, so the clouds and the planes sit behind the mountains.
+12. Paragliders, then the near planes back over them.
+13. The beacons on the masts, the lamp glow.
+14. The close-up painting when standing at a prop.
+15. Precipitation, blowing snow, the lightning's flash.
+16. A poster held up, over everything.
 
 ## Layout
 
@@ -110,6 +113,7 @@ src/main.js                  the loop; computeEnv builds the environment from ti
 src/state.js                 constants (the station, the summit, the season table), the override, time helpers
 src/weather.js               Open-Meteo: the valley station and the hourly week, the summit query; presets
 src/cams.js                  the webcams read for the cumulus and the fog the feed misses
+src/flights.js               the aircraft feed and the geometry: dead reckoning, azimuth and elevation from the bench, the contrail's life from the upper air
 src/dusting.js               the overnight dusting as a snow budget by elevation and aspect, per plane
 src/season.js                when snow arrives on the peaks: the summit latch over the month table
 src/palette.js               sky and light keyframes by sun altitude
@@ -128,12 +132,13 @@ src/render/clouds.js         cumulus sprites and the cumulonimbus
 src/render/weatherfx.js      the cloud field, rain, snow, blowing snow, lightning, meteors
 src/render/gliders.js        paragliders off Sentinel
 src/render/beacons.js        the aircraft beacons on Dean Stone's masts
+src/render/flights.js        the aircraft: specks and contrails by day, strobes and beacons by night
 src/render/props.js          what changes on the painted props: notes, snow caps, shadows, the lantern
 src/util/                    solar.js (sun, moon, sidereal time), planets.js, pixel.js (integer drawing, dither), noise.js, bluenoise.js
 art/                         paintings, photos and a JSON config each; art/current picks one
 assets/                      what the build writes; assets/small/ the half-size copy; assets/audio/ the phone's voices and numbers.json
 assets/stars.json            the Bright Star Catalog to magnitude 5.2
-functions/api/               Pages Functions: notes.js, posters.js, voicemail.js over D1 (db/schema.sql, wrangler.toml); cam/[name].js the webcam proxy
+functions/api/               Pages Functions: notes.js, posters.js, voicemail.js over D1 (db/schema.sql, wrangler.toml); cam/[name].js the webcam proxy; flights.js the aircraft feed proxy
 tools/build_backdrop.py      the painting to assets/
 tools/pixelate.py            a photograph to shaded pixel art, no model
 tools/swap_flank.py          a photographed Sentinel into the painted front
@@ -159,7 +164,7 @@ Roughly in the order they matter.
 - **A rare visitor on the bench**, and whose answering machine the machines are.
 - **Cloud shadows** crossing the hills as the cumulus drift. Complicated; wanted some day (2026-10-13).
 - **The open-topped trash can** (user's art) with critters; wind-swayed foliage; a real mobile landscape layout; the second domain's redirect and retiring GitHub Pages (`docs/deploy.md`).
-- **Satellites** from CelesTrak elements, shown only when sunlit against a dark ground. **Planes**: contrails and the occasional arrival from OpenSky, with persistence from the 250 hPa humidity (see below). **Smoke season** from PM2.5, in August 2027 when there is smoke to look at. A camera of our own on Sentinel for the ceiling and the snowline, now that the public cams carry the cumulus.
+- **Satellites** from CelesTrak elements, shown only when sunlit against a dark ground. **Planes** are built (2026-10-21, `worktree-flights`; see below): still wanted there, a plane's own shadow on a contrail-lit dawn, the approach lights at night, a debug switch to force a sky of them. **Smoke season** from PM2.5, in August 2027 when there is smoke to look at. A camera of our own on Sentinel for the ceiling and the snowline, now that the public cams carry the cumulus.
 
 ## Design notes worth keeping
 
@@ -179,7 +184,7 @@ The phone speaks in the voice every pay phone had: Jane Barbe, who recorded the 
 
 ### Contrails are a humidity question, and the data is there (2026-10-07)
 
-A day of contrails that spread instead of fading: Open-Meteo had 250 hPa at -50°C with relative humidity 42 to 56% over water, which is 70 to 92% over ice (the saturation ratio at -50°C is about 1.65). Contrails persist when the air is supersaturated over ice, and a grid-mean model almost never reports that, so the rule has to be a threshold well under 100% over ice: the morning's 85 to 92% is what long-lasting looks like in this feed. 300 hPa was far drier, so the level matters. The early light is already in the code: a contrail at 10 km sees the sun from 3.3° below the horizon while the meadow waits for +4.5°, and `cloudTones` already blazes undersides through that window.
+A day of contrails that spread instead of fading: Open-Meteo had 250 hPa at -50°C with relative humidity 42 to 56% over water, which is 70 to 92% over ice (the saturation ratio at -50°C is about 1.65). Contrails persist when the air is supersaturated over ice, and a grid-mean model almost never reports that, so the rule has to be a threshold well under 100% over ice: the morning's 85 to 92% is what long-lasting looks like in this feed. 300 hPa was far drier, so the level matters. The early light is already in the code: a contrail at 10 km sees the sun from 3.3° below the horizon while the meadow waits for +4.5°, and `cloudTones` already blazes undersides through that window. Built 2026-10-21 (`src/flights.js`, `contrailLife`): the feed's 250 hPa humidity over water, 20% a ten-second dash, 50% and up the full ten minutes, nothing warmer than -40°; the trail drifts on the 250 hPa wind.
 
 ### Webcams (2026-09-03, built 2026-10-13)
 
