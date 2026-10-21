@@ -114,6 +114,7 @@ src/state.js                 constants (the station, the summit, the season tabl
 src/weather.js               Open-Meteo: the valley station and the hourly week, the summit query; presets
 src/cams.js                  the webcams read for the cumulus and the fog the feed misses
 src/flights.js               the aircraft feed and the geometry: dead reckoning, azimuth and elevation from the bench, the contrail's life from the upper air
+tools/push_flights.py        pushes the aircraft feed to the site from a machine with its own address (docs/deploy.md section 6)
 src/dusting.js               the overnight dusting as a snow budget by elevation and aspect, per plane
 src/season.js                when snow arrives on the peaks: the summit latch over the month table
 src/palette.js               sky and light keyframes by sun altitude
@@ -138,7 +139,7 @@ src/util/                    solar.js (sun, moon, sidereal time), planets.js, pi
 art/                         paintings, photos and a JSON config each; art/current picks one
 assets/                      what the build writes; assets/small/ the half-size copy; assets/audio/ the phone's voices and numbers.json
 assets/stars.json            the Bright Star Catalog to magnitude 5.2
-functions/api/               Pages Functions: notes.js, posters.js, voicemail.js over D1 (db/schema.sql, wrangler.toml); cam/[name].js the webcam proxy; flights.js the aircraft feed proxy
+functions/api/               Pages Functions: notes.js, posters.js, voicemail.js over D1 (db/schema.sql, wrangler.toml); cam/[name].js the webcam proxy; flights.js the aircraft feed (three feeds, a shared copy in D1, a pusher's POST)
 tools/build_backdrop.py      the painting to assets/
 tools/pixelate.py            a photograph to shaded pixel art, no model
 tools/swap_flank.py          a photographed Sentinel into the painted front

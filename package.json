@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "python3 tools/serve.py 5173 127.0.0.1",
     "lan": "python3 tools/serve.py 5174 0.0.0.0",
-    "shot": "node tools/screenshot.mjs"
+    "shot": "node tools/screenshot.mjs",
+    "push": "python3 tools/push_flights.py"
   },
   "devDependencies": {
     "playwright": "1.47.2",

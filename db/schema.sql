@@ -50,3 +50,13 @@ CREATE TABLE IF NOT EXISTS posters (
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE posters ADD COLUMN k INTEGER NOT NULL DEFAULT 0"
 CREATE INDEX IF NOT EXISTS posters_at ON posters (at);
 CREATE INDEX IF NOT EXISTS posters_who_at ON posters (who, at);
+
+-- One shared copy of a feed the Functions fetch for everyone (2026-10-21): the aircraft feed
+-- (functions/api/flights.js) keeps its last answer here so the upstream is asked once every
+-- 30 s worldwide, not once per edge location. The Function makes the table itself on first
+-- use; it is here so the schema is in one place.
+CREATE TABLE IF NOT EXISTS kv (
+  key   TEXT    PRIMARY KEY,
+  value TEXT    NOT NULL,
+  at    INTEGER NOT NULL       -- ms since the epoch, when it was stored
+);

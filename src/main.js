@@ -206,7 +206,7 @@ setInterval(refreshCams, 10 * 60 * 1000);
 async function refreshFlights() {
   try {
     state.flights = await fetchFlights();
-    renderer.diag.flights = `${state.flights.list.length} aircraft within 120 nm`;
+    renderer.diag.flights = `${state.flights.list.length} aircraft within 120 nm (${state.flights.src || 'feed'}${state.flights.stale ? ', stale' : ''})`;
   }
   catch (err) { console.warn('flights failed', err); renderer.diag.flights = 'failed: ' + (err && err.message || err); }
 }

@@ -27,7 +27,7 @@ export async function fetchFlights() {
       at: now - (a.seen || 0) * 1000,   // when the position was true
     });
   }
-  return { ok: true, at: now, list };
+  return { ok: true, at: now, list, src: j.src || '', stale: !!j.stale, ttl: j.ttl || 30 };   // src: which feed answered the proxy; stale: the last good copy, no feed answering
 }
 
 const M_PER_DEG = 111195;

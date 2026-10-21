@@ -127,6 +127,35 @@ GitHub Pages cannot redirect on its own, so switch the repo's Pages source (Sett
 
 Then update the URL in README.md and CLAUDE.md.
 
+## 6. The aircraft feed (2026-10-21)
+
+`functions/api/flights.js` serves the planes (src/flights.js). It asks three community feeds in
+turn, adsb.lol, adsb.fi and OpenSky, and keeps one shared copy in D1 (the `kv` table, which the
+Function makes on first use; it is in `db/schema.sql` too). From Cloudflare's shared egress
+addresses the feeds are a poor bet: adsb.lol allows 500 calls a day per address and the Function
+shares its address with the world, adsb.fi answers 403 to anything from a Worker, and OpenSky is
+slow and times out. So the reliable path is a pusher on a machine with its own address, which the
+feeds answer freely:
+
+```
+npx wrangler pages secret put FLIGHTS_PUSH_KEY     # any long random string
+FLIGHTS_PUSH_KEY=<the same string> npm run push     # every 30 s, forever; on the LAN box or a Pi
+```
+
+The pusher (`tools/push_flights.py`) fetches the feed and POSTs it to `/api/flights`; while a
+pushed copy is fresh the Function asks no feed, and when the pusher stops it goes back to asking
+them itself, serving the last good copy, marked stale, for an hour when none answers. An OpenSky
+account's API client raises its budget from 400 to 4000 credits a day and makes the limit
+per account instead of per address:
+
+```
+npx wrangler pages secret put OPENSKY_CLIENT_ID
+npx wrangler pages secret put OPENSKY_CLIENT_SECRET
+```
+
+Check a feed from the edge with `/api/flights?src=adsb.lol` (or `adsb.fi`, `opensky`): it asks that
+feed directly and stores nothing. `?diag` on the page names the source of what it is showing.
+
 ## Rate limits and abuse
 
 `functions/api/notes.js` allows three notes an hour per address (salted daily hash, no addresses

@@ -6,7 +6,7 @@
 It also stands in for the webcam proxy (functions/api/cam/[name].js) at /api/cam/NAME, so the
 cam-read cumulus (src/cams.js) works on the dev server: each still is fetched at most every ten
 minutes and held in memory. And for the aircraft feed (functions/api/flights.js) at /api/flights,
-fetched from adsb.lol at most every 30 s.
+fetched from adsb.fi (adsb.lol as the fallback) at most every 30 s.
 """
 import json, os, re, sys, time, threading, urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -38,7 +38,8 @@ def cam_still(name):
 # the aircraft within 120 nm of the bench (the bench point from src/state.js, so the two agree)
 _st = open(os.path.join(ROOT, 'src/state.js')).read()
 LAT = re.search(r'LAT = ([-\d.]+)', _st).group(1); LON = re.search(r'LON = ([-\d.]+)', _st).group(1)
-FLIGHTS_URL = f'https://api.adsb.lol/v2/point/{LAT}/{LON}/120'
+# adsb.fi first, adsb.lol as the fallback, as functions/api/flights.js has them
+FLIGHTS_URLS = [f'https://opendata.adsb.fi/api/v2/lat/{LAT}/lon/{LON}/dist/120', f'https://api.adsb.lol/v2/point/{LAT}/{LON}/120']
 FLIGHTS_TTL = 30
 _fl_cache = None
 _fl_lock = threading.Lock()
@@ -49,13 +50,16 @@ def flights():
     global _fl_cache
     with _fl_lock:
         if _fl_cache and time.time() - _fl_cache[0] < FLIGHTS_TTL: return _fl_cache[1]
-        try:
-            req = urllib.request.Request(FLIGHTS_URL, headers={'User-Agent': 'liminalbench.net sky (dev)', 'Accept': 'application/json'})
-            with urllib.request.urlopen(req, timeout=20) as r: j = json.loads(r.read())
-        except Exception as e:
-            print('flights fetch failed', e); return _fl_cache[1] if _fl_cache else None
+        j = None
+        for url in FLIGHTS_URLS:
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'liminalbench.net sky (dev)', 'Accept': 'application/json'})
+                with urllib.request.urlopen(req, timeout=20) as r: j = json.loads(r.read()); break
+            except Exception as e:
+                print('flights fetch failed', url, e)
+        if j is None: return _fl_cache[1] if _fl_cache else None
         ac = []
-        for a in j.get('ac', []):
+        for a in j.get('aircraft') or j.get('ac') or []:
             if a.get('lat') is None or a.get('lon') is None: continue
             alt = a.get('alt_baro'); alt = 'ground' if alt == 'ground' else (alt if alt is not None else a.get('alt_geom'))
             ac.append({'hex': a.get('hex'), 'flight': (a.get('flight') or '').strip(), 't': a.get('t') or '', 'r': a.get('r') or '', 'lat': a['lat'], 'lon': a['lon'],
