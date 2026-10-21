@@ -47,7 +47,6 @@ export class Flights {
     }
     const life = contrailLife(env.upper);
     const wind = upperWind(env.upper);
-    const lat0 = env.upper ? 0 : 0;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const f = this.list[i];
       if (now - f.src.at > STALE_MS * 3) { this.list.splice(i, 1); continue; }
@@ -64,7 +63,7 @@ export class Flights {
       if (f.pos.altFt >= CONTRAIL_FT && f.src.gs > 150) {
         const last = tr[tr.length - 1];
         const far = !last || Math.hypot((f.pos.lat - last.lat) * M_PER_DEG, (f.pos.lon - last.lon) * M_PER_DEG * 0.68) > 220 || now - last.t > 1500;
-        if (far) tr.push({ lat: f.pos.lat, lon: f.pos.lon, alt: f.pos.altFt, t: now });
+        if (far) tr.push({ lat: f.pos.lat, lon: f.pos.lon, lat0: f.pos.lat, lon0: f.pos.lon, alt: f.pos.altFt, t: now });   // lat0/lon0: where it was laid, before the wind
       }
       if (tr.length) {
         const dlat = wind.n * dt / M_PER_DEG, dlon = wind.e * dt / (M_PER_DEG * Math.cos(f.pos.lat * Math.PI / 180));
@@ -75,7 +74,6 @@ export class Flights {
         if (tr.length > MAX_POINTS) tr.splice(0, tr.length - MAX_POINTS);
       }
     }
-    void lat0;
   }
 
   // how much of an aircraft shows through what is in front of it: a deck hides it, a veil
@@ -119,45 +117,47 @@ export class Flights {
       return c;
     };
     for (const f of this.list) {
-      // the contrail first, so the speck sits on its head. The sky mapping lays azimuth and
+      // The contrail first, so the speck sits on its head. The sky mapping lays azimuth and
       // elevation out on a grid, so a straight flight path bows across it the way a great
-      // circle bows on a map, and the eye sees a contrail dead straight (the user, 2026-10-21:
-      // "too much curve"); so the trail is drawn as the straight line from its tail to the
-      // speck, each point set along it by the distance flown, the ages and the spread kept
+      // circle bows on a map, and to the eye a contrail is dead straight (the user, 2026-10-21:
+      // "too much curve"; and with only the trail straightened tail to head, the plane "still
+      // following the curve", veering off its own trail). So the plane keeps its true place and
+      // the trail is laid straight along the plane's direction of travel on the screen, each
+      // point at its true on-screen distance behind the head (the length the grid path would
+      // have had), so the two always agree; the wind's sideways drift is an offset across the
+      // line. The far end of a long trail sits off the grid, which is where the bow was.
       const tr = f.trail;
-      if (tr.length > 1 && nightK < 1) {
-        const pts = [];
-        let dist = 0, last = null;
-        for (let i = 0; i < tr.length; i++) {
-          const p = tr[i];
-          if (last) dist += Math.hypot((p.lat - last.lat) * M_PER_DEG, (p.lon - last.lon) * M_PER_DEG * 0.68);
-          const lk = lookAt(p.lat, p.lon, p.alt);
-          pts.push({ xy: lk.az > 88 && lk.az < 272 && lk.el > -1 ? skyXY(lk.az, lk.el) : null, age: clamp((now - p.t) / life, 0, 1), s: dist });
-          last = p;
-        }
-        if (f.pos) { dist += Math.hypot((f.pos.lat - last.lat) * M_PER_DEG, (f.pos.lon - last.lon) * M_PER_DEG * 0.68); pts.push({ xy: f.xy, age: 0, s: dist }); }
-        let a = 0; while (a < pts.length && !pts[a].xy) a++;
-        let b = pts.length - 1; while (b > a && !pts[b].xy) b--;
-        if (b > a) {
-          const A = pts[a].xy, B = pts[b].xy, span = Math.max(1, pts[b].s - pts[a].s);
-          let prev = null;
-          for (let i = a; i <= b; i++) {
-            const k = (pts[i].s - pts[a].s) / span;
-            const x = A.x + (B.x - A.x) * k, y = A.y + (B.y - A.y) * k;
+      if (tr.length > 1 && nightK < 1 && f.xy) {
+        const tg = tangent(f);
+        if (tg) {
+          const cosL = Math.cos(f.pos.lat * Math.PI / 180);
+          let prev = f.xy, prevGrid = f.xy, L = 0, prevOut = null;
+          for (let i = tr.length - 1; i >= 0; i--) {
+            const p = tr[i];
+            const lk = lookAt(p.lat0, p.lon0, p.alt);
+            if (lk.az <= 88 || lk.az >= 272 || lk.el < -1) break;   // the path ran out of the frame
+            const grid = skyXY(lk.az, lk.el);
+            L += Math.hypot(grid.x - prevGrid.x, grid.y - prevGrid.y);
+            prevGrid = grid;
+            // the wind's drift since the point was laid, its part across the track
+            const dn = (p.lat - p.lat0) * M_PER_DEG, de = (p.lon - p.lon0) * M_PER_DEG * cosL;
+            const w = de * tg.uy - dn * tg.ux;
+            const x = Math.round(f.xy.x - tg.dx * L + tg.sx * w), y = Math.round(f.xy.y - tg.dy * L + tg.sy * w);
             // the trail forms a little way behind the aircraft, not at it: the vapour takes a
             // few hundred metres to condense (the user, 2026-10-21)
-            const behind = pts[b].s - pts[i].s;
-            if (prev && behind > GAP_M && y > -4 && prev.y > -4 && y < H && prev.y < H) {
-              const age = pts[i].age;
+            const behind = ((f.pos.lat - p.lat0) * M_PER_DEG) * tg.uy + ((f.pos.lon - p.lon0) * M_PER_DEG * cosL) * tg.ux;
+            if (prevOut && behind > GAP_M && y > -4 && prevOut.y > -4 && y < H && prevOut.y < H) {
+              const age = clamp((now - p.t) / life, 0, 1);
               const bk = Math.min(7, Math.floor(age * 8));
               // the trail spreads as it ages into a soft band: a wide faint sheath and a core
               const core = th + (age > 0.25 ? 1 : 0);
               const wide = core + Math.round(age * 3 * SCALE);
-              if (wide > core) { c.fillStyle = trailTone(Math.min(7, bk + 2), (y + prev.y) / 2); segment(c, prev.x, prev.y, x, y, wide); }
-              c.fillStyle = trailTone(bk, (y + prev.y) / 2);
-              segment(c, prev.x, prev.y, x, y, core);
+              if (wide > core) { c.fillStyle = trailTone(Math.min(7, bk + 2), (y + prevOut.y) / 2); segment(c, prevOut.x, prevOut.y, x, y, wide); }
+              c.fillStyle = trailTone(bk, (y + prevOut.y) / 2);
+              segment(c, prevOut.x, prevOut.y, x, y, core);
             }
-            prev = { x, y };
+            prevOut = behind > GAP_M ? { x, y } : prevOut;
+            void prev;
           }
         }
       }
@@ -193,6 +193,24 @@ export class Flights {
     for (const s of flightSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) { this.label = s.label; return true; }
     return false;
   }
+}
+
+// The plane's direction of travel on the screen (a unit vector), from its grid positions a
+// little ahead and behind along its track, and the screen offset of a metre sideways to the
+// track, by a numerical step; null when the step leaves the frame.
+function tangent(f) {
+  const th = f.src.track * Math.PI / 180, ux = Math.sin(th), uy = Math.cos(th);
+  const cosL = Math.cos(f.pos.lat * Math.PI / 180), alt = f.pos.altFt;
+  const at = (d, side) => {
+    const lat = f.pos.lat + (d * uy - side * ux) / M_PER_DEG, lon = f.pos.lon + (d * ux + side * uy) / (M_PER_DEG * cosL);
+    const lk = lookAt(lat, lon, alt);
+    return lk.az > 88 && lk.az < 272 && lk.el > -1 ? skyXY(lk.az, lk.el) : null;
+  };
+  const a = at(-2000, 0), b = at(2000, 0), o = at(0, 0), q = at(0, 1000);
+  if (!a || !b || !o || !q) return null;
+  const dx = b.x - a.x, dy = b.y - a.y, n = Math.hypot(dx, dy);
+  if (n < 0.5) return null;
+  return { ux, uy, dx: dx / n, dy: dy / n, sx: (q.x - o.x) / 1000, sy: (q.y - o.y) / 1000 };
 }
 
 // a line `w` pixels thick, plotted pixel by pixel (no canvas strokes: they anti-alias)
