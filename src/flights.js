@@ -2,7 +2,7 @@
 // dev server stands in at the same path). A live thing in the sky that the painting cannot
 // have: the east-west corridor at cruise crosses right over the bench, a dozen jets at a time
 // at 34,000 to 41,000 ft, the small aircraft make their approach over Sentinel and the airliners
-// in from Denver and Salt Lake come over Dean Stone and straight at the viewer overhead (the
+// in from Denver and Salt Lake come up the Bitterroot valley and in over the South Hills (the
 // user, 2026-10-21). This module reads the feed and does the geometry: where each aircraft is
 // now (dead-reckoned between fetches on its speed and track, so it moves every frame) and
 // where that is in the sky from the bench, as an azimuth and an elevation the sky projection
