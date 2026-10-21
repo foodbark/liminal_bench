@@ -10,11 +10,39 @@
 // behind a cumulus, and the user wanted it so to start, 2026-10-21), and then lays the terrain
 // back over them, so a low one on the approach drops behind Sentinel like a star setting. A
 // deck in front dims them the way it dims the stars; fog hides them.
-import { W, H, SCALE, HORIZON } from '../state.js';
-import { skyXY } from './sky.js';
+import { W, H, SCALE, HORIZON, ELEV, ASSET_DIR } from '../state.js';
+import { skyXY, PX_PER_DEG } from './sky.js';
 import { cloudTones } from './clouds.js';
-import { lerpRGB, clamp } from '../util/pixel.js';
-import { reckon, lookAt, contrailLife, upperWind, flightLabel, STALE_MS } from '../flights.js';
+import { lerpRGB, clamp, fillCircle } from '../util/pixel.js';
+import { reckon, lookAt, contrailLife, upperWind, flightLabel, wingspan, STALE_MS } from '../flights.js';
+
+// Low traffic (2026-10-21). A plane close in is an object, not a speck: it is sized by its
+// wingspan over its distance, cheated two and a half times the way the gliders and the moon
+// are (CHEAT), and drawn at its depth: beyond MID_KM behind all the terrain, inside it in front
+// of Dean Stone and the far ranges and behind Sentinel, the trees and the props (the gliders'
+// `near` layer laid back over it), and inside NEAR_KM in front of Sentinel too, behind only the
+// trees and the props (the renderer's `trees` layer). The user's photographs will be the
+// planes, cut by the build like the paraglider wings into assets/planes.png and planes.json
+// ({ sprites: [{ x, y, w, h, kind: 'jet' | 'prop', faces: 'right' | 'left' }] }); until that
+// sheet exists a flat bar in the hour's light stands in, foreshortened when the plane is coming
+// at us or going away. At night a plane heading our way shows its landing light, a steady
+// white point that grows as it comes, the brightest thing in the sky.
+export const CHEAT = 2.5;
+export const NEAR_KM = 1.5, MID_KM = 10;
+let planes = null;   // { img, sprites: [...] } or null while there is no sheet
+if (typeof Image !== 'undefined') {
+  (async () => {
+    try {
+      const r = await fetch(new URL('../../' + ASSET_DIR + '/planes.json', import.meta.url));
+      if (!r.ok) return;
+      const meta = await r.json();
+      const im = new Image();
+      im.src = new URL('../../' + ASSET_DIR + '/planes.png', import.meta.url);
+      await im.decode();
+      planes = { img: im, sprites: meta.sprites || [] };
+    } catch (e) { /* no sheet yet: the stand-in */ }
+  })();
+}
 
 export let flightSpots = [];   // [{ x, y, label }] for the hover caption, canvas pixels
 
@@ -76,6 +104,18 @@ export class Flights {
     }
   }
 
+  // which depth an aircraft is drawn at, by its distance
+  static band(f) { return f.look.km < NEAR_KM ? 'near' : f.look.km < MID_KM ? 'mid' : 'far'; }
+  // what is up in each band this frame: a far plane counts only when it is over the ridge
+  // (under it the terrain hides it), a close one wherever it is in the frame
+  bands() {
+    const b = { far: false, mid: false, near: false };
+    for (const f of this.list) if (f.xy) { const k = Flights.band(f); if (k !== 'far' || f.look.el > 5) b[k] = true; }
+    b.any = b.far || b.mid || b.near;
+    return b;
+  }
+  begin() { flightSpots = []; }
+
   // how much of an aircraft shows through what is in front of it: a deck hides it, a veil
   // dims it, fog takes it; the cumulus do their own hiding by being drawn in front
   static visibility(env) {
@@ -84,8 +124,8 @@ export class Flights {
     return env.cond.fog ? 0 : clamp(1 - hide, 0, 1);
   }
 
-  draw(c, env, t) {
-    flightSpots = [];
+  // one depth band per call (the renderer lays the terrain's layers back between them)
+  draw(c, env, t, band = 'far') {
     if (!this.list.length) return;
     const vis = Flights.visibility(env);
     if (vis < 0.12) return;
@@ -117,6 +157,7 @@ export class Flights {
       return c;
     };
     for (const f of this.list) {
+      if (Flights.band(f) !== band) continue;
       // The contrail first, so the speck sits on its head. The sky mapping lays azimuth and
       // elevation out on a grid, so a straight flight path bows across it the way a great
       // circle bows on a map, and to the eye a contrail is dead straight (the user, 2026-10-21:
@@ -166,12 +207,44 @@ export class Flights {
       if (y < -sp || y > H || x < -sp || x > W + sp) continue;
       const label = flightLabel(f.src, f.pos.altFt, f.look.km);
       flightSpots.push({ x, y, label });
-      // by day the speck, through dusk fading as the lights come up
       const sky = skyAt(y);
+      // how big it is: its wingspan over its slant range, cheated, in the sky's pixels per
+      // degree; and how it is turned to us: the angle between its track and the line of sight,
+      // a plane coming at us or going away showing only its width
+      const slant = Math.hypot(f.look.km * 1000, f.pos.altFt * 0.3048 - ELEV);
+      const px = wingspan(f.src) / Math.max(200, slant) * 57.3 * PX_PER_DEG * CHEAT;
+      const rel = (f.src.track - f.look.az) * Math.PI / 180;        // the track against the bearing from the bench
+      const side = Math.abs(Math.sin(rel)), toward = -Math.cos(rel);   // toward > 0: coming our way
+      const facingRight = Math.sin(f.src.track * Math.PI / 180) < 0;   // westbound moves right across a south-facing frame
+      // by day the plane, through dusk fading as the lights come up
       if (nightK < 1) {
         const k = (1 - nightK) * vis;
-        c.fillStyle = rgb(lerpRGB(sky, lit, k));
-        c.fillRect(x - (sp >> 1), y, sp, Math.max(1, Math.round(sp * 0.6)));
+        const tone = rgb(lerpRGB(sky, lit, k));
+        const sprite = planes && px >= sp * 2 ? pickSprite(wingspan(f.src)) : null;
+        if (sprite) {
+          // the photographed plane, scaled to its size, turned to its heading, foreshortened
+          const w = Math.max(2, Math.round(px * Math.max(0.3, side))), h = Math.max(1, Math.round(px * sprite.h / sprite.w));
+          c.save(); c.translate(x, y); if ((sprite.faces === 'right') !== facingRight) c.scale(-1, 1);
+          c.drawImage(planes.img, sprite.x, sprite.y, sprite.w, sprite.h, -(w >> 1), -(h >> 1), w, h);
+          c.restore();
+        } else if (px >= sp * 2) {
+          // the stand-in until the photos come: a flat bar in the hour's light, its underside shaded
+          const w = Math.max(sp, Math.round(px * Math.max(0.35, side))), h = Math.max(2, Math.round(px / 5));
+          c.fillStyle = tone; c.fillRect(x - (w >> 1), y - (h >> 1), w, h);
+          c.fillStyle = rgb(lerpRGB(lerpRGB(sky, lit, k), sky, 0.45)); c.fillRect(x - (w >> 1), y - (h >> 1) + h - 1, w, 1);
+        } else {
+          c.fillStyle = tone;
+          c.fillRect(x - (sp >> 1), y, sp, Math.max(1, Math.round(sp * 0.6)));
+        }
+      }
+      // the landing light: a plane low and heading our way carries a steady white light
+      // pointed at the bench, growing as it comes, by day a glint, by night the brightest
+      // thing in the sky, with a dim ring of glow round it
+      if (toward > 0.88 && f.look.km < 25 && f.pos.altFt * 0.3048 - ELEV < 3500) {
+        const k = vis * (0.3 + 0.7 * nightK);
+        const r = Math.max(1, Math.round(SCALE * (0.35 + 1.5 / Math.max(1, f.look.km)) * (0.6 + 0.4 * nightK)));
+        if (nightK > 0.3) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], 0.3 * k)); fillCircle(c, x, y, r + 1); }
+        c.fillStyle = rgb(lerpRGB(sky, [255, 252, 240], k)); fillCircle(c, x, y, r);
       }
       if (nightK > 0) {
         const ph = (t + f.clock * 7) % 1;                // the strobe's second, on this aircraft's clock
@@ -193,6 +266,12 @@ export class Flights {
     for (const s of flightSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) { this.label = s.label; return true; }
     return false;
   }
+}
+
+// the photographed plane for a wingspan: a jet for the big ones, a prop for the small
+function pickSprite(span) {
+  const kind = span >= 20 ? 'jet' : 'prop';
+  return planes.sprites.find((p) => p.kind === kind) || planes.sprites[0] || null;
 }
 
 // The plane's direction of travel on the screen (a unit vector), from its grid positions a

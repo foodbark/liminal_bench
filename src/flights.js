@@ -93,6 +93,17 @@ const TYPES = {
   UH1: 'huey', H60: 'black hawk', EC35: 'eurocopter', AS50: 'a-star helicopter', B407: 'bell 407', B06: 'jetranger',
   C130: 'c-130 hercules', C17: 'c-17 globemaster', KC35: 'kc-135', DC10: 'dc-10 tanker', RV: 'air tanker',
 };
+// wingspans in metres, for how big a low one looks; unknown types get a light twin's
+const SPANS = {
+  B737: 34, B738: 36, B739: 36, B38M: 36, B39M: 36, B752: 38, B753: 38, B763: 48, B764: 52, B744: 64, B748: 68, B772: 61, B77W: 65, B788: 60, B789: 60, B78X: 60,
+  A319: 34, A320: 34, A321: 34, A20N: 36, A21N: 36, A332: 60, A333: 60, A359: 65, BCS1: 35, BCS3: 35,
+  E170: 26, E175: 26, E75L: 28, E75S: 26, E190: 29, CRJ2: 21, CRJ7: 23, CRJ9: 25, DH8D: 28, AT76: 27,
+  C172: 11, C182: 11, C206: 11, C208: 16, C210: 11, T210: 11, PA28: 11, PA22: 9, PA18: 11, PA46: 13, SR22: 12, SR20: 12, DA40: 12,
+  BE20: 17, BE9L: 15, B350: 18, PC12: 16, TBM9: 13, H25B: 16, C56X: 17, C25A: 15, C25B: 16, C68A: 22, C700: 22,
+  CL35: 21, CL60: 20, GLF4: 24, GLF5: 28, GLEX: 29, LJ45: 15, UH1: 15, H60: 16, EC35: 10, AS50: 11, B407: 11, B06: 10,
+  C130: 40, C17: 52, KC35: 40, DC10: 50, RV: 35,
+};
+export const wingspan = (a) => SPANS[a.type] || 14;
 const DIRS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 export function flightLabel(a, altFt, km) {
   const name = a.flight || a.reg || 'an aircraft';

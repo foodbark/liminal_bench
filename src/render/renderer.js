@@ -67,10 +67,19 @@ export class Renderer {
     // in front of Dean Stone's forest and still sink behind the trees to land.
     [this.near, this.nearCtx] = makeCanvas(W, H);
     [this.nearMask, this.nearMaskCtx] = makeCanvas(W, H);
+    // And the trees, the meadow and the props alone, without Sentinel's face: what a plane on
+    // the Sentinel approach, under a mile out, flies behind while it is in front of the hill.
+    [this.trees, this.treesCtx] = makeCanvas(W, H);
+    [this.treesMask, this.treesMaskCtx] = makeCanvas(W, H);
     if (assets) {
       const img = this.nearMaskCtx.createImageData(W, H), d = img.data, m = assets.mask;
-      for (let i = 0; i < d.length; i += 4) if (m[i] >= LAYER.FLANK || m[i + 1] === MAT.PROP) d[i + 3] = 255;
+      const img2 = this.treesMaskCtx.createImageData(W, H), d2 = img2.data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (m[i] >= LAYER.FLANK || m[i + 1] === MAT.PROP) d[i + 3] = 255;
+        if (m[i] >= LAYER.TREES || m[i + 1] === MAT.PROP) d2[i + 3] = 255;
+      }
       this.nearMaskCtx.putImageData(img, 0, 0);
+      this.treesMaskCtx.putImageData(img2, 0, 0);
     }
     this.baseKey = ''; this.camKey = '';
     [this.sky, this.skyCtx] = makeCanvas(W, H);
@@ -170,6 +179,10 @@ export class Renderer {
       n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, W, H); n.drawImage(this.fg, 0, 0);
       n.globalCompositeOperation = 'destination-in'; n.drawImage(this.nearMask, 0, 0);
       n.globalCompositeOperation = 'source-over';
+      const tc = this.treesCtx;
+      tc.globalCompositeOperation = 'source-over'; tc.clearRect(0, 0, W, H); tc.drawImage(this.fg, 0, 0);
+      tc.globalCompositeOperation = 'destination-in'; tc.drawImage(this.treesMask, 0, 0);
+      tc.globalCompositeOperation = 'source-over';
       this.baseKey = baseKey; this.dirty = true;
     }
     // Standing at a prop: its close-up painting over the zoomed scene, notes set legibly on its
@@ -203,9 +216,10 @@ export class Renderer {
     const sgn = Math.sin(env.wind.dir * Math.PI / 180) >= 0 ? 1 : -1;
     this.sheetX = ((this.sheetX + (0.25 + env.wind.speed * 0.07) * SCALE * sgn * dt) % W + W) % W;
     const gliders = this.fx.gliders.list.length > 0;
-    // an aircraft counts only when it is up in the sky: the ones under the ridge line are hidden
-    // by the terrain, and thirty of them a day would otherwise keep a clear still scene redrawing
-    const flights = this.fx.flights.list.some((f) => f.xy && f.look.el > 5);
+    // the aircraft by depth band (render/flights.js): a far one counts only when it is up over
+    // the ridge line, since under it the terrain hides it, and thirty of them a day would
+    // otherwise keep a clear still scene redrawing; a close one wherever it is in the frame
+    const fb = this.fx.flights.bands(), flights = fb.any;
     const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}` : '';
     if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
     const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0 || gliders || flights;
@@ -241,13 +255,18 @@ export class Renderer {
     const meteors = this.fx.meteors.length > 0;
     if (meteors) { this.fx.drawMeteors(c); lap('meteors'); }
     if (sheets && !thin) drawSheets();
-    // the aircraft: specks and contrails by day, lights by night, behind the cumulus
-    if (flights) { this.fx.flights.draw(c, env, t); lap('flights'); }
+    // the far aircraft: specks and contrails by day, lights by night, behind the cumulus
+    this.fx.flights.begin();
+    if (fb.far) { this.fx.flights.draw(c, env, t, 'far'); lap('flights'); }
     if (clouds) { this.fx.drawClouds(c, env); lap('clouds'); }
     // the terrain goes back over the clouds, and over a meteor or an aircraft so it passes behind the ridges
-    if (clouds || meteors || flights) { c.drawImage(this.fg, 0, 0); lap('fg'); }
+    if (clouds || meteors || fb.far) { c.drawImage(this.fg, 0, 0); lap('fg'); }
     // wings fly in front of the clouds and the far ranges, behind Sentinel, the trees and the props
     if (gliders) { this.fx.gliders.draw(c, env); c.drawImage(this.near, 0, 0); lap('gliders'); }
+    // the low traffic: inside ten kilometres in front of Dean Stone and behind Sentinel, like
+    // the wings; under a mile out in front of Sentinel too, behind only the trees and the props
+    if (fb.mid) { this.fx.flights.draw(c, env, t, 'mid'); c.drawImage(this.near, 0, 0); lap('flights mid'); }
+    if (fb.near) { this.fx.flights.draw(c, env, t, 'near'); c.drawImage(this.trees, 0, 0); lap('flights near'); }
     // the red beacons on the masts, in front of the mountain and the fog on it, behind the rain
     if (beaconsOn(env)) { drawBeacons(c, env, t); lap('beacons'); }
     drawLampGlow(c, env); lap('lamp');
