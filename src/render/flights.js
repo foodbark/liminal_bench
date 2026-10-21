@@ -21,6 +21,7 @@ export let flightSpots = [];   // [{ x, y, label }] for the hover caption, canva
 const M_PER_DEG = 111195;
 const CONTRAIL_FT = 26000;   // below this the air is too warm for a contrail (and most traffic is cruising well above)
 const MAX_POINTS = 700;
+const GAP_M = 450;   // the contrail starts this far behind the aircraft
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
 
@@ -98,7 +99,13 @@ export class Flights {
     // down at the ridge (a trail faded toward the top's blue went blue against a pink morning)
     const top = env.pal.top || env.pal.horizon, hz = env.pal.horizon;
     const skyAt = (y) => lerpRGB(top, hz, clamp(y / HORIZON, 0, 1) ** 1.5);
-    const lit = lerpRGB(tones[0], [255, 255, 255], 0.25);
+    let lit = lerpRGB(tones[0], [255, 255, 255], 0.25);
+    // the sunset ember: a contrail ten kilometres up is lit from below while the sun is on
+    // the horizon, and keeps the sun past the ground's sunset (3.3 degrees below for a trail at
+    // 10 km), so it takes the ember the cloud undersides get, strongest just after the sun is
+    // down for the meadow
+    const emberK = clamp(1 - Math.abs(sun + 0.8) / 4.5, 0, 1) * (1 - (env.cond.shade ?? env.cond.cover) * 0.5);
+    if (emberK > 0) lit = lerpRGB(lit, lerpRGB(env.pal.sunColor, [255, 120, 70], 0.45), emberK * 0.9);
     const life = contrailLife(env.upper) * 1000;
     const th = Math.max(1, Math.round(SCALE * 0.6));   // the fresh trail's thickness in pixels
     const sp = Math.max(2, Math.round(SCALE));          // the speck
@@ -137,13 +144,18 @@ export class Flights {
           for (let i = a; i <= b; i++) {
             const k = (pts[i].s - pts[a].s) / span;
             const x = A.x + (B.x - A.x) * k, y = A.y + (B.y - A.y) * k;
-            if (prev && y > -4 && prev.y > -4 && y < H && prev.y < H) {
+            // the trail forms a little way behind the aircraft, not at it: the vapour takes a
+            // few hundred metres to condense (the user, 2026-10-21)
+            const behind = pts[b].s - pts[i].s;
+            if (prev && behind > GAP_M && y > -4 && prev.y > -4 && y < H && prev.y < H) {
               const age = pts[i].age;
               const bk = Math.min(7, Math.floor(age * 8));
+              // the trail spreads as it ages into a soft band: a wide faint sheath and a core
+              const core = th + (age > 0.25 ? 1 : 0);
+              const wide = core + Math.round(age * 3 * SCALE);
+              if (wide > core) { c.fillStyle = trailTone(Math.min(7, bk + 2), (y + prev.y) / 2); segment(c, prev.x, prev.y, x, y, wide); }
               c.fillStyle = trailTone(bk, (y + prev.y) / 2);
-              // the trail spreads as it ages: thicker and fainter
-              const w = th + (age > 0.3 ? 1 : 0) + (age > 0.65 ? 1 : 0);
-              segment(c, prev.x, prev.y, x, y, w);
+              segment(c, prev.x, prev.y, x, y, core);
             }
             prev = { x, y };
           }
