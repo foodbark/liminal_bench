@@ -75,7 +75,16 @@ export class Flights {
           // is eased out (update, below)
           if (f.pos) {
             const fresh = reckon(a, now);
-            f.ease = { dlat: f.pos.lat - fresh.lat, dlon: f.pos.lon - fresh.lon, dalt: f.pos.altFt - fresh.altFt, until: now + EASE_MS };
+            // the correction, split along the track and across it: the sideways part eases
+            // out over a few seconds; the along-track part, when the old reckoning ran ahead
+            // of the fresh report (a light plane turning or slowing in the pattern), is a hold
+            // rather than a slide back, since a plane never flies backward (the user,
+            // 2026-10-22: "suddenly slide back along their flight paths and then retrace it")
+            const th = (a.track || 0) * Math.PI / 180, ux = Math.sin(th), uy = Math.cos(th);
+            const cosL = Math.cos(a.lat * Math.PI / 180);
+            const dn = (f.pos.lat - fresh.lat) * M_PER_DEG, de = (f.pos.lon - fresh.lon) * M_PER_DEG * cosL;
+            const along = de * ux + dn * uy, cross = de * uy - dn * ux;
+            f.ease = { cross, ahead: Math.max(0, along), ux, uy, cosL, v: (a.gs || 0) * 0.514444, dalt: f.pos.altFt - fresh.altFt, t0: now, until: now + EASE_MS };
           }
           f.src = a; byHex.delete(a.hex);
         }
@@ -92,9 +101,16 @@ export class Flights {
       f.pos = reckon(f.src, now);
       // a fresh report moves the dead-reckoned position a little: the jump is eased out over
       // a few seconds so the speck and its trail do not jolt every half minute
-      if (f.ease && now < f.ease.until) {
-        const k = (f.ease.until - now) / EASE_MS;
-        f.pos = { lat: f.pos.lat + f.ease.dlat * k, lon: f.pos.lon + f.ease.dlon * k, altFt: f.pos.altFt + f.ease.dalt * k };
+      if (f.ease) {
+        const e = f.ease;
+        const k = Math.max(0, (e.until - now) / EASE_MS);                    // the sideways correction, easing out
+        const ahead = Math.max(0, e.ahead - e.v * (now - e.t0) / 1000);        // how far the hold still has to go
+        if (k <= 0 && ahead <= 0) f.ease = null;
+        else {
+          const ce = e.cross * k, cn = 0;   // cross-track: east and north parts of a sideways metre
+          const de = ce * e.uy + ahead * e.ux, dn = -ce * e.ux + ahead * e.uy + cn;
+          f.pos = { lat: f.pos.lat + dn / M_PER_DEG, lon: f.pos.lon + de / (M_PER_DEG * e.cosL), altFt: f.pos.altFt + e.dalt * k };
+        }
       }
       f.look = lookAt(f.pos.lat, f.pos.lon, f.pos.altFt);
       // in the south-facing frame and above the ground: east to west across the sky, anything
