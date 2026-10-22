@@ -333,8 +333,13 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      caption.textContent = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
-      caption.classList.toggle('caps', state.view === 'scene' && state.hover === 'flight');   // a flight's line reads like a departures board (the user, 2026-10-22)
+      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
+      if (state.view === 'scene' && state.hover === 'flight' && line.includes(' · ')) {
+        // a flight's callsign in capitals, the rest of its line in the caption's lowercase (the user, 2026-10-22)
+        const cut = line.indexOf(' · ');
+        const head = document.createElement('span'); head.className = 'caps'; head.textContent = line.slice(0, cut);
+        caption.replaceChildren(head, document.createTextNode(line.slice(cut)));
+      } else caption.textContent = line;
 
       if (tNow - lastStatus > 1000) {
         lastStatus = tNow;

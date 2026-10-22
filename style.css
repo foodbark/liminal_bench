@@ -23,7 +23,7 @@ body { display: flex; align-items: center; justify-content: center; font-family:
   font-size: calc(18px * var(--u) * var(--cap)); letter-spacing: 0.02em; text-transform: lowercase;
 }
 #caption-text { color: #e8e2cc; white-space: nowrap; }
-#caption-text.caps { text-transform: uppercase; }   /* the flight captions, in capitals like a departures board */
+#caption-text .caps { text-transform: uppercase; }   /* a flight's callsign, in capitals like a departures board; the rest of its line stays lowercase */
 #status { color: #7d8595; font-size: calc(15px * var(--u) * var(--cap)); text-align: left; white-space: pre; text-transform: none; }   /* the tag line's capitals are its own */
 #panel {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
