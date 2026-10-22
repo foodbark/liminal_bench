@@ -2,7 +2,7 @@
 
 A quiet park scene that lives on the real clock and sky over Missoula, Montana. A bench, a bulletin board, a pay phone, a pole with a lantern, Mount Sentinel on the left and Mount Dean Stone's forested dome behind. The sun, moon, stars, clouds, snow and fog are the ones outside right now. Nothing to win.
 
-![The scene on an October afternoon: cumulus the webcams saw, last night's dusting held on Dean Stone, Sentinel bare](docs/screenshot.png)
+![The scene on an October afternoon: the user's photographed cumulus over Dean Stone, a jet's contrail off to the right from the live feed, posters pinned on the board by whoever stopped by](docs/screenshot.png)
 
 The mood is hauntology, in Mark Fisher's sense: a place remembered more than seen, with the medium's wear left showing. Boards of Canada is the muse. The pixel art is hi-res and shaded, with visible pixels and dither, never chunky and never painterly. Three rules sit over everything, spelled out in `CLAUDE.md`: beauty over realism (live data says what is happening, never what color it is), the user's paintings and photographs are the look (code only adds light, weather and what changes), and `master` is production.
 
