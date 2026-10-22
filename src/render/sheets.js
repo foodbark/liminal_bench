@@ -133,9 +133,10 @@ export function renderSheets(img, env) {
   }
 
   // --- stratocumulus: a lumpy sheet with gaps; stratus: a flat gray layer; nimbostratus: dark rain base
-  const lumpy = sky.strato, flat = Math.max(sky.stratus, sky.nimbo);
+  // the photographed decks take the lumpy deck and the rain base once loaded (drawDeckMist); the flat stratus stays drawn
+  const lumpy = env.photoDecks ? 0 : sky.strato, flat = Math.max(sky.stratus, env.photoDecks ? 0 : sky.nimbo);
   if (lumpy > 0 || flat > 0) {
-    const dark = sky.nimbo > 0;
+    const dark = !env.photoDecks && sky.nimbo > 0;
     const top0 = dark ? tones[2] : tones[0], top1 = dark ? tones[3] : tones[1], shade = dark ? tones[4] : tones[2], under = dark ? tones[4] : tones[3];
     for (let y = 0; y < VANISH; y++) {
       const d = depthAt(y);

@@ -1,6 +1,7 @@
 import { ASSET_DIR, SCALE, W, HORIZON } from '../state.js';
 import { makeCanvas, clamp, blue } from '../util/pixel.js';
 import { cloudTones } from './clouds.js';
+import { skyXY } from './sky.js';
 import { valueNoise2D } from '../util/noise.js';
 const mistNoise = valueNoise2D(8191);   // mottling for the cirrus mist, like the Milky Way's rifts
 
@@ -26,6 +27,9 @@ export function photoField() { return field; }
 // the cirrus tiles (assets/cirrus.png, cirrus.json): a photographed cirrus sheet keyed to a density per cell
 let cirrus = null;   // { tiles: [{ x, y, w, h, scale, data }] }
 export function photoCirrus() { return cirrus; }
+// the overcast decks (assets/decks.png, decks.json): photographed skies from under a stratocumulus and a nimbostratus, as luminance
+let decks = null;   // { tiles: [{ x, y, w, h, kind, lum: Uint8Array }] }
+export function photoDecks() { return decks; }
 
 async function loadSheet(name) {
   const r = await fetch(new URL('../../' + ASSET_DIR + '/' + name + '.json', import.meta.url));
@@ -73,6 +77,8 @@ if (typeof Image !== 'undefined') {
         });
         field = { fields: fd.meta.fields, cloudlets, lo: flo, hi: Math.max(fhi, flo + 1) };
       }
+      const dk = await loadSheet('decks');
+      if (dk) decks = { tiles: dk.meta.tiles.map((t) => { const d = dk.g.getImageData(t.x, t.y, t.w, t.h).data; const lum = new Uint8Array(t.w * t.h); for (let i = 0; i < lum.length; i++) lum[i] = d[i * 4]; return { ...t, lum }; }) };
       const ci = await loadSheet('cirrus');
       if (ci) cirrus = { tiles: ci.meta.tiles.map((t) => ({ ...t, data: ci.g.getImageData(t.x, t.y, t.w, t.h) })) };
     } catch (e) { console.warn('photo clouds not loaded', e); }
@@ -379,6 +385,7 @@ function scalesDensity(amount) {
         const mirror = (k + row) % 2 === 1;
         for (let i = 0; i < field.cloudlets.length; i++) {
           const c = field.cloudlets[i];
+          if (frameCut(c)) continue;   // a cloudlet the photo's frame cut has a straight side; mirrored copies paired them into seams (the user, 2026-10-21)
           const jitter = fhash(i, k * 7 + row * 5 + (shift ? 3 : 0));
           if (c.rank + (jitter - 0.5) * 0.2 < 1 - tt) continue;
           const cw = Math.max(1, Math.round(c.w / DIV)), chh = Math.max(1, Math.round(c.h / DIV));
@@ -406,7 +413,38 @@ function scalesDensity(amount) {
       }
     }
   }
-  scalesCache.set(q, out);
+  // softened, so the stipple feathers every edge instead of cutting a cloudlet out sharp
+  const soft = blurField(out, W, VANISH, 3);
+  scalesCache.set(q, soft);
+  return soft;
+}
+// a cloudlet with a straight run of cloud down a side edge was cut by the photo's frame
+function frameCut(c) {
+  if (c.cut != null) return c.cut;
+  const d = c.data.data; let l = 0, r = 0;
+  for (let y = 0; y < c.h; y++) { if (d[(y * c.w) * 4 + 3] > 40) l++; if (d[(y * c.w + c.w - 1) * 4 + 3] > 40) r++; }
+  c.cut = l > c.h * 0.35 || r > c.h * 0.35;
+  return c.cut;
+}
+// a separable box blur of a byte field, wrapping in x (the field tiles across the frame)
+function blurField(src, w, h, r) {
+  const tmp = new Float32Array(w * h), out = new Uint8ClampedArray(w * h), n = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += src[y * w + ((k + w) % w)];
+    for (let x = 0; x < w; x++) {
+      tmp[y * w + x] = acc / n;
+      acc += src[y * w + ((x + r + 1) % w)] - src[y * w + ((x - r + w) % w)];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += tmp[Math.min(h - 1, Math.max(0, k)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = acc / n;
+      acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+    }
+  }
   return out;
 }
 // The cirrus as mist, the way the Milky Way is drawn (the user, 2026-10-21: "they need to be
@@ -554,7 +592,7 @@ export function drawCirrusMist(g, env, off = 0) {
       // and never more than two thirds lit, so sky always shows through
       const mc = Math.max(e, hz) * mistMottle[y * W + x];
       // lit where the fixed noise falls under the density: dense in a core, points at the edge
-      const thr = Math.max(Math.min(0.66, mc * 0.9), Math.min(0.9, sc * 1.3));
+      const thr = Math.max(Math.min(0.66, mc * 0.9), Math.min(0.82, sc * 1.25));
       if (blue(x, y) >= thr) continue;
       const m = Math.max(mc, Math.min(1, sc * 1.4));   // the scales whiter than mist of the same density
       const c = toneAt(Math.min(5, Math.floor(m * 6)), band);
@@ -563,4 +601,90 @@ export function drawCirrusMist(g, env, off = 0) {
     }
   }
   g.putImageData(cirrusImg, 0, 0);
+}
+
+// The overcast decks from the photographs (the user's mammatus over Denver as the stratocumulus,
+// the rain sky as the nimbostratus; 2026-10-21). A deck is solid cloud, so the tile is the
+// sky's luminance and the stipple's cap sits near solid: the photo's lumps become the deck's
+// shading in the hour's deck tones by darkness (the lighter tones for the lumpy deck, the dark
+// ones for the rain base), hazed toward the horizon. Where the cover is partial the deck
+// breaks open along a slow noise, the stipple feathering the edges, and sky shows in the
+// gaps. The tile repeats across the sky, every other copy mirrored; the stipple stays fixed to
+// the screen and the deck drifts under it like the mist. The drawn decks in sheets.js stand
+// in until the sheet is loaded (env.photoDecks); the flat stratus stays drawn.
+let deckImg = null;
+export function drawDeckMist(g, env, off = 0) {
+  if (!deckImg) deckImg = g.createImageData(W, VANISH);
+  const out = deckImg.data; out.fill(0);
+  const { horizon } = env.pal;
+  const want = [['strato', env.sky.strato || 0], ['nimbo', env.sky.nimbo || 0]].filter(([, a]) => a > 0.01);
+  if (!want.length) { g.putImageData(deckImg, 0, 0); return; }
+  if (!mistMottle) drawCirrusMist(g, env, off);   // the noise fields are made there
+  const shift = Math.round(off);
+  const haze = (c, d) => { const hz = Math.min(0.55, (1 - 1 / d) * 0.55); return [0, 1, 2].map((i) => Math.round(c[i] + (horizon[i] - c[i]) * hz)); };
+  for (const [kind, amount] of want) {
+    const t = decks.tiles.find((x) => x.kind === kind) || decks.tiles[0];
+    if (!t) continue;
+    const { tones } = cloudTones(env, 1);
+    // the tones by darkness: the lumpy deck from the lit top down to its shade, the rain base darker
+    const ramp = kind === 'nimbo' ? [tones[1], tones[2], tones[3], tones[4]] : [tones[0], tones[1], tones[2], tones[3]];
+    // a low sun lights an overcast's underside from its own side only: the warm tones hold
+    // toward the sun's place in the frame and the rest of the deck stays its gray (the whole
+    // deck went one salmon at sunset)
+    const sunX = skyXY(env.sun.azimuth, env.sun.altitude).x;
+    const glowK = clamp(1 - Math.abs(env.sun.altitude - 1) / 6, 0, 1);
+    const gray = ramp.map((c) => { const L = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]; return [L * 0.97, L * 0.97, L * 1.04]; });
+    const cache = new Map();
+    const toneAt = (ti, band, ek) => {
+      const key = (ti * 8 + band) * 6 + ek;
+      let c = cache.get(key);
+      if (!c) { const w = ek / 5; const base = [0, 1, 2].map((i) => gray[ti][i] + (ramp[ti][i] - gray[ti][i]) * (1 - glowK + glowK * w)); c = haze(base, 1 / (1 - (band + 0.5) / 8)); cache.set(key, c); }
+      return c;
+    };
+    const tw = t.w, th = t.h, lum = t.lum;
+    const solid = amount >= 0.9 || kind === 'nimbo';   // a rain base has no gaps
+    // the sky in a gap is bright, the way daylight through a hole in a deck is (the beauty
+    // rule's blue sky through cloud gaps), not the slate the palette gives under heavy cover;
+    // at night the gap is the night sky as it is
+    const nightK = clamp((-env.sun.altitude - 2) / 6, 0, 1);
+    const skyTop = env.pal.top || horizon;
+    const gapTone = [0, 1, 2].map((i) => skyTop[i] + ([150, 185, 235][i] - skyTop[i]) * 0.55 * (1 - nightK));
+    const gapCache = new Map();
+    const gapAt = (band) => { let c = gapCache.get(band); if (!c) { c = haze(gapTone, 1 / (1 - (band + 0.5) / 8)); gapCache.set(band, c); } return c; };
+    // the copies crossfade over an overlap instead of mirroring: a mirrored join paired the
+    // lumps into a butterfly, and a vertical drop to break that left rectangular seams
+    const OV = Math.min(160, tw >> 2), P = tw - OV;
+    for (let y = 0; y < VANISH; y++) {
+      const d = VANISH / Math.max(1, VANISH - y);
+      const band = Math.min(7, Math.floor((1 - 1 / d) * 8));
+      for (let x = 0; x < W; x++) {
+        const u = ((x - shift) % P + P) % P;
+        const ty = Math.min(th - 1, y);
+        const ek = glowK > 0 ? Math.round(clamp(1 - Math.abs(x - sunX) / (W * 0.55), 0, 1) * 5) : 0;
+        // inside the overlap the tile's tail fades into the next copy's head
+        let L = lum[ty * tw + u];
+        if (u < OV) { const f = u / OV; L = lum[ty * tw + P + u] * (1 - f) + L * f; }
+        const dark = 1 - L / 255;
+        // the cover: solid, or broken open where the slow noise runs above it, feathered, the
+        // holes opening first where the photo's lumps are lightest so the gaps follow the deck's
+        // own structure (the slow noise bunches around its middle, so it is stretched to use its
+        // whole range before the cover is set against it, or a half-covered sky was nearly empty)
+        let m = 1;
+        if (!solid) {
+          const n = clamp((mistSlow[y * W + x] - 0.5) * 2.4 + 0.5, 0, 1) * 0.6 + (1 - dark) * 0.4;
+          m = clamp((amount - n) / 0.2 + 0.5, 0, 1);
+        }
+        if (m <= 0 || blue(x, y) >= m * 0.97) {
+          if (!solid) { const c = gapAt(band); const o = (y * W + x) * 4; out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255; }
+          continue;
+        }
+        // the tone steps dithered through the noise, so the four tones meet in grain, not contour lines
+        const ti = Math.min(3, Math.max(0, Math.floor(dark * 4 + (blue(x + 7, y + 3) - 0.5) * 0.9)));
+        const c = toneAt(ti, band, ek);
+        const o = (y * W + x) * 4;
+        out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255;
+      }
+    }
+  }
+  g.putImageData(deckImg, 0, 0);
 }

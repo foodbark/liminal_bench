@@ -15,7 +15,7 @@ an average of the photo's own pixels.
 """
 import argparse, json, os, subprocess, sys, tempfile
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lobes import segment
 from cut_cloud import key_sky, despill
@@ -101,6 +101,51 @@ def build_cirrus(cfg, small):
     with open(os.path.join(small, 'cirrus.json'), 'w') as f:
         json.dump({'tiles': [{**r, 'x': r['x'] // 2, 'y': r['y'] // 2, 'w': r['w'] // 2, 'h': r['h'] // 2} for r in rects]}, f)
     print(f'assets/cirrus.png {Wt}x{Ht}, {len(rects)} cirrus tile(s)')
+
+
+def build_decks(cfg, small):
+    """Overcast decks from photographs (the config's "fields" entries of type "deck"): a sky seen
+    from under a stratocumulus or a nimbostratus has no blue to key against, so the tile is the
+    sky's luminance (the box, despeckled with a median where a flock of birds crossed it,
+    normalised between its 2nd and 98th percentiles) scaled to the height of the page's sky
+    band (the vanishing line, 62% of the horizon) and never squeezed, in the red channel; the
+    page (drawDeckMist in src/render/photoclouds.js) repeats it across the sky, mirrored every
+    other copy, and stipples it near solid in the hour's deck tones by darkness, breaking it
+    open where the cover is partial. kind: strato (the lumpy deck), nimbo (the rain base).
+    assets/decks.png and decks.json, halved by averaging for assets/small (2026-10-21)."""
+    entries = [e for e in (cfg.get('fields') or []) if e.get('type') == 'deck']
+    if not entries: return
+    meta = json.load(open(os.path.join(ROOT, 'assets/backdrop.json')))
+    band = int(round(meta['horizon'] * 0.62))
+    tiles = []; rects = []
+    for e in entries:
+        im = ImageOps.exif_transpose(Image.open(os.path.join(ROOT, 'art', e['photo']))).convert('RGB')
+        W, H = im.size
+        fx0, fy0, fx1, fy1 = e.get('box', [0, 0, 1, 1])
+        im = im.crop((int(fx0 * W), int(fy0 * H), int(fx1 * W), int(fy1 * H)))
+        if e.get('despeckle'): im = im.filter(ImageFilter.MedianFilter(int(e['despeckle']) | 1))
+        scale = band / im.height
+        im = im.resize((max(8, int(round(im.width * scale))), band), Image.LANCZOS if scale < 1 else Image.BICUBIC)
+        L = np.asarray(im.convert('L'), np.float64)
+        lo, hi = np.percentile(L, 2), np.percentile(L, 98)
+        Ln = np.clip((L - lo) / max(1.0, hi - lo), 0, 1)
+        tile = np.zeros((band, im.width, 4), np.uint8)
+        tile[..., 0] = (Ln * 255 + 0.5).astype(np.uint8); tile[..., 1] = tile[..., 0]; tile[..., 2] = tile[..., 0]; tile[..., 3] = 255
+        tiles.append(tile)
+        print(f"  deck {e['photo']} ({e.get('kind', 'strato')}): {im.width}x{band}, luminance {lo:.0f}..{hi:.0f} spread to full")
+    Wt = max(t.shape[1] for t in tiles); Ht = sum(t.shape[0] for t in tiles) + 2 * (len(tiles) - 1)
+    sheet = np.zeros((Ht, Wt, 4), np.uint8); y = 0
+    for t, e in zip(tiles, entries):
+        h, w = t.shape[:2]; sheet[y:y + h, :w] = t
+        rects.append({'x': 0, 'y': y, 'w': w, 'h': h, 'photo': e['photo'], 'kind': e.get('kind', 'strato')}); y += h + 2
+    Image.fromarray(sheet, 'RGBA').save(os.path.join(ROOT, 'assets/decks.png'), optimize=True)
+    with open(os.path.join(ROOT, 'assets/decks.json'), 'w') as f: json.dump({'tiles': rects}, f)
+    h2, w2 = sheet.shape[0] // 2 * 2, sheet.shape[1] // 2 * 2
+    sm = sheet[:h2, :w2].reshape(h2 // 2, 2, w2 // 2, 2, 4).astype(np.float64).mean((1, 3))
+    Image.fromarray((sm + 0.5).astype(np.uint8), 'RGBA').save(os.path.join(small, 'decks.png'), optimize=True)
+    with open(os.path.join(small, 'decks.json'), 'w') as f:
+        json.dump({'tiles': [{**r, 'x': r['x'] // 2, 'y': r['y'] // 2, 'w': r['w'] // 2, 'h': r['h'] // 2} for r in rects]}, f)
+    print(f'assets/decks.png {Wt}x{Ht}, {len(rects)} deck tile(s)')
 
 
 def build_fields(cfg, tmp, small):
@@ -212,9 +257,13 @@ def build_fields(cfg, tmp, small):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--art', help='config name (default: art/current)')
+    ap.add_argument('--decks', action='store_true', help='build only the overcast deck tiles')
     a = ap.parse_args()
     name = a.art or open(os.path.join(ROOT, 'art', 'current')).read().strip()
     cfg = json.load(open(os.path.join(ROOT, 'art', name + '.json')))
+    if a.decks:
+        small = os.path.join(ROOT, 'assets/small'); os.makedirs(small, exist_ok=True)
+        build_decks(cfg, small); return
     entries = cfg.get('clouds')
     if not entries: sys.exit(f'no "clouds" in art/{name}.json')
     tmp = tempfile.mkdtemp(prefix='clouds-')
@@ -293,6 +342,7 @@ def main():
         print(f'assets/lobes.png {LW}x{LH}, {len(lrects)} lobes from {len({m["cloud"] for _, m in lobes})} clouds')
     build_fields(cfg, tmp, small)
     build_cirrus(cfg, small)
+    build_decks(cfg, small)
 
 
 if __name__ == '__main__':

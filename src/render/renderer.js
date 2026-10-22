@@ -9,14 +9,14 @@ function envForWorker(env) {
   return {
     pal: env.pal, sun: env.sun, moon: env.moon, lst: env.lst, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
     groundSnow: env.groundSnow, inversion: env.inversion, fogTop: env.fogTop, mountainFog: env.mountainFog, dusting: env.dusting, greenup: env.greenup,
-    photoAlto: !!photoField(), photoCirrus: !!photoCirrus(),
+    photoAlto: !!photoField(), photoCirrus: !!photoCirrus(), photoDecks: !!photoDecks(),
   };
 }
 import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
-import { photoField, photoCirrus, drawField, drawCirrusMist, VANISH as MIST_H } from './photoclouds.js';
+import { photoField, photoCirrus, photoDecks, drawField, drawCirrusMist, drawDeckMist, VANISH as MIST_H } from './photoclouds.js';
 
 const MIST_STEP = 3;   // pixels of drift between re-renders of the cirrus mist
 
@@ -90,6 +90,7 @@ export class Renderer {
     [this.sheets, this.sheetsCtx] = makeCanvas(W, H);
     this.sheetKey = ''; this.pendingSheetKey = ''; this.sheetX = 0;
     [this.field, this.fieldCtx] = makeCanvas(W, H); this.fieldKey = '';   // the photographed altocumulus field, scrolled with the sheets
+    [this.deck, this.deckCtx] = makeCanvas(W, MIST_H); this.deckKey = '';   // the overcast decks from the photos, stippled near solid, drifting like the mist
     [this.mist, this.mistCtx] = makeCanvas(W, MIST_H); this.mistKey = '';   // the cirrus as mist: a fixed stipple, the density drifting under it, re-rendered every few pixels of drift
     [this.propsLit, this.propsLitCtx] = makeCanvas(W, H);
     // Show the painting at once, in its own daylight colors, so the scene is never empty while
@@ -248,6 +249,11 @@ export class Renderer {
     // goes through it as fish scales while the cirrus tile is loaded, else as the field's sprites
     const mistOn = sheets && (sk.cirrus + sk.veilHigh + sk.alto) > 0.01 && !!photoCirrus();
     const fieldOn = sheets && sk.alto > 0.01 && !!photoField() && !mistOn;
+    const deckOn = sheets && (sk.strato + sk.nimbo) > 0.01 && !!photoDecks();
+    if (deckOn) {
+      const deckKey = env.sheetKey + '|' + Math.floor(this.sheetX / MIST_STEP);
+      if (deckKey !== this.deckKey) { drawDeckMist(this.deckCtx, env, this.sheetX); this.deckKey = deckKey; lap('deck'); }
+    }
     if (fieldOn && env.sheetKey !== this.fieldKey) { drawField(this.fieldCtx, env); this.fieldKey = env.sheetKey; }
     if (mistOn) {
       const mistKey = env.sheetKey + '|' + Math.floor(this.sheetX / MIST_STEP);
@@ -264,6 +270,7 @@ export class Renderer {
         if (fieldOn) { c.drawImage(this.field, ox, 0); c.drawImage(this.field, ox - W, 0); }
       }
       c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0);
+      if (deckOn) c.drawImage(this.deck, 0, 0);   // the lowest cloud there is, over everything above it
       if (thin) {
         if (mistOn) c.drawImage(this.mist, 0, 0);
         if (fieldOn) { c.drawImage(this.field, ox, 0); c.drawImage(this.field, ox - W, 0); }

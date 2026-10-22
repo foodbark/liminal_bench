@@ -6,7 +6,7 @@ import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { dustingTables, presetHours } from './dusting.js';
 import { skyPalette } from './palette.js';
 import { Renderer } from './render/renderer.js';
-import { photoField, photoCirrus } from './render/photoclouds.js';
+import { photoField, photoCirrus, photoDecks } from './render/photoclouds.js';
 import { setupUI } from './ui.js';
 import { loadBackdrop } from './assets.js';
 import { peakSnowAmount, updatePeakSnowLatch, PEAK_BARE, PEAK_FIRST } from './season.js';
@@ -169,7 +169,7 @@ function computeEnv() {
     upper: w.upper || null,   // the air at contrail height (weather.js): humidity, temperature, wind
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
     terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
-    sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}|${photoField() ? 'pf' : ''}${photoCirrus() ? 'pc' : ''}`,
+    sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}|${photoField() ? 'pf' : ''}${photoCirrus() ? 'pc' : ''}${photoDecks() ? 'pd' : ''}`,
     ambientKey,
   };
 }
