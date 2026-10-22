@@ -51,6 +51,7 @@ const CONTRAIL_FT = 26000;   // below this the air is too warm for a contrail (a
 const MAX_POINTS = 700;
 const GAP_M = 450;   // the contrail starts this far behind the aircraft
 const FAR_MIN_EL = 7;   // degrees: the far traffic shows only up over the hills
+const FAR_MAX = 3;      // the far aircraft drawn at once, the nearest first
 const EASE_MS = 4000;   // a fresh report's correction is spread over this long
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
@@ -107,10 +108,7 @@ export class Flights {
       // ...and within the range the eye has for an airframe of its size: an airliner's trail
       // out to about 60 km, a business jet's 22, a Cessna 18 (a Citation 82 km out at 7 degrees
       // was drawn, and "i doubt we could see N390KT", the user, 2026-10-21)
-      // at night the lights carry further than a speck does by day: the range stretches with
-      // the dark (the user, 2026-10-21: the lights need to fade too)
-      const nightK = clamp((-env.sun.altitude - 2) / 6, 0, 1);
-      const rangeKm = Math.min(70, Math.max(15, wingspan(f.src) * 1.6)) * (1 + 0.8 * nightK);
+      const rangeKm = Math.min(70, Math.max(15, wingspan(f.src) * 1.6));
       const slantKm = Math.hypot(f.look.km, (f.pos.altFt * 0.3048 - ELEV) / 1000);
       f.slantKm = slantKm;
       const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.look.el >= FAR_MIN_EL && slantKm <= rangeKm);
@@ -135,6 +133,12 @@ export class Flights {
         if (tr.length > MAX_POINTS) tr.splice(0, tr.length - MAX_POINTS);
       }
     }
+    // A few at a time. On an evening the corridor puts a dozen jets along the ridge at once,
+    // every one strobing ("the whole horizon is flashing plane lights", the user, 2026-10-21),
+    // and the sky over the bench is not that kind of sky: of the far traffic that passes the
+    // cuts, only the nearest FAR_MAX draw, the next one at half, the rest wait their turn.
+    const far = this.list.filter((f) => f.xy && f.look.km >= MID_KM).sort((a, b) => a.slantKm - b.slantKm);
+    far.forEach((f, i) => { if (i >= FAR_MAX) { if (i === FAR_MAX) f.fade *= 0.5; else { f.xy = null; f.fade = 0; } } });
   }
 
   // which depth an aircraft is drawn at, by its distance
