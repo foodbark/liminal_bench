@@ -127,6 +127,19 @@ GitHub Pages cannot redirect on its own, so switch the repo's Pages source (Sett
 
 Then update the URL in README.md and CLAUDE.md.
 
+## When the git build does not fire
+
+On 2026-10-22 two pushes to master registered on GitHub but Cloudflare never built them. The
+deployment list (`npx wrangler pages deployment list --project-name liminal-bench`) shows which
+commit production is on; to deploy the current checkout's commit by hand:
+
+```
+npx wrangler pages deploy . --project-name liminal-bench --branch master --commit-hash $(git rev-parse HEAD)
+```
+
+Wrangler reads the bindings from `wrangler.toml` and leaves `node_modules`, dotfiles and the
+wrangler state out of the upload. The builds fired again on their own later that day.
+
 ## 6. The aircraft feed (2026-10-21)
 
 `functions/api/flights.js` serves the planes (src/flights.js). It asks three community feeds in
