@@ -20,7 +20,9 @@ export async function fetchFlights() {
   // the copy's own time, not the page's: a pushed copy can sit in the store for a minute, and
   // taken as fresh its positions were a minute behind, so every refresh jolted the planes
   // (a DAL contrail forming and retracting at the frame's edge, the user, 2026-10-22)
-  const now = Math.min(Date.now(), j.at || Date.now());
+  let at = j.at || 0;
+  if (at && at < 1e11) at *= 1000;                      // a feed's `now` in seconds (readsb's is), not milliseconds
+  const now = at && Math.abs(Date.now() - at) < 3600e3 ? Math.min(Date.now(), at) : Date.now();   // and never a clock an hour out
   const list = [];
   for (const a of j.ac || []) {
     if (a.alt === 'ground' || a.alt == null || a.lat == null) continue;
