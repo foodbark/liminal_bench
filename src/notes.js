@@ -86,10 +86,19 @@ export async function loadPosted() {
   return posted;
 }
 
+// The API is probed once at load; if that probe failed (a deploy in progress, a hiccup) the
+// board stayed in the browser for the whole visit and a note pinned then went nowhere shared
+// (a visitor's pin "didn't work", 2026-10-22). So a pin asks again first.
+async function ensureApi() {
+  if (mode !== 'api') await loadPosted();
+  return mode === 'api';
+}
+const OUT_OF_REACH = 'the board is out of reach right now. try again in a minute.';
+
 // Pinning a poster: `png` is the data URL of the art pixels the page made, `w` by `h`.
 export async function postPoster(png, w, h, k = 0) {
   if (!/^data:image\/png;base64,/.test(png || '')) throw new Error('nothing to pin');
-  if (mode === 'api') {
+  if (await ensureApi()) {
     const r = await fetch(POSTER_API + '?v=2', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ png, k }) });
     const body = await r.json().catch(() => null);
     if (!r.ok) throw new Error((body && body.error) || 'the pin would not go in');
@@ -116,8 +125,10 @@ export function posterImage(p) {
 export async function postNote(text) {
   text = cleanText(text);
   if (!text) throw new Error('nothing to pin');
-  if (mode === 'api') {
-    const r = await fetch(API_V2, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (await ensureApi()) {
+    let r;
+    try { r = await fetch(API_V2, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }); }
+    catch (e) { throw new Error(OUT_OF_REACH); }
     const body = await r.json().catch(() => null);
     if (!r.ok) throw new Error((body && body.error) || 'the pin would not go in');
     if (!takeBoard(body)) posted = sortByAt([...posted, { id: Date.now(), text, at: Date.now() }]);
