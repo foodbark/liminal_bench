@@ -112,6 +112,17 @@ export class Flights {
           f.pos = { lat: f.pos.lat + dn / M_PER_DEG, lon: f.pos.lon + de / (M_PER_DEG * e.cosL), altFt: f.pos.altFt + e.dalt * k };
         }
       }
+      // the ratchet: whatever the correction did, the drawn position never moves against the
+      // track from one frame to the next (a frame's hiccup of a hundred metres remained at a
+      // feed update after the hold, 2026-10-22); sideways is free
+      if (f.shown) {
+        const th = (f.src.track || 0) * Math.PI / 180, ux = Math.sin(th), uy = Math.cos(th);
+        const cosL = Math.cos(f.pos.lat * Math.PI / 180);
+        const dn = (f.pos.lat - f.shown.lat) * M_PER_DEG, de = (f.pos.lon - f.shown.lon) * M_PER_DEG * cosL;
+        const back = -(de * ux + dn * uy);
+        if (back > 0 && back < 5000) f.pos = { lat: f.pos.lat + back * uy / M_PER_DEG, lon: f.pos.lon + back * ux / (M_PER_DEG * cosL), altFt: f.pos.altFt };
+      }
+      f.shown = { lat: f.pos.lat, lon: f.pos.lon };
       f.look = lookAt(f.pos.lat, f.pos.lon, f.pos.altFt);
       // in the south-facing frame and above the ground: east to west across the sky, anything
       // behind the bench is never seen; the sky projection puts the rest, and the terrain hides
