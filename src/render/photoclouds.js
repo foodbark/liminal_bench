@@ -380,9 +380,13 @@ function scalesDensity(amount) {
   const bandH = Math.round(VANISH / DIV);
   const layers = t > 0.5 ? [[0, t], [0.5, (t - 0.5) / 0.2]] : [[0, t]];
   for (const [shift, tt] of layers) {
-    for (let row = 0; row < DIV; row++) {                // the band laid again below itself, mirrored, down to the vanishing line
+    for (let row = 0; row < DIV; row++) {                // the band laid again below itself down to the vanishing line
       for (let k = 0; k < n; k++) {
-        const mirror = (k + row) % 2 === 1;
+        // no mirroring: a cloudlet near a copy's edge met its own reflection in the next copy
+        // (the user, 2026-10-22); alternate copies and the lower row slide by part of a period
+        // instead, so neighbouring copies interleave their cloudlets
+        const mirror = false;
+        const slide = ((k + row) % 2) * 0.5 + row * 0.23;
         for (let i = 0; i < field.cloudlets.length; i++) {
           const c = field.cloudlets[i];
           // a cloudlet the photo's frame cut has a straight side: a cut side is feathered over
@@ -393,7 +397,7 @@ function scalesDensity(amount) {
           const jitter = fhash(i, k * 7 + row * 5 + (shift ? 3 : 0));
           if (c.rank + (jitter - 0.5) * 0.2 < 1 - tt) continue;
           const cw = Math.max(1, Math.round(c.w / DIV)), chh = Math.max(1, Math.round(c.h / DIV));
-          const u = mirror ? 1 - c.u : c.u;
+          const u = (c.u + slide) % 1;
           const x0 = Math.round((k + shift) * Pp + u * Pp - cw / 2 + (shift ? (fhash(i, 11) - 0.5) * cw : 0));
           const y0 = Math.round(row * bandH + c.v * bandH - chh / 2 + (shift ? (fhash(i, 13) - 0.5) * chh * 0.6 : 0));
           if (y0 + chh <= 0 || y0 >= VANISH) continue;
