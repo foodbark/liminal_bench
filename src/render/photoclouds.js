@@ -1,6 +1,8 @@
 import { ASSET_DIR, SCALE, W, HORIZON } from '../state.js';
-import { makeCanvas, clamp } from '../util/pixel.js';
+import { makeCanvas, clamp, blue } from '../util/pixel.js';
 import { cloudTones } from './clouds.js';
+import { valueNoise2D } from '../util/noise.js';
+const mistNoise = valueNoise2D(8191);   // mottling for the cirrus mist, like the Milky Way's rifts
 
 // Cumulus cut from the user's photographs (tools/build_clouds.py: assets/clouds.png and
 // clouds.json, from the config's "clouds" list), in place of the drawn puffs. Each sprite is the
@@ -301,11 +303,10 @@ function paint(data, img, tones, env, cb = false, dark = null, range = sheet, su
 // second copy, offset by half a period, fills the gaps with more of the same cloudlets. Each row's depth
 // picks its tones (farther rows hazier, as cloudTones does for the cumulus), and the recolor
 // is the cumulus sprites' own (paint), so the sunset and the moon land on the field too.
-const VANISH = Math.round(HORIZON * 0.62);
+export const VANISH = Math.round(HORIZON * 0.62);
 const fhash = (a, b) => { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 export function drawField(g, env) {
   g.clearRect(0, 0, W, VANISH);
-  if (cirrus && env.sky && env.sky.cirrus > 0) drawCirrus(g, env);
   const amount = env.sky ? env.sky.alto : 0;
   if (!field || amount <= 0) return;
   const f = field.fields[0];
@@ -354,22 +355,47 @@ export function drawField(g, env) {
 // since the sheet scrolls and a scrolling stipple dances (the user, 2026-10-11). The drawn
 // filaments (sheets.js) stand in until the tile is loaded.
 let cirrusImg = null;
-function drawCirrus(g, env) {
+// The cirrus as mist, the way the Milky Way is drawn (the user, 2026-10-21: "they need to be
+// more misty like the milky way"; the solid-toned version read as threads and ropes). The
+// photographed tile's density per cell is sampled smoothly and put through the blue noise at a
+// fixed screen position: a pixel is lit where the noise falls under the density, so dense
+// cores are nearly solid and the edges thin out to scattered points, with no edge anywhere
+// and never a solid tone. The lit tone is the hour's veil tone mixed toward the sky where the
+// density is thin, hazed toward the horizon with depth. The stipple stays fixed to the screen
+// and the density drifts under it: the renderer re-renders this with the sheets' scroll as the
+// sample offset (`off`, page pixels) every few pixels of drift, instead of scrolling the pixels,
+// since a scrolling stipple dances (the user, 2026-10-11). The feed's high cover sets how
+// much of the tile's density shows: a little cover, the cores only; full cover, the whole veil.
+// Precomputed once per tile: the smooth density (the cells interpolated), as a byte per tile
+// pixel, and once per page: the mottling noise per screen pixel. A render is then lookups and
+// compares (the first version did the interpolation and a pow per pixel and took 180 ms at
+// full size, a hitch every few seconds of drift).
+let mistMottle = null, mistSlow = null;
+function mistDensity(t) {
+  if (t.dens) return t.dens;
+  const td = t.data.data, tw = t.w, th = t.h, CELL = 4;
+  const cw = Math.floor(tw / CELL), chh = Math.floor(th / CELL);
+  const cell = (cx, cy) => td[((Math.min(chh - 1, Math.max(0, cy)) * CELL + 1) * tw + Math.min(cw - 1, Math.max(0, cx)) * CELL + 1) * 4 + 3];
+  const dens = new Uint8ClampedArray(tw * th);
+  for (let ty = 0; ty < th; ty++) {
+    const fy = (ty - CELL / 2) / CELL, cy = Math.floor(fy), ay = fy - cy;
+    for (let tx = 0; tx < tw; tx++) {
+      const fx = (tx - CELL / 2) / CELL, cx = Math.floor(fx), ax = fx - cx;
+      dens[ty * tw + tx] = (cell(cx, cy) * (1 - ax) + cell(cx + 1, cy) * ax) * (1 - ay) + (cell(cx, cy + 1) * (1 - ax) + cell(cx + 1, cy + 1) * ax) * ay;
+    }
+  }
+  t.dens = dens;
+  return dens;
+}
+export function drawCirrusMist(g, env, off = 0) {
   const t = cirrus.tiles[0];
-  const k = env.sky.cirrus;
+  const k = Math.min(1, env.sky.cirrus + (env.sky.veilHigh || 0));   // all the high cover: the veil is mist too, denser
   const { tones } = cloudTones(env, 1);
   const { horizon, top } = env.pal;
   const sky = top || horizon;
-  const cut = 0.55 - 0.43 * k;                       // the thinnest density that shows
-  const levels = [[0.55, tones[0], 0.0], [0.3, tones[1], 0.25], [0.12, tones[1], 0.55]];   // [density, tone, how far toward the sky]
   if (!cirrusImg) cirrusImg = g.createImageData(W, VANISH);
   const out = cirrusImg.data; out.fill(0);
   const td = t.data.data, tw = t.w, th = t.h;
-  // copies of the tile across the frame at its own scale, cropped at the join (never squeezed),
-  // every other one mirrored; the tile's top set by its dy (a photo shot looking up has its
-  // band low in the frame, and the cirrus hugged the ridge)
-  // the join is the column with the least cirrus in the last sixth of a copy's width, so the
-  // copies meet through sky and not through a cut hook (a fixed width left a vertical line)
   if (!t.join) {
     const n0 = Math.max(1, Math.round(W / tw)), full = Math.floor(Math.min(tw, W / n0));
     let best = full - 1, least = Infinity;
@@ -381,28 +407,59 @@ function drawCirrus(g, env) {
   }
   const Pp = t.join;
   const oy = Math.round((t.dy || 0) * th);
-  const colorAt = (level, d) => {
-    const [, tone, toSky] = level;
-    const c = [0, 1, 2].map((i) => tone[i] + (sky[i] - tone[i]) * toSky);
-    const hz = Math.min(0.55, (1 - 1 / d) * 0.55);
-    return c.map((v, i) => Math.round(v + (horizon[i] - v) * hz));
-  };
-  const cache = new Map();
-  // (the mirrored copies also sit a little lower, or the hooks either side of the join paired
-  // into a butterfly)
   const drop = Math.round(th * 0.18);
+  const cut = 0.5 - 0.42 * k;                // the tile density under which nothing shows
+  const dens = mistDensity(t);
+  if (!mistMottle) {
+    mistMottle = new Float32Array(W * VANISH); mistSlow = new Float32Array(W * VANISH);
+    for (let y = 0; y < VANISH; y++) for (let x = 0; x < W; x++) {
+      mistMottle[y * W + x] = 0.55 + 0.45 * mistNoise(x / 38, y / 26);
+      mistSlow[y * W + x] = mistNoise(x / 210 + 50, y / 70 + 20);   // the veil's own slow mottling, streaked along the sky
+    }
+  }
+  // the cirrostratus veil as mist too: the tile has dense cirrus over a few percent of its
+  // frame, and a veil is a milky haze over the whole sky with blue through it, so under the
+  // hooks a slow mottled haze grows with the veil amount (never more than the stipple's cap,
+  // so the sky always shows through: a high veil never grays the sky)
+  const veil = (env.sky.veilHigh || 0);
+  const hazeK = veil * 0.55;
+  // the eased density by byte, so the per-pixel work is a lookup
+  const eased = new Float32Array(256);
+  const cutB = cut * 255;
+  for (let v = 0; v < 256; v++) eased[v] = v <= cutB ? 0 : Math.pow((v - cutB) / (255 - cutB), 1.4);
+  // the lit tones by density step and depth band, mixed toward the sky where thin and toward
+  // the horizon with depth
+  const cache = new Map();
+  const toneAt = (ms, band) => {
+    const key = ms * 8 + band;
+    let c = cache.get(key);
+    if (!c) {
+      const m = (ms + 0.5) / 6, d = 1 / (1 - (band + 0.5) / 8);
+      const hz = Math.min(0.55, (1 - 1 / d) * 0.55);
+      c = [0, 1, 2].map((i) => { const v = tones[0][i] + (sky[i] - tones[0][i]) * (1 - m) * 0.5; return Math.round(v + (horizon[i] - v) * hz); });
+      cache.set(key, c);
+    }
+    return c;
+  };
+  const shift = Math.round(off);
   for (let y = 0; y < VANISH; y++) {
     const d = VANISH / Math.max(1, VANISH - y);
     const band = Math.min(7, Math.floor((1 - 1 / d) * 8));
     for (let x = 0; x < W; x++) {
-      const copy = Math.floor(x / Pp), u = x - copy * Pp;
-      let tx = Math.floor(u); if (copy % 2) tx = Pp - 1 - tx;   // mirrored about the join, so the seam column meets itself
-      const ty = y - oy - (copy % 2 ? drop : 0); if (ty < 0 || ty >= th) continue;
-      const a = td[(ty * tw + Math.min(tw - 1, Math.max(0, tx))) * 4 + 3] / 255;
-      if (a < cut || a < 0.12) continue;
-      const li = a >= 0.55 ? 0 : a >= 0.3 ? 1 : 2;
-      const key = li * 8 + band;
-      let c = cache.get(key); if (!c) { c = colorAt(levels[li], d); cache.set(key, c); }
+      const xs = ((x - shift) % (Pp * 2) + Pp * 2) % (Pp * 2);
+      const copy = Math.floor(xs / Pp), u = xs - copy * Pp;
+      const tx = copy % 2 ? Pp - 1 - u : u;
+      const ty = y - oy - (copy % 2 ? drop : 0);
+      const e = ty < 0 || ty >= th ? 0 : eased[dens[ty * tw + Math.min(tw - 1, Math.max(0, tx))]];
+      const hz = hazeK > 0 ? hazeK * (0.35 + 0.65 * mistSlow[y * W + x]) : 0;
+      if (e === 0 && hz < 0.02) continue;
+      // the density eased so the thin reaches stay thin, mottled with a slow noise the way the
+      // Milky Way is with its rifts (at 70% cover the dense parts had gone to flat pale slabs),
+      // and never more than two thirds lit, so sky always shows through
+      const m = Math.max(e, hz) * mistMottle[y * W + x];
+      // lit where the fixed noise falls under the density: dense in a core, points at the edge
+      if (blue(x, y) >= Math.min(0.66, m * 0.9)) continue;
+      const c = toneAt(Math.min(5, Math.floor(m * 6)), band);
       const o = (y * W + x) * 4;
       out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255;
     }

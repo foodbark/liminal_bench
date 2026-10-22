@@ -16,7 +16,9 @@ import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, 
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
-import { photoField, photoCirrus, drawField } from './photoclouds.js';
+import { photoField, photoCirrus, drawField, drawCirrusMist, VANISH as MIST_H } from './photoclouds.js';
+
+const MIST_STEP = 3;   // pixels of drift between re-renders of the cirrus mist
 
 export class Renderer {
   constructor(canvas, assets) {
@@ -88,6 +90,7 @@ export class Renderer {
     [this.sheets, this.sheetsCtx] = makeCanvas(W, H);
     this.sheetKey = ''; this.pendingSheetKey = ''; this.sheetX = 0;
     [this.field, this.fieldCtx] = makeCanvas(W, H); this.fieldKey = '';   // the photographed altocumulus field, scrolled with the sheets
+    [this.mist, this.mistCtx] = makeCanvas(W, MIST_H); this.mistKey = '';   // the cirrus as mist: a fixed stipple, the density drifting under it, re-rendered every few pixels of drift
     [this.propsLit, this.propsLitCtx] = makeCanvas(W, H);
     // Show the painting at once, in its own daylight colors, so the scene is never empty while
     // the first lighting pass runs (seconds on a big painting, much longer on a phone).
@@ -240,11 +243,19 @@ export class Renderer {
     // stars; cumulus, which are solid, still pass in front of them.
     // A low deck (stratocumulus, stratus, nimbostratus) is solid enough that it stays in front.
     const thin = sheets && (sk.strato + sk.stratus + sk.nimbo) < 0.05;
-    const fieldOn = sheets && ((sk.alto > 0.01 && !!photoField()) || (sk.cirrus > 0.01 && !!photoCirrus()));
+    const fieldOn = sheets && sk.alto > 0.01 && !!photoField();
     if (fieldOn && env.sheetKey !== this.fieldKey) { drawField(this.fieldCtx, env); this.fieldKey = env.sheetKey; }
+    // the cirrus mist is never scrolled: its stipple is fixed to the screen and the density
+    // drifts under it, re-rendered every MIST_STEP pixels of the sheets' drift
+    const mistOn = sheets && (sk.cirrus + sk.veilHigh) > 0.01 && !!photoCirrus();
+    if (mistOn) {
+      const mistKey = env.sheetKey + '|' + Math.floor(this.sheetX / MIST_STEP);
+      if (mistKey !== this.mistKey) { drawCirrusMist(this.mistCtx, env, this.sheetX); this.mistKey = mistKey; lap('mist'); }
+    }
     const drawSheets = () => {
       const ox = Math.round(this.sheetX);
       c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0);
+      if (mistOn) c.drawImage(this.mist, 0, 0);
       if (fieldOn) { c.drawImage(this.field, ox, 0); c.drawImage(this.field, ox - W, 0); }
       lap('sheets');
     };
