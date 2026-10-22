@@ -45,7 +45,7 @@ export function renderSheets(img, env) {
   // shapes, never a field of single pixels: the sheet scrolls with the wind, and a stipple that
   // scrolls is a dance of pixels however evenly it is spread (the user, 2026-10-11).
   // the high veil is the photographed mist's when that is loaded (drawCirrusMist); the drawn bands stand in until then
-  const veils = [[env.photoCirrus ? 0 : sky.veilHigh, 1, 0.70, 0.08], [sky.veilMid, 2, 0.58, 0.18]];   // [amount, tone, threshold at k=0, how far it drops by k=1]
+  const veils = [[env.photoCirrus ? 0 : sky.veilHigh, 1, 0.70, 0.08], [env.photoCirrus ? 0 : sky.veilMid, 2, 0.58, 0.18]];   // [amount, tone, threshold at k=0, how far it drops by k=1]
   for (const [k, tone, t0, drop] of veils) {
     if (k <= 0) continue;
     for (let y = 0; y < VANISH; y++) {
@@ -134,7 +134,7 @@ export function renderSheets(img, env) {
 
   // --- stratocumulus: a lumpy sheet with gaps; stratus: a flat gray layer; nimbostratus: dark rain base
   // the photographed decks take the lumpy deck and the rain base once loaded (drawDeckMist); the flat stratus stays drawn
-  const lumpy = env.photoDecks ? 0 : sky.strato, flat = Math.max(sky.stratus, env.photoDecks ? 0 : sky.nimbo);
+  const lumpy = env.photoDecks ? 0 : sky.strato, flat = env.photoDecks ? 0 : Math.max(sky.stratus, sky.nimbo);
   if (lumpy > 0 || flat > 0) {
     const dark = !env.photoDecks && sky.nimbo > 0;
     const top0 = dark ? tones[2] : tones[0], top1 = dark ? tones[3] : tones[1], shade = dark ? tones[4] : tones[2], under = dark ? tones[4] : tones[3];

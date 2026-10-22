@@ -247,9 +247,9 @@ export class Renderer {
     // the cirrus mist is never scrolled: its stipple is fixed to the screen and the density
     // drifts under it, re-rendered every MIST_STEP pixels of the sheets' drift; the altocumulus
     // goes through it as fish scales while the cirrus tile is loaded, else as the field's sprites
-    const mistOn = sheets && (sk.cirrus + sk.veilHigh + sk.alto) > 0.01 && !!photoCirrus();
+    const mistOn = sheets && (sk.cirrus + sk.veilHigh + sk.veilMid + sk.alto) > 0.01 && !!photoCirrus();
     const fieldOn = sheets && sk.alto > 0.01 && !!photoField() && !mistOn;
-    const deckOn = sheets && (sk.strato + sk.nimbo) > 0.01 && !!photoDecks();
+    const deckOn = sheets && (sk.strato + sk.stratus + sk.nimbo) > 0.01 && !!photoDecks();
     if (deckOn) {
       const deckKey = env.sheetKey + '|' + Math.floor(this.sheetX / MIST_STEP);
       if (deckKey !== this.deckKey) { drawDeckMist(this.deckCtx, env, this.sheetX); this.deckKey = deckKey; lap('deck'); }

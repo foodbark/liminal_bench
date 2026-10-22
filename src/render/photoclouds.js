@@ -559,8 +559,9 @@ export function drawCirrusMist(g, env, off = 0) {
   // frame, and a veil is a milky haze over the whole sky with blue through it, so under the
   // hooks a slow mottled haze grows with the veil amount (never more than the stipple's cap,
   // so the sky always shows through: a high veil never grays the sky)
-  const veil = (env.sky.veilHigh || 0);
-  const hazeK = veil * 0.55;
+  // the altostratus veil hazes the same way, denser and grayer than the cirrostratus
+  const veil = (env.sky.veilHigh || 0), veilMid = (env.sky.veilMid || 0);
+  const hazeK = Math.min(1, veil * 0.55 + veilMid * 0.85);
   // the fish scales, when there is mid cover and the altocumulus photo is loaded
   const altoAmt = env.sky.alto || 0;
   const scales = altoAmt > 0.01 && field ? scalesDensity(altoAmt) : null;
@@ -631,17 +632,18 @@ export function drawDeckMist(g, env, off = 0) {
   if (!deckImg) deckImg = g.createImageData(W, VANISH);
   const out = deckImg.data; out.fill(0);
   const { horizon } = env.pal;
-  const want = [['strato', env.sky.strato || 0], ['nimbo', env.sky.nimbo || 0]].filter(([, a]) => a > 0.01);
+  // the flat stratus takes the rain sky's texture in lighter tones (the stratus photo was set aside; the drawn sheet was "cartoony blobs of grey", the user, 2026-10-22)
+  const want = [['strato', env.sky.strato || 0], ['stratus', env.sky.stratus || 0], ['nimbo', env.sky.nimbo || 0]].filter(([, a]) => a > 0.01);
   if (!want.length) { g.putImageData(deckImg, 0, 0); return; }
   if (!mistMottle) drawCirrusMist(g, env, off);   // the noise fields are made there
   const shift = Math.round(off);
   const haze = (c, d) => { const hz = Math.min(0.55, (1 - 1 / d) * 0.55); return [0, 1, 2].map((i) => Math.round(c[i] + (horizon[i] - c[i]) * hz)); };
   for (const [kind, amount] of want) {
-    const t = decks.tiles.find((x) => x.kind === kind) || decks.tiles[0];
+    const t = decks.tiles.find((x) => x.kind === kind) || (kind === 'stratus' ? decks.tiles.find((x) => x.kind === 'nimbo') : null) || decks.tiles[0];
     if (!t) continue;
     const { tones } = cloudTones(env, 1);
     // the tones by darkness: the lumpy deck from the lit top down to its shade, the rain base darker
-    const ramp = kind === 'nimbo' ? [tones[1], tones[2], tones[3], tones[4]] : [tones[0], tones[1], tones[2], tones[3]];
+    const ramp = kind === 'nimbo' ? [tones[1], tones[2], tones[3], tones[4]] : kind === 'stratus' ? [tones[0], tones[1], tones[1], tones[2]] : [tones[0], tones[1], tones[2], tones[3]];
     // a low sun lights an overcast's underside from its own side only: the warm tones hold
     // toward the sun's place in the frame and the rest of the deck stays its gray (the whole
     // deck went one salmon at sunset)
@@ -656,7 +658,7 @@ export function drawDeckMist(g, env, off = 0) {
       return c;
     };
     const tw = t.w, th = t.h, lum = t.lum;
-    const solid = amount >= 0.9 || kind === 'nimbo';   // a rain base has no gaps
+    const solid = amount >= 0.9 || kind === 'nimbo' || (kind === 'stratus' && amount >= 0.7);   // a rain base has no gaps, a stratus few
     // the sky in a gap is bright, the way daylight through a hole in a deck is (the beauty
     // rule's blue sky through cloud gaps), not the slate the palette gives under heavy cover;
     // at night the gap is the night sky as it is
