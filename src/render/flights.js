@@ -104,10 +104,16 @@ export class Flights {
       // painting's lower western skyline let a corridor's worth of them through with contrails
       // ("way too many visible planes with contrails", the user, 2026-10-21); the low traffic is
       // drawn at its depth and may be anywhere in the frame
-      const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.look.el >= FAR_MIN_EL);
+      // ...and within the range the eye has for an airframe of its size: an airliner's trail
+      // out to about 60 km, a business jet's 22, a Cessna 18 (a Citation 82 km out at 7 degrees
+      // was drawn, and "i doubt we could see N390KT", the user, 2026-10-21)
+      const rangeKm = Math.min(70, Math.max(15, wingspan(f.src) * 1.6));
+      const slantKm = Math.hypot(f.look.km, (f.pos.altFt * 0.3048 - ELEV) / 1000);
+      const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.look.el >= FAR_MIN_EL && slantKm <= rangeKm);
       f.xy = inFrame ? skyXY(f.look.az, f.look.el) : null;
-      // a far one comes on over its first degree and a half, not all at once with its trail
-      f.fade = f.look.km < MID_KM ? 1 : clamp((f.look.el - FAR_MIN_EL) / 1.5, 0, 1);
+      // a far one comes on over its first degree and a half, not all at once with its trail,
+      // and over the last fifth of its range
+      f.fade = f.look.km < MID_KM ? 1 : Math.min(clamp((f.look.el - FAR_MIN_EL) / 1.5, 0, 1), clamp((rangeKm - slantKm) / (rangeKm * 0.2), 0, 1));
       // the contrail: a point every so often along the path, each point then carried on the
       // upper wind and let go when it is older than the air allows
       const tr = f.trail;
