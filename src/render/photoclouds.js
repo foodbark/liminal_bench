@@ -370,12 +370,39 @@ let cirrusImg = null;
 // pixel, and once per page: the mottling noise per screen pixel. A render is then lookups and
 // compares (the first version did the interpolation and a pow per pixel and took 180 ms at
 // full size, a hitch every few seconds of drift).
-let mistMottle = null, mistSlow = null;
-function mistDensity(t) {
-  if (t.dens) return t.dens;
+let mistMottle = null, mistSlow = null, mistMottleKey = '';
+// Mares' tails (the user, 2026-10-21): cirrus uncinus is a dense hooked head with a fibrous
+// tail combed out behind it by the wind shear, hanging a little below. The tile's hooks are the
+// heads; the comb makes every dense cell trail a fading streak downwind (a decaying maximum
+// along the comb direction, at cell resolution, so it costs nothing to speak of), and the
+// mottling is stretched along the same direction so the stipple reads as fibres. The direction
+// is the upper wind's: tails stream toward where the wind at cirrus height is going, east being
+// the left of a south-facing frame.
+const COMB_CELLS = 40;   // the tail's e-folding length, in tile cells (160 tile pixels)
+export function combDir(env) {
+  const from = env.upper && env.upper.windDir != null ? env.upper.windDir : env.wind.dir;
+  const toward = (from + 180) * Math.PI / 180;
+  const east = Math.sin(toward);
+  return { dx: east >= 0 ? -1 : 1, dy: 0.3 };   // east is screen-left; the tails hang a little
+}
+function mistDensity(t, dir) {
+  const key = dir.dx + ',' + dir.dy;
+  if (t.dens && t.densKey === key) return t.dens;
   const td = t.data.data, tw = t.w, th = t.h, CELL = 4;
   const cw = Math.floor(tw / CELL), chh = Math.floor(th / CELL);
-  const cell = (cx, cy) => td[((Math.min(chh - 1, Math.max(0, cy)) * CELL + 1) * tw + Math.min(cw - 1, Math.max(0, cx)) * CELL + 1) * 4 + 3];
+  const raw = (cx, cy) => td[((Math.min(chh - 1, Math.max(0, cy)) * CELL + 1) * tw + Math.min(cw - 1, Math.max(0, cx)) * CELL + 1) * 4 + 3];
+  // the comb: each cell is the most of what lies upwind of it along the direction, decayed
+  const grid = new Float32Array(cw * chh);
+  const n = Math.hypot(dir.dx, dir.dy), ux = dir.dx / n, uy = dir.dy / n;
+  for (let cy = 0; cy < chh; cy++) for (let cx = 0; cx < cw; cx++) {
+    let best = raw(cx, cy);
+    for (let k = 1; k <= COMB_CELLS * 2.5; k++) {
+      const v = raw(Math.round(cx - ux * k), Math.round(cy - uy * k)) * Math.exp(-k / COMB_CELLS);
+      if (v > best) best = v;
+    }
+    grid[cy * cw + cx] = best;
+  }
+  const cell = (cx, cy) => grid[Math.min(chh - 1, Math.max(0, cy)) * cw + Math.min(cw - 1, Math.max(0, cx))];
   const dens = new Uint8ClampedArray(tw * th);
   for (let ty = 0; ty < th; ty++) {
     const fy = (ty - CELL / 2) / CELL, cy = Math.floor(fy), ay = fy - cy;
@@ -384,7 +411,7 @@ function mistDensity(t) {
       dens[ty * tw + tx] = (cell(cx, cy) * (1 - ax) + cell(cx + 1, cy) * ax) * (1 - ay) + (cell(cx, cy + 1) * (1 - ax) + cell(cx + 1, cy + 1) * ax) * ay;
     }
   }
-  t.dens = dens;
+  t.dens = dens; t.densKey = key;
   return dens;
 }
 export function drawCirrusMist(g, env, off = 0) {
@@ -409,11 +436,16 @@ export function drawCirrusMist(g, env, off = 0) {
   const oy = Math.round((t.dy || 0) * th);
   const drop = Math.round(th * 0.18);
   const cut = 0.5 - 0.42 * k;                // the tile density under which nothing shows
-  const dens = mistDensity(t);
-  if (!mistMottle) {
-    mistMottle = new Float32Array(W * VANISH); mistSlow = new Float32Array(W * VANISH);
+  const dir = combDir(env);
+  const dens = mistDensity(t, dir);
+  const mkey = dir.dx + ',' + dir.dy;
+  if (!mistMottle || mistMottleKey !== mkey) {
+    mistMottle = new Float32Array(W * VANISH); mistSlow = new Float32Array(W * VANISH); mistMottleKey = mkey;
+    const n = Math.hypot(dir.dx, dir.dy), ux = dir.dx / n, uy = dir.dy / n;
     for (let y = 0; y < VANISH; y++) for (let x = 0; x < W; x++) {
-      mistMottle[y * W + x] = 0.55 + 0.45 * mistNoise(x / 38, y / 26);
+      // fibres: the noise stretched along the comb direction, fine across it
+      const along = x * ux + y * uy, across = -x * uy + y * ux;
+      mistMottle[y * W + x] = 0.5 + 0.5 * mistNoise(along / 150, across / 7);
       mistSlow[y * W + x] = mistNoise(x / 210 + 50, y / 70 + 20);   // the veil's own slow mottling, streaked along the sky
     }
   }
