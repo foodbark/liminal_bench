@@ -144,7 +144,11 @@ FLIGHTS_PUSH_KEY=<the same string> npm run push     # every 30 s, forever; on th
 
 The pusher (`tools/push_flights.py`) fetches the feed and POSTs it to `/api/flights`; while a
 pushed copy is fresh the Function asks no feed, and when the pusher stops it goes back to asking
-them itself, serving the last good copy, marked stale, for an hour when none answers. An OpenSky
+them itself, serving the last good copy, marked stale, for an hour when none answers. The always-on
+pusher is a GitHub Actions workflow (`.github/workflows/push_flights.yml`): every five hours it
+starts a job that pushes every 30 s for just under six, queued behind the one before, free on the
+public repository; it needs the same string as a repository secret (`gh secret set FLIGHTS_PUSH_KEY`,
+or Settings, Secrets and variables, Actions), and `gh workflow run "push flights"` starts it by hand. An OpenSky
 account's API client raises its budget from 400 to 4000 credits a day and makes the limit
 per account instead of per address:
 

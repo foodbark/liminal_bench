@@ -1,0 +1,26 @@
+# The aircraft feed pusher, always on (2026-10-21). The site's Function cannot reach the
+# community ADS-B feeds from Cloudflare's shared addresses (docs/deploy.md section 6), so a
+# machine with its own address fetches the feed and POSTs it in: this job runs
+# tools/push_flights.py every 30 s for just under six hours (a job's limit), and the schedule
+# starts the next one before this one ends; the concurrency group queues it so the two never
+# run at once and the hand-off is a minute or two, which the Function covers with the last good
+# copy. The key is the repository secret FLIGHTS_PUSH_KEY, the same string as the Pages secret.
+# Free on a public repository. A desktop running `npm run push` alongside does no harm.
+name: push flights
+on:
+  schedule:
+    - cron: '3 */5 * * *'
+  workflow_dispatch:
+concurrency:
+  group: push-flights
+  cancel-in-progress: false
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 352
+    steps:
+      - uses: actions/checkout@v4
+      - name: push the feed every 30 s for most of six hours
+        env:
+          FLIGHTS_PUSH_KEY: ${{ secrets.FLIGHTS_PUSH_KEY }}
+        run: timeout 20900 python3 tools/push_flights.py --every 30 || true
