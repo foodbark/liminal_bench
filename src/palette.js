@@ -50,6 +50,14 @@ export function skyPalette(alt, cond, sky = null) {
     top = lerpRGB(top, horizon, 0.6);
     ambient = scaleRGB(ambient, 0.9);
   }
+  // the inversion's haze: the sky goes milky from the top down, pale and a little warm by day
+  if (cond.haze > 0) {
+    const g = Math.max(lum(top), lum(horizon));
+    const milk = [Math.min(255, g * 1.12 + 24), Math.min(255, g * 1.12 + 22), Math.min(255, g * 1.1 + 18)];
+    top = lerpRGB(top, milk, cond.haze * 0.9);
+    horizon = lerpRGB(horizon, milk, cond.haze * 0.75);
+    ambient = scaleRGB(ambient, 1 - 0.08 * cond.haze);
+  }
 
   return { top, horizon, ambient, sunColor };
 }

@@ -91,6 +91,11 @@ export function renderTerrain(img, env, assets) {
   }
   const alt = env.sun.altitude;
   const fogK = env.cond.fog ? 0.45 : 0;
+  // A deep fog (the cams have it up the slopes, env.fogTop toward 1) reaches the bench: the
+  // trees, the meadow and the props go into it, the trees most, the props least, since they
+  // are nearest. The plain inversion keeps the bench above the sea and the foreground clear
+  // (the user, 2026-10-15); the deep one wants "a ton" of foreground fog (the user, 2026-10-22).
+  const nearFog = env.inversion ? clamp((env.fogTop - 0.3) / 0.7, 0, 1) : 0;
   const wet = env.cond.precip.type === 'rain';
   const tintMeadow = grassTint(env.month, false, env.greenup), tintHill = grassTint(env.month, true, env.greenup);
   const groundSnow = env.groundSnow;
@@ -219,6 +224,11 @@ export function renderTerrain(img, env, assets) {
       const persp = layer === LAYER.NEAR ? nearHaze : P.persp;
       const fog = layer === LAYER.NEAR ? fogK * 0.78 : fogK;
       c = lerpRGB(c, horizon, persp + fog * (1 - persp));
+      if (nearFog > 0 && (layer === LAYER.TREES || layer === LAYER.NEAR || isProp)) {
+        const drift = 0.85 + 0.3 * (fogN(x * 0.004 / SCALE, y * 0.01 / SCALE) - 0.5);
+        const k = (isProp ? 0.4 : layer === LAYER.TREES ? 0.85 : 0.65) * nearFog * drift;
+        c = lerpRGB(c, fogCol, clamp(k, 0, 0.95));
+      }
 
       // --- sun: lit layers warm up toward the glow color, unlit ones cool into shadow
       const lm = lum(c) / 255;
