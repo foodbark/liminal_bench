@@ -17,7 +17,10 @@ export async function fetchFlights() {
   const r = await fetch(FEED, { cache: 'no-store' });
   if (!r.ok) throw new Error('flights http ' + r.status);
   const j = await r.json();
-  const now = Date.now();
+  // the copy's own time, not the page's: a pushed copy can sit in the store for a minute, and
+  // taken as fresh its positions were a minute behind, so every refresh jolted the planes
+  // (a DAL contrail forming and retracting at the frame's edge, the user, 2026-10-22)
+  const now = Math.min(Date.now(), j.at || Date.now());
   const list = [];
   for (const a of j.ac || []) {
     if (a.alt === 'ground' || a.alt == null || a.lat == null) continue;
@@ -27,7 +30,7 @@ export async function fetchFlights() {
       at: now - (a.seen || 0) * 1000,   // when the position was true
     });
   }
-  return { ok: true, at: now, list, src: j.src || '', stale: !!j.stale, ttl: j.ttl || 30 };   // src: which feed answered the proxy; stale: the last good copy, no feed answering
+  return { ok: true, at: Date.now(), list, src: j.src || '', stale: !!j.stale, ttl: j.ttl || 30 };   // src: which feed answered the proxy; stale: the last good copy, no feed answering
 }
 
 const M_PER_DEG = 111195;

@@ -111,11 +111,13 @@ export class Flights {
       const rangeKm = Math.min(70, Math.max(15, wingspan(f.src) * 1.6));
       const slantKm = Math.hypot(f.look.km, (f.pos.altFt * 0.3048 - ELEV) / 1000);
       f.slantKm = slantKm;
-      const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.look.el >= FAR_MIN_EL && slantKm <= rangeKm);
+      // a far one comes on over its first two degrees and the last quarter of its range, and
+      // it is in the frame while its fade is above nothing: the cuts are the fade's own zero,
+      // so a plane sitting on a cut (an A321 at 58 of its 60 km, 8.6 degrees up, the user,
+      // 2026-10-22) fades rather than pops as the feed corrects it
+      f.fade = f.look.km < MID_KM ? 1 : Math.min(clamp((f.look.el - FAR_MIN_EL) / 2, 0, 1), clamp((rangeKm - slantKm) / (rangeKm * 0.25), 0, 1));
+      const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.fade > 0.02);
       f.xy = inFrame ? skyXY(f.look.az, f.look.el) : null;
-      // a far one comes on over its first degree and a half, not all at once with its trail,
-      // and over the last fifth of its range
-      f.fade = f.look.km < MID_KM ? 1 : Math.min(clamp((f.look.el - FAR_MIN_EL) / 1.5, 0, 1), clamp((rangeKm - slantKm) / (rangeKm * 0.2), 0, 1));
       // the contrail: a point every so often along the path, each point then carried on the
       // upper wind and let go when it is older than the air allows
       const tr = f.trail;
@@ -325,7 +327,10 @@ function tangent(f) {
   const at = (d, side) => {
     const lat = f.pos.lat + (d * uy - side * ux) / M_PER_DEG, lon = f.pos.lon + (d * ux + side * uy) / (M_PER_DEG * cosL);
     const lk = lookAt(lat, lon, alt);
-    return lk.az > 88 && lk.az < 272 && lk.el > -1 ? skyXYf(lk.az, lk.el) : null;
+    // a point a little outside the frame still projects (the mapping runs on past the edges);
+    // only one behind the bench is no use (at the frame's left edge the heading came back null
+    // and the trail blanked for a frame, the user, 2026-10-22)
+    return lk.az > 20 && lk.az < 340 ? skyXYf(lk.az, lk.el) : null;
   };
   const a = at(-5000, 0), b = at(5000, 0), o = at(0, 0), q = at(0, 2000);
   if (!a || !b || !o || !q) return null;
