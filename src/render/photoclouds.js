@@ -637,7 +637,11 @@ export function drawDeckMist(g, env, off = 0) {
   if (!want.length) { g.putImageData(deckImg, 0, 0); return; }
   if (!mistMottle) drawCirrusMist(g, env, off);   // the noise fields are made there
   const shift = Math.round(off);
-  const haze = (c, d) => { const hz = Math.min(0.55, (1 - 1 / d) * 0.55); return [0, 1, 2].map((i) => Math.round(c[i] + (horizon[i] - c[i]) * hz)); };
+  // the haze toward the horizon colour, which at sunset is the ember: a deck takes it only on
+  // the sun's side of the frame (w, 0..1 by distance from the sun's place) and a desaturated
+  // horizon elsewhere, or the whole overcast warmed evenly (the user, 2026-10-22)
+  const horizonGray = (() => { const L = 0.299 * horizon[0] + 0.587 * horizon[1] + 0.114 * horizon[2]; return [L * 0.98, L * 0.98, L * 1.04]; })();
+  const haze = (c, d, w = 1) => { const hz = Math.min(0.55, (1 - 1 / d) * 0.55); return [0, 1, 2].map((i) => { const h = horizonGray[i] + (horizon[i] - horizonGray[i]) * w; return Math.round(c[i] + (h - c[i]) * hz); }); };
   for (const [kind, amount] of want) {
     const t = decks.tiles.find((x) => x.kind === kind) || (kind === 'stratus' ? decks.tiles.find((x) => x.kind === 'nimbo') : null) || decks.tiles[0];
     if (!t) continue;
@@ -654,7 +658,7 @@ export function drawDeckMist(g, env, off = 0) {
     const toneAt = (ti, band, ek) => {
       const key = (ti * 8 + band) * 6 + ek;
       let c = cache.get(key);
-      if (!c) { const w = ek / 5; const base = [0, 1, 2].map((i) => gray[ti][i] + (ramp[ti][i] - gray[ti][i]) * (1 - glowK + glowK * w)); c = haze(base, 1 / (1 - (band + 0.5) / 8)); cache.set(key, c); }
+      if (!c) { const w = ek / 5; const base = [0, 1, 2].map((i) => gray[ti][i] + (ramp[ti][i] - gray[ti][i]) * (1 - glowK + glowK * w)); c = haze(base, 1 / (1 - (band + 0.5) / 8), 1 - glowK + glowK * w); cache.set(key, c); }
       return c;
     };
     const tw = t.w, th = t.h, lum = t.lum;
@@ -666,7 +670,7 @@ export function drawDeckMist(g, env, off = 0) {
     const skyTop = env.pal.top || horizon;
     const gapTone = [0, 1, 2].map((i) => skyTop[i] + ([150, 185, 235][i] - skyTop[i]) * 0.55 * (1 - nightK));
     const gapCache = new Map();
-    const gapAt = (band) => { let c = gapCache.get(band); if (!c) { c = haze(gapTone, 1 / (1 - (band + 0.5) / 8)); gapCache.set(band, c); } return c; };
+    const gapAt = (band, ek = 5) => { const key = band * 6 + ek; let c = gapCache.get(key); if (!c) { c = haze(gapTone, 1 / (1 - (band + 0.5) / 8), 1 - glowK + glowK * ek / 5); gapCache.set(key, c); } return c; };
     // the copies crossfade over an overlap instead of mirroring: a mirrored join paired the
     // lumps into a butterfly, and a vertical drop to break that left rectangular seams
     const OV = Math.min(160, tw >> 2), P = tw - OV;
@@ -676,7 +680,8 @@ export function drawDeckMist(g, env, off = 0) {
       for (let x = 0; x < W; x++) {
         const u = ((x - shift) % P + P) % P;
         const ty = Math.min(th - 1, y);
-        const ek = glowK > 0 ? Math.round(clamp(1 - Math.abs(x - sunX) / (W * 0.55), 0, 1) * 5) : 0;
+        // the sun-side step dithered through the noise, or a flat deck showed it as vertical bands
+        const ek = glowK > 0 ? Math.min(5, Math.max(0, Math.round(clamp(1 - Math.abs(x - sunX) / (W * 0.55), 0, 1) * 5 + (blue(x + 3, y + 11) - 0.5) * 0.9))) : 0;
         // inside the overlap the tile's tail fades into the next copy's head
         let L = lum[ty * tw + u];
         if (u < OV) { const f = u / OV; L = lum[ty * tw + P + u] * (1 - f) + L * f; }
@@ -691,7 +696,7 @@ export function drawDeckMist(g, env, off = 0) {
           m = clamp((amount - n) / 0.2 + 0.5, 0, 1);
         }
         if (m <= 0 || blue(x, y) >= m * 0.97) {
-          if (!solid) { const c = gapAt(band); const o = (y * W + x) * 4; out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255; }
+          if (!solid) { const c = gapAt(band, ek); const o = (y * W + x) * 4; out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255; }
           continue;
         }
         // the tone steps dithered through the noise, so the four tones meet in grain, not contour lines
