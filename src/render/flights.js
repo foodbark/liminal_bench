@@ -295,14 +295,13 @@ export class Flights {
           c.save(); c.translate(x, y); if ((sprite.faces === 'right') !== facingRight) c.scale(-1, 1);
           c.drawImage(planes.img, sprite.x, sprite.y, sprite.w, sprite.h, -(w >> 1), -(h >> 1), w, h);
           c.restore();
-        } else if (px >= sp * 2) {
-          // the stand-in until the photos come: a flat bar in the hour's light, its underside shaded
-          const w = Math.max(sp, Math.round(px * Math.max(0.35, side))), h = Math.max(2, Math.round(px / 5));
-          c.fillStyle = tone; c.fillRect(x - (w >> 1), y - (h >> 1), w, h);
-          c.fillStyle = rgb(lerpRGB(lerpRGB(sky, lit, k), sky, 0.45)); c.fillRect(x - (w >> 1), y - (h >> 1) + h - 1, w, 1);
         } else {
+          // the speck, a little bigger for a plane close in, never a bar: the flat bar that
+          // stood in for the photos read as a white rectangle on a full-size screen (the user,
+          // 2026-10-22); the photographed planes take over when assets/planes.png exists
+          const w = Math.min(sp + 2, Math.max(sp, Math.round(px / 4)));
           c.fillStyle = tone;
-          c.fillRect(x - (sp >> 1), y, sp, Math.max(1, Math.round(sp * 0.6)));
+          c.fillRect(x - (w >> 1), y, w, Math.max(1, Math.round(w * 0.6)));
         }
       }
       // the landing light: a plane low and heading our way carries a steady white light
