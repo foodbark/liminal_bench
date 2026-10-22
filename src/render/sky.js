@@ -13,6 +13,12 @@ const SKY_BOTTOM = HORIZON + 24;
 // and the top of the frame is about 58 degrees; anything lower than the ridge is behind it.
 const RIDGE_Y = Math.round(HORIZON * 0.5), RIDGE_DEG = 8;
 export const PX_PER_DEG = RIDGE_Y / 50;   // scene pixels per degree of altitude, for anything sized in sky degrees
+// the same without the rounding, for geometry taken from differences of projected points (a
+// contrail's heading, the drift across it): rounded, those flickered by a pixel each frame and
+// the far end of a long trail wiggled (the user, 2026-10-21)
+export function skyXYf(az, alt) {
+  return { x: W * ((az - 90) / 180), y: RIDGE_Y - (alt - RIDGE_DEG) * PX_PER_DEG };
+}
 export function skyXY(az, alt) {
   return { x: Math.round(W * ((az - 90) / 180)), y: Math.round(RIDGE_Y - (alt - RIDGE_DEG) * PX_PER_DEG) };
 }

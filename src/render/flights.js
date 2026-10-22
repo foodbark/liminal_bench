@@ -11,7 +11,7 @@
 // back over them, so a low one on the approach drops behind Sentinel like a star setting. A
 // deck in front dims them the way it dims the stars; fog hides them.
 import { W, H, SCALE, HORIZON, ELEV, ASSET_DIR } from '../state.js';
-import { skyXY, PX_PER_DEG } from './sky.js';
+import { skyXY, skyXYf, PX_PER_DEG } from './sky.js';
 import { cloudTones } from './clouds.js';
 import { lerpRGB, clamp, fillCircle } from '../util/pixel.js';
 import { reckon, lookAt, contrailLife, upperWind, flightLabel, wingspan, STALE_MS } from '../flights.js';
@@ -50,6 +50,8 @@ const M_PER_DEG = 111195;
 const CONTRAIL_FT = 26000;   // below this the air is too warm for a contrail (and most traffic is cruising well above)
 const MAX_POINTS = 700;
 const GAP_M = 450;   // the contrail starts this far behind the aircraft
+const FAR_MIN_EL = 7;   // degrees: the far traffic shows only up over the hills
+const EASE_MS = 4000;   // a fresh report's correction is spread over this long
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
 
@@ -67,7 +69,15 @@ export class Flights {
       const byHex = new Map(this.list.map((f) => [f.hex, f]));
       for (const a of feed.list) {
         const f = byHex.get(a.hex);
-        if (f) { f.src = a; byHex.delete(a.hex); }
+        if (f) {
+          // where the old report had it now against where the new one has it: the difference
+          // is eased out (update, below)
+          if (f.pos) {
+            const fresh = reckon(a, now);
+            f.ease = { dlat: f.pos.lat - fresh.lat, dlon: f.pos.lon - fresh.lon, dalt: f.pos.altFt - fresh.altFt, until: now + EASE_MS };
+          }
+          f.src = a; byHex.delete(a.hex);
+        }
         else this.list.push({ src: a, hex: a.hex, pos: null, look: null, xy: null, trail: [], clock: hash(a.hex) });
       }
       // gone from the feed: kept a while on dead reckoning, then dropped
@@ -79,11 +89,22 @@ export class Flights {
       const f = this.list[i];
       if (now - f.src.at > STALE_MS * 3) { this.list.splice(i, 1); continue; }
       f.pos = reckon(f.src, now);
+      // a fresh report moves the dead-reckoned position a little: the jump is eased out over
+      // a few seconds so the speck and its trail do not jolt every half minute
+      if (f.ease && now < f.ease.until) {
+        const k = (f.ease.until - now) / EASE_MS;
+        f.pos = { lat: f.pos.lat + f.ease.dlat * k, lon: f.pos.lon + f.ease.dlon * k, altFt: f.pos.altFt + f.ease.dalt * k };
+      }
       f.look = lookAt(f.pos.lat, f.pos.lon, f.pos.altFt);
       // in the south-facing frame and above the ground: east to west across the sky, anything
       // behind the bench is never seen; the sky projection puts the rest, and the terrain hides
       // what is below the ridges
-      const inFrame = f.look.az > 88 && f.look.az < 272 && f.look.el > -1;
+      // in the frame, and for the far traffic up over the hills: the valley's hills stand about
+      // 8 degrees up, and a jet 100 km out sits at 3 or 4, behind them to anyone here, while the
+      // painting's lower western skyline let a corridor's worth of them through with contrails
+      // ("way too many visible planes with contrails", the user, 2026-10-21); the low traffic is
+      // drawn at its depth and may be anywhere in the frame
+      const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.look.el >= FAR_MIN_EL);
       f.xy = inFrame ? skyXY(f.look.az, f.look.el) : null;
       // the contrail: a point every so often along the path, each point then carried on the
       // upper wind and let go when it is older than the air allows
@@ -172,12 +193,12 @@ export class Flights {
         const tg = tangent(f);
         if (tg) {
           const cosL = Math.cos(f.pos.lat * Math.PI / 180);
-          let prev = f.xy, prevGrid = f.xy, L = 0, prevOut = null;
+          let prev = f.xy, prevGrid = skyXYf(f.look.az, f.look.el), L = 0, prevOut = null;
           for (let i = tr.length - 1; i >= 0; i--) {
             const p = tr[i];
             const lk = lookAt(p.lat0, p.lon0, p.alt);
             if (lk.az <= 88 || lk.az >= 272 || lk.el < -1) break;   // the path ran out of the frame
-            const grid = skyXY(lk.az, lk.el);
+            const grid = skyXYf(lk.az, lk.el);
             L += Math.hypot(grid.x - prevGrid.x, grid.y - prevGrid.y);
             prevGrid = grid;
             // the wind's drift since the point was laid, its part across the track
@@ -283,13 +304,13 @@ function tangent(f) {
   const at = (d, side) => {
     const lat = f.pos.lat + (d * uy - side * ux) / M_PER_DEG, lon = f.pos.lon + (d * ux + side * uy) / (M_PER_DEG * cosL);
     const lk = lookAt(lat, lon, alt);
-    return lk.az > 88 && lk.az < 272 && lk.el > -1 ? skyXY(lk.az, lk.el) : null;
+    return lk.az > 88 && lk.az < 272 && lk.el > -1 ? skyXYf(lk.az, lk.el) : null;
   };
-  const a = at(-2000, 0), b = at(2000, 0), o = at(0, 0), q = at(0, 1000);
+  const a = at(-5000, 0), b = at(5000, 0), o = at(0, 0), q = at(0, 2000);
   if (!a || !b || !o || !q) return null;
   const dx = b.x - a.x, dy = b.y - a.y, n = Math.hypot(dx, dy);
   if (n < 0.5) return null;
-  return { ux, uy, dx: dx / n, dy: dy / n, sx: (q.x - o.x) / 1000, sy: (q.y - o.y) / 1000 };
+  return { ux, uy, dx: dx / n, dy: dy / n, sx: (q.x - o.x) / 2000, sy: (q.y - o.y) / 2000 };
 }
 
 // a line `w` pixels thick, plotted pixel by pixel (no canvas strokes: they anti-alias)
