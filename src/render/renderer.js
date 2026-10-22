@@ -255,9 +255,19 @@ export class Renderer {
     }
     const drawSheets = () => {
       const ox = Math.round(this.sheetX);
+      // the mist and the field are the high and middle cloud: under a low deck (stratocumulus,
+      // stratus, nimbostratus) they go on first and the deck covers them, since a deck is below
+      // them (the fish scales were drawn on top of a solid stratus, 2026-10-21); over thin sheets
+      // they go on last
+      if (!thin) {
+        if (mistOn) c.drawImage(this.mist, 0, 0);
+        if (fieldOn) { c.drawImage(this.field, ox, 0); c.drawImage(this.field, ox - W, 0); }
+      }
       c.drawImage(this.sheets, ox, 0); c.drawImage(this.sheets, ox - W, 0);
-      if (mistOn) c.drawImage(this.mist, 0, 0);
-      if (fieldOn) { c.drawImage(this.field, ox, 0); c.drawImage(this.field, ox - W, 0); }
+      if (thin) {
+        if (mistOn) c.drawImage(this.mist, 0, 0);
+        if (fieldOn) { c.drawImage(this.field, ox, 0); c.drawImage(this.field, ox - W, 0); }
+      }
       lap('sheets');
     };
     if (thin) drawSheets();
