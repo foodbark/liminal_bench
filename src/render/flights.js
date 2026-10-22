@@ -106,6 +106,8 @@ export class Flights {
       // drawn at its depth and may be anywhere in the frame
       const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.look.el >= FAR_MIN_EL);
       f.xy = inFrame ? skyXY(f.look.az, f.look.el) : null;
+      // a far one comes on over its first degree and a half, not all at once with its trail
+      f.fade = f.look.km < MID_KM ? 1 : clamp((f.look.el - FAR_MIN_EL) / 1.5, 0, 1);
       // the contrail: a point every so often along the path, each point then carried on the
       // upper wind and let go when it is older than the air allows
       const tr = f.trail;
@@ -171,14 +173,16 @@ export class Flights {
     const rgb = (k) => `rgb(${k[0] | 0},${k[1] | 0},${k[2] | 0})`;
     // the trail's tones by age and height, mixed toward the sky as it thins, and dimmed by what is in front
     const toneCache = new Map();
+    let fade = 1;   // the aircraft being drawn: how far on it is (update sets f.fade)
     const trailTone = (b, y) => {
-      const band = Math.min(5, Math.floor(y / HORIZON * 6)), key = b * 8 + band;
+      const band = Math.min(5, Math.floor(y / HORIZON * 6)), fq = Math.round(fade * 4), key = (b * 8 + band) * 5 + fq;
       let c = toneCache.get(key);
-      if (!c) { const sky = skyAt((band + 0.5) / 6 * HORIZON); c = rgb(lerpRGB(lerpRGB(lit, sky, 0.1 + 0.75 * (b + 0.5) / 8), sky, 1 - vis)); toneCache.set(key, c); }
+      if (!c) { const sky = skyAt((band + 0.5) / 6 * HORIZON); c = rgb(lerpRGB(lerpRGB(lit, sky, 0.1 + 0.75 * (b + 0.5) / 8), sky, 1 - vis * fq / 4)); toneCache.set(key, c); }
       return c;
     };
     for (const f of this.list) {
       if (Flights.band(f) !== band) continue;
+      fade = f.fade ?? 1;
       // The contrail first, so the speck sits on its head. The sky mapping lays azimuth and
       // elevation out on a grid, so a straight flight path bows across it the way a great
       // circle bows on a map, and to the eye a contrail is dead straight (the user, 2026-10-21:
@@ -239,7 +243,7 @@ export class Flights {
       const facingRight = Math.sin(f.src.track * Math.PI / 180) < 0;   // westbound moves right across a south-facing frame
       // by day the plane, through dusk fading as the lights come up
       if (nightK < 1) {
-        const k = (1 - nightK) * vis;
+        const k = (1 - nightK) * vis * fade;
         const tone = rgb(lerpRGB(sky, lit, k));
         const sprite = planes && px >= sp * 2 ? pickSprite(wingspan(f.src)) : null;
         if (sprite) {
@@ -270,7 +274,7 @@ export class Flights {
       if (nightK > 0) {
         const ph = (t + f.clock * 7) % 1;                // the strobe's second, on this aircraft's clock
         const bph = ((t + f.clock * 11) / 1.3) % 1;      // the beacon's
-        const k = nightK * vis;
+        const k = nightK * vis * fade;
         // a faint steady pixel so the eye can follow it between flashes
         c.fillStyle = rgb(lerpRGB(sky, [200, 204, 214], 0.45 * k));
         c.fillRect(x, y, 1, 1);
