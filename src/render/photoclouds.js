@@ -385,7 +385,11 @@ function scalesDensity(amount) {
         const mirror = (k + row) % 2 === 1;
         for (let i = 0; i < field.cloudlets.length; i++) {
           const c = field.cloudlets[i];
-          if (frameCut(c)) continue;   // a cloudlet the photo's frame cut has a straight side; mirrored copies paired them into seams (the user, 2026-10-21)
+          // a cloudlet the photo's frame cut has a straight side: a cut side is feathered over
+          // its width so it fades into the stipple instead of ending in a line (the user,
+          // 2026-10-21 and 22: weird mirroring and sharp edges; the flat bases are cloud-like
+          // and stay)
+          const cut = cutEdges(c);
           const jitter = fhash(i, k * 7 + row * 5 + (shift ? 3 : 0));
           if (c.rank + (jitter - 0.5) * 0.2 < 1 - tt) continue;
           const cw = Math.max(1, Math.round(c.w / DIV)), chh = Math.max(1, Math.round(c.h / DIV));
@@ -402,7 +406,11 @@ function scalesDensity(amount) {
               const o = (syy * c.w + sxx) * 4, a = d[o + 3];
               if (!a) continue;
               const L = (0.299 * d[o] + 0.587 * d[o + 1] + 0.114 * d[o + 2]) / 255;
-              const v = a * (0.7 + 0.3 * L);
+              // the sides only: a flat base is what an altocumulus has (the user, 2026-10-22)
+              let feather = 1;
+              if (cut.l) feather *= Math.min(1, xx / (cw * 0.4));
+              if (cut.r) feather *= Math.min(1, (cw - 1 - xx) / (cw * 0.4));
+              const v = a * (0.7 + 0.3 * L) * feather;
               const sx = mirror ? x0 + cw - 1 - xx : x0 + xx;
               const x = ((sx % W) + W) % W;
               const idx = y * W + x;
@@ -418,12 +426,14 @@ function scalesDensity(amount) {
   scalesCache.set(q, soft);
   return soft;
 }
-// a cloudlet with a straight run of cloud down a side edge was cut by the photo's frame
-function frameCut(c) {
-  if (c.cut != null) return c.cut;
-  const d = c.data.data; let l = 0, r = 0;
+// which edges of a cloudlet were cut straight by the photo's frame or its horizon: a long
+// run of cloud along that edge
+function cutEdges(c) {
+  if (c.cut) return c.cut;
+  const d = c.data.data; let l = 0, r = 0, t = 0, b = 0;
   for (let y = 0; y < c.h; y++) { if (d[(y * c.w) * 4 + 3] > 40) l++; if (d[(y * c.w + c.w - 1) * 4 + 3] > 40) r++; }
-  c.cut = l > c.h * 0.35 || r > c.h * 0.35;
+  for (let x = 0; x < c.w; x++) { if (d[x * 4 + 3] > 40) t++; if (d[((c.h - 1) * c.w + x) * 4 + 3] > 40) b++; }
+  c.cut = { l: l > c.h * 0.3, r: r > c.h * 0.3, t: t > c.w * 0.3, b: b > c.w * 0.3 };
   return c.cut;
 }
 // a separable box blur of a byte field, wrapping in x (the field tiles across the frame)
