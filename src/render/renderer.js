@@ -243,11 +243,12 @@ export class Renderer {
     // stars; cumulus, which are solid, still pass in front of them.
     // A low deck (stratocumulus, stratus, nimbostratus) is solid enough that it stays in front.
     const thin = sheets && (sk.strato + sk.stratus + sk.nimbo) < 0.05;
-    const fieldOn = sheets && sk.alto > 0.01 && !!photoField();
-    if (fieldOn && env.sheetKey !== this.fieldKey) { drawField(this.fieldCtx, env); this.fieldKey = env.sheetKey; }
     // the cirrus mist is never scrolled: its stipple is fixed to the screen and the density
-    // drifts under it, re-rendered every MIST_STEP pixels of the sheets' drift
-    const mistOn = sheets && (sk.cirrus + sk.veilHigh) > 0.01 && !!photoCirrus();
+    // drifts under it, re-rendered every MIST_STEP pixels of the sheets' drift; the altocumulus
+    // goes through it as fish scales while the cirrus tile is loaded, else as the field's sprites
+    const mistOn = sheets && (sk.cirrus + sk.veilHigh + sk.alto) > 0.01 && !!photoCirrus();
+    const fieldOn = sheets && sk.alto > 0.01 && !!photoField() && !mistOn;
+    if (fieldOn && env.sheetKey !== this.fieldKey) { drawField(this.fieldCtx, env); this.fieldKey = env.sheetKey; }
     if (mistOn) {
       const mistKey = env.sheetKey + '|' + Math.floor(this.sheetX / MIST_STEP);
       if (mistKey !== this.mistKey) { drawCirrusMist(this.mistCtx, env, this.sheetX); this.mistKey = mistKey; lap('mist'); }

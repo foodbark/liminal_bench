@@ -355,6 +355,60 @@ export function drawField(g, env) {
 // since the sheet scrolls and a scrolling stipple dances (the user, 2026-10-11). The drawn
 // filaments (sheets.js) stand in until the tile is loaded.
 let cirrusImg = null;
+// Fish scales (the user, 2026-10-21): the mackerel sky, small cloudlets in rippled rows, as a
+// stand-in from the altocumulus photo's cloudlets until a cirrocumulus photo comes: the
+// cloudlets' alpha, weighted by their lightness, laid out as drawField lays the sprites (the
+// photo's own arrangement, repeated across the frame, every other copy mirrored, thinned by
+// rank with the mid cover, a second offset copy past half), into a density field the mist
+// stipples like the cirrus. Built once per tenth of cover and kept.
+let scalesCache = new Map();
+function scalesDensity(amount) {
+  const q = Math.min(10, Math.max(1, Math.round(amount * 10)));
+  if (scalesCache.has(q)) return scalesCache.get(q);
+  const t = Math.min(1, q / 10 * 1.5);   // thinned less than the sprites: a mackerel sky is full
+  const out = new Uint8ClampedArray(W * VANISH);
+  const f = field.fields[0];
+  const DIV = 2;                          // the photo's band at half size: scales, not lumps
+  const P = f.width * f.scale / DIV;
+  const n = Math.max(1, Math.round(W / P)), Pp = W / n;
+  const bandH = Math.round(VANISH / DIV);
+  const layers = t > 0.5 ? [[0, t], [0.5, (t - 0.5) / 0.2]] : [[0, t]];
+  for (const [shift, tt] of layers) {
+    for (let row = 0; row < DIV; row++) {                // the band laid again below itself, mirrored, down to the vanishing line
+      for (let k = 0; k < n; k++) {
+        const mirror = (k + row) % 2 === 1;
+        for (let i = 0; i < field.cloudlets.length; i++) {
+          const c = field.cloudlets[i];
+          const jitter = fhash(i, k * 7 + row * 5 + (shift ? 3 : 0));
+          if (c.rank + (jitter - 0.5) * 0.2 < 1 - tt) continue;
+          const cw = Math.max(1, Math.round(c.w / DIV)), chh = Math.max(1, Math.round(c.h / DIV));
+          const u = mirror ? 1 - c.u : c.u;
+          const x0 = Math.round((k + shift) * Pp + u * Pp - cw / 2 + (shift ? (fhash(i, 11) - 0.5) * cw : 0));
+          const y0 = Math.round(row * bandH + c.v * bandH - chh / 2 + (shift ? (fhash(i, 13) - 0.5) * chh * 0.6 : 0));
+          if (y0 + chh <= 0 || y0 >= VANISH) continue;
+          const d = c.data.data;
+          for (let yy = 0; yy < chh; yy++) {
+            const y = y0 + yy; if (y < 0 || y >= VANISH) continue;
+            const syy = Math.min(c.h - 1, yy * DIV);
+            for (let xx = 0; xx < cw; xx++) {
+              const sxx = Math.min(c.w - 1, xx * DIV);
+              const o = (syy * c.w + sxx) * 4, a = d[o + 3];
+              if (!a) continue;
+              const L = (0.299 * d[o] + 0.587 * d[o + 1] + 0.114 * d[o + 2]) / 255;
+              const v = a * (0.7 + 0.3 * L);
+              const sx = mirror ? x0 + cw - 1 - xx : x0 + xx;
+              const x = ((sx % W) + W) % W;
+              const idx = y * W + x;
+              if (v > out[idx]) out[idx] = v;
+            }
+          }
+        }
+      }
+    }
+  }
+  scalesCache.set(q, out);
+  return out;
+}
 // The cirrus as mist, the way the Milky Way is drawn (the user, 2026-10-21: "they need to be
 // more misty like the milky way"; the solid-toned version read as threads and ropes). The
 // photographed tile's density per cell is sampled smoothly and put through the blue noise at a
@@ -370,7 +424,7 @@ let cirrusImg = null;
 // pixel, and once per page: the mottling noise per screen pixel. A render is then lookups and
 // compares (the first version did the interpolation and a pow per pixel and took 180 ms at
 // full size, a hitch every few seconds of drift).
-let mistMottle = null, mistSlow = null, mistMottleKey = '';
+let mistMottle = null, mistSlow = null, mistGrain = null, mistMottleKey = '';
 // Mares' tails (the user, 2026-10-21): cirrus uncinus is a dense hooked head with a fibrous
 // tail combed out behind it by the wind shear, hanging a little below. The tile's hooks are the
 // heads; the comb makes every dense cell trail a fading streak downwind (a decaying maximum
@@ -455,6 +509,14 @@ export function drawCirrusMist(g, env, off = 0) {
   // so the sky always shows through: a high veil never grays the sky)
   const veil = (env.sky.veilHigh || 0);
   const hazeK = veil * 0.55;
+  // the fish scales, when there is mid cover and the altocumulus photo is loaded
+  const altoAmt = env.sky.alto || 0;
+  const scales = altoAmt > 0.01 && field ? scalesDensity(altoAmt) : null;
+  if (!mistGrain) {
+    mistGrain = new Float32Array(W * VANISH);
+    for (let y = 0; y < VANISH; y++) for (let x = 0; x < W; x++) mistGrain[y * W + x] = 0.6 + 0.4 * mistNoise(x / 16 + 90, y / 12 + 40);   // a fine even grain for the scales, not the tails' fibres
+  }
+  const wrapW = (v) => ((v % W) + W) % W;
   // the eased density by byte, so the per-pixel work is a lookup
   const eased = new Float32Array(256);
   const cutB = cut * 255;
@@ -484,13 +546,17 @@ export function drawCirrusMist(g, env, off = 0) {
       const ty = y - oy - (copy % 2 ? drop : 0);
       const e = ty < 0 || ty >= th ? 0 : eased[dens[ty * tw + Math.min(tw - 1, Math.max(0, tx))]];
       const hz = hazeK > 0 ? hazeK * (0.35 + 0.65 * mistSlow[y * W + x]) : 0;
-      if (e === 0 && hz < 0.02) continue;
+      // the scales: denser than cirrus, so they may go nearly solid in a cloudlet's heart
+      const sc = scales ? scales[y * W + wrapW(x - shift)] / 255 * mistGrain[y * W + x] : 0;
+      if (e === 0 && hz < 0.02 && sc < 0.03) continue;
       // the density eased so the thin reaches stay thin, mottled with a slow noise the way the
       // Milky Way is with its rifts (at 70% cover the dense parts had gone to flat pale slabs),
       // and never more than two thirds lit, so sky always shows through
-      const m = Math.max(e, hz) * mistMottle[y * W + x];
+      const mc = Math.max(e, hz) * mistMottle[y * W + x];
       // lit where the fixed noise falls under the density: dense in a core, points at the edge
-      if (blue(x, y) >= Math.min(0.66, m * 0.9)) continue;
+      const thr = Math.max(Math.min(0.66, mc * 0.9), Math.min(0.9, sc * 1.3));
+      if (blue(x, y) >= thr) continue;
+      const m = Math.max(mc, Math.min(1, sc * 1.4));   // the scales whiter than mist of the same density
       const c = toneAt(Math.min(5, Math.floor(m * 6)), band);
       const o = (y * W + x) * 4;
       out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255;
