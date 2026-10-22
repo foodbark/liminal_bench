@@ -107,8 +107,12 @@ export class Flights {
       // ...and within the range the eye has for an airframe of its size: an airliner's trail
       // out to about 60 km, a business jet's 22, a Cessna 18 (a Citation 82 km out at 7 degrees
       // was drawn, and "i doubt we could see N390KT", the user, 2026-10-21)
-      const rangeKm = Math.min(70, Math.max(15, wingspan(f.src) * 1.6));
+      // at night the lights carry further than a speck does by day: the range stretches with
+      // the dark (the user, 2026-10-21: the lights need to fade too)
+      const nightK = clamp((-env.sun.altitude - 2) / 6, 0, 1);
+      const rangeKm = Math.min(70, Math.max(15, wingspan(f.src) * 1.6)) * (1 + 0.8 * nightK);
       const slantKm = Math.hypot(f.look.km, (f.pos.altFt * 0.3048 - ELEV) / 1000);
+      f.slantKm = slantKm;
       const inFrame = f.look.az > 88 && f.look.az < 272 && (f.look.km < MID_KM ? f.look.el > -1 : f.look.el >= FAR_MIN_EL && slantKm <= rangeKm);
       f.xy = inFrame ? skyXY(f.look.az, f.look.el) : null;
       // a far one comes on over its first degree and a half, not all at once with its trail,
@@ -280,14 +284,17 @@ export class Flights {
       if (nightK > 0) {
         const ph = (t + f.clock * 7) % 1;                // the strobe's second, on this aircraft's clock
         const bph = ((t + f.clock * 11) / 1.3) % 1;      // the beacon's
-        const k = nightK * vis * fade;
+        // the lights dim and shrink with distance: full inside 20 km, a third of that at 70
+        const dist = clamp(20 / Math.max(1, f.slantKm || 1), 0.3, 1);
+        const k = nightK * vis * fade * dist;
+        const ls = dist > 0.6 ? sp : Math.max(1, sp - 1);
         // a faint steady pixel so the eye can follow it between flashes
         c.fillStyle = rgb(lerpRGB(sky, [200, 204, 214], 0.45 * k));
         c.fillRect(x, y, 1, 1);
         // the red anti-collision beacon, a slow blink
-        if (bph < 0.28) { c.fillStyle = rgb(lerpRGB(sky, [255, 48, 40], k)); c.fillRect(x - (sp >> 2), y, Math.max(1, sp >> 1), Math.max(1, sp >> 1)); }
+        if (bph < 0.28) { c.fillStyle = rgb(lerpRGB(sky, [255, 48, 40], k)); c.fillRect(x - (ls >> 2), y, Math.max(1, ls >> 1), Math.max(1, ls >> 1)); }
         // the white strobe: a double flash about once a second
-        if (ph < 0.06 || (ph > 0.13 && ph < 0.19)) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], k)); c.fillRect(x - (sp >> 1), y - (sp >> 2), sp, Math.max(1, sp - 1)); }
+        if (ph < 0.06 || (ph > 0.13 && ph < 0.19)) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], k)); c.fillRect(x - (ls >> 1), y - (ls >> 2), ls, Math.max(1, ls - 1)); }
       }
     }
   }
