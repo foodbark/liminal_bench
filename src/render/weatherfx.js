@@ -232,7 +232,16 @@ export class WeatherFX {
         near = clamp(1 - dist / (Math.max(c.w, c.h) * 1.2 + 120 * SCALE), 0, 1);
       }
       const { tones, key } = cloudTones(env, c.depth, near);
-      const sprite = c.photo || c.parts ? photoCloudSprite(c, tones, key, env) : cloudSprite(c, tones, key, lightX, lightY);
+      // at night, which side of this cloud the moon is on (in the sprite's own frame, which is
+      // mirrored for a flipped cloud), and how strongly it lights: the moon's height and phase
+      let light = null;
+      if (moonP) {
+        const cx = c.x + c.w / 2;
+        const side = (moonP.x >= cx ? 1 : -1) * (c.flip ? -1 : 1);
+        const k = clamp(env.moon.altitude / 15, 0, 1) * (0.1 + 0.9 * (1 - Math.abs(env.moon.phase - 0.5) * 2));
+        light = { side, k };
+      }
+      const sprite = c.photo || c.parts ? photoCloudSprite(c, tones, key, env, light) : cloudSprite(c, tones, key, lightX, lightY);
       if (c.flip) { ctx.save(); ctx.translate(Math.round(c.x) + c.w, c.y); ctx.scale(-1, 1); ctx.drawImage(sprite, 0, 0); ctx.restore(); }
       else ctx.drawImage(sprite, Math.round(c.x), c.y);
     }

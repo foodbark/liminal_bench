@@ -200,17 +200,55 @@ export function assemblyBounds(parts) {
 }
 
 // One sprite recolored for the hour, cached on the sprite (clouds sharing it share the work).
-function recolored(s, tones, key, env, dark, range = sheet, sunlit = 1) {
+function recolored(s, tones, key, env, dark, range = sheet, sunlit = 1, light = null) {
   if (s.cache && s.cacheKey === key) return s.cache;
   const { w, h, data } = s;
   if (!s.cache) { const [cv, g] = makeCanvas(w, h); s.cache = cv; s.cacheCtx = g; s.img = g.createImageData(w, h); }
-  paint(data, s.img, tones, env, !!s.cb, dark, range, sunlit);
+  paint(data, s.img, tones, env, !!s.cb, dark, range, sunlit, light);
   s.cacheCtx.putImageData(s.img, 0, 0);
   s.cacheKey = key;
   return s.cache;
 }
 
-export function photoCloudSprite(c, tones, key, env) {
+// `light`: at night, which side of the cloud the moon is on ({ side: -1 | 1, k: 0..1 }), so
+// the moon's silver and the rim go on the moon-facing side and the far side falls into shade
+// The moon's rim on the composed cloud: the silhouette pixels on the moon's side and along
+// the top take the rim tone, the pixel inside them half of it, scaled across the cloud from
+// the far edge to the moon-facing one. Done after the parts are laid, not per part, since
+// per part the rim ran along the joins inside the cloud and read as a pencil outline
+// (the user rejected an outline once before, 2026-10-20).
+function moonRim(g, w, h, light, env, tones) {
+  const nightK = clamp((-env.sun.altitude - 3) / 5, 0, 1);
+  const k0 = light.k * nightK;
+  if (k0 <= 0.02) return;
+  const img = g.getImageData(0, 0, w, h), d = img.data;
+  const rimCol = tones[5] || tones[0];
+  const edge = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (!d[i * 4 + 3]) continue;
+    const nx = x + light.side, up = y - 1;
+    if ((nx < 0 || nx >= w || !d[(y * w + nx) * 4 + 3]) || (up < 0 || !d[(up * w + x) * 4 + 3])) edge[i] = 1;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (!d[i * 4 + 3]) continue;
+    let r = 0;
+    if (edge[i]) r = 1;
+    else {
+      const bx = x + light.side, by = y - 1;   // the pixel just inside an edge pixel
+      if ((bx >= 0 && bx < w && edge[y * w + bx]) || (by >= 0 && edge[by * w + x])) r = 0.45;
+    }
+    if (!r) continue;
+    const facing = clamp(0.5 + (x / w - 0.5) * light.side * 1.5, 0, 1);
+    const k = r * k0 * (0.3 + 0.6 * facing) * 0.8;
+    for (let ch = 0; ch < 3; ch++) d[i * 4 + ch] = clamp(Math.round(d[i * 4 + ch] + (rimCol[ch] - d[i * 4 + ch]) * k), 0, 255);
+  }
+  g.putImageData(img, 0, 0);
+}
+
+export function photoCloudSprite(c, tones, key, env, light = null) {
+  if (light) key = key + '|' + light.side + '|' + light.k.toFixed(1);
   if (c.sprite && c.spriteKey === key) return c.sprite;
   // the same hour's tones with the moon down: what the cloud's bulk is at night, the moon's
   // silver being kept for the crowns (paint)
@@ -221,14 +259,16 @@ export function photoCloudSprite(c, tones, key, env) {
     g.clearRect(0, 0, c.w, c.h);
     // (a band of shade cast from each lobe onto the one behind was tried for the joins and
     // read as a pencil outline; the lobes stay as the photos' pixels, the joins hidden by order)
-    for (const p of c.parts) g.drawImage(recolored(p.photo, tones, key, env, dark), p.x, p.y);
+    for (const p of c.parts) g.drawImage(recolored(p.photo, tones, key + '|' + (p.x / c.w).toFixed(2), env, dark, sheet, 1, light && { ...light, x0: p.x / c.w, span: (p.w || p.photo.w) / c.w }), p.x, p.y);
+    if (light) moonRim(g, c.w, c.h, light, env, tones);
     c.spriteKey = key;
     return c.sprite;
   }
   const { w, h, data } = c.photo;
   if (!c.sprite) { const [cv, g] = makeCanvas(w, h); c.sprite = cv; c.spriteCtx = g; c.img = g.createImageData(w, h); }
-  paint(data, c.img, tones, env, !!c.cb, dark);
+  paint(data, c.img, tones, env, !!c.cb, dark, sheet, 1, light && { ...light, x0: 0, span: 1 });
   c.spriteCtx.putImageData(c.img, 0, 0);
+  if (light) moonRim(c.spriteCtx, w, h, light, env, tones);
   c.spriteKey = key;
   return c.sprite;
 }
@@ -239,7 +279,7 @@ export function photoCloudSprite(c, tones, key, env) {
 // with the moon down), and the town's glow warms the bases from below, since a cumulus over
 // Missoula on a moonless night is a dark shape that blots out stars with an orange underside
 // (the user, 2026-10-17: there are still cumulus at night).
-function paint(data, img, tones, env, cb = false, dark = null, range = sheet, sunlit = 1) {
+function paint(data, img, tones, env, cb = false, dark = null, range = sheet, sunlit = 1, light = null) {
   const nightK = env ? clamp((-env.sun.altitude - 3) / 5, 0, 1) : 0;
   const body = dark || tones;
   // how this hour's light changed each step of the ramp, against a clear noon
@@ -279,18 +319,30 @@ function paint(data, img, tones, env, cb = false, dark = null, range = sheet, su
   const w = img.width, h = img.height;
   const last = ratio.length - 1;
   const src = data.data, out = img.data, { lo, hi } = range;
+  // the moon's side (the user, 2026-10-22: the cloud was lit from the top right with the moon
+  // top left): across the whole cloud, from its far edge to its moon-facing edge, the moon's
+  // silver scales up and the shade scales down, and the silhouette's pixels on the moon's side
+  // take the rim tone; the photo's own shading from the sun stays underneath
+  const sideK = light && nightK > 0 ? light.k * nightK : 0;
   for (let i = 0; i < src.length; i += 4) {
     if (!src[i + 3]) { out[i + 3] = 0; continue; }
     const L = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
     const ln = clamp((L - lo) / (hi - lo), 0, 1);
     const t = (1 - ln) * last;
     const k = Math.min(last - 1, Math.floor(t)), f = t - k;
-    const lit = silver ? clamp((ln - 0.6) / 0.35, 0, 1) : 0;                 // the crowns
-    const yF = ((i >> 2) / w | 0) / h;
+    const px = (i >> 2) % w, py = (i >> 2) / w | 0;
+    const yF = py / h;
+    let facing = 1;
+    if (sideK > 0) {
+      const xF = light.x0 + (px / w) * light.span;                           // across the whole cloud, 0..1
+      facing = clamp(0.5 + (xF - 0.5) * light.side * 1.5, 0, 1);             // 1 on the moon's side, 0 on the far side
+    }
+    const lit = silver ? clamp((ln - 0.6) / 0.35, 0, 1) * (sideK > 0 ? 0.3 + 0.7 * facing : 1) : 0;   // the crowns, on the moon's side
+    const shade = sideK > 0 ? 1 - sideK * 0.3 * (1 - facing) : 1;                                     // the far side falls into shade
     const glow = glowK > 0 ? glowK * yF * yF * (1 - ln * 0.7) : 0;         // the bases, from below
     for (let ch = 0; ch < 3; ch++) {
       const q = ratio[k][ch] + (ratio[k + 1][ch] - ratio[k][ch]) * f;
-      let v = src[i + ch] * q;
+      let v = src[i + ch] * q * shade;
       if (lit > 0) v += silver[ch] * lit * (src[i + ch] / 255);
       if (glow > 0) v += glowCol[ch] * glow;
       out[i + ch] = clamp(Math.round(v), 0, 255);
@@ -526,7 +578,26 @@ function mistDensity(t, dir) {
   t.dens = dens; t.densKey = key;
   return dens;
 }
+// the noise fields the mist and the decks share: the fibres along the comb direction, the
+// veil's slow mottle (its clear patches), an even mottle for the haze; made on their own, since
+// a deck that drew before the cirrus tile had loaded reached for the tile through the mist
+// and the thrown error killed the frame loop (a partly cloudy load froze with no clouds,
+// found 2026-10-23)
+function mistFields(dir) {
+  const mkey = dir.dx + ',' + dir.dy;
+  if (mistMottle && mistMottleKey === mkey) return;
+  mistMottle = new Float32Array(W * VANISH); mistSlow = new Float32Array(W * VANISH); mistSoft = new Float32Array(W * VANISH); mistMottleKey = mkey;
+  const n = Math.hypot(dir.dx, dir.dy), ux = dir.dx / n, uy = dir.dy / n;
+  for (let y = 0; y < VANISH; y++) for (let x = 0; x < W; x++) {
+    // fibres: the noise stretched along the comb direction, fine across it
+    const along = x * ux + y * uy, across = -x * uy + y * ux;
+    mistMottle[y * W + x] = 0.5 + 0.5 * mistNoise(along / 150, across / 7);
+    mistSlow[y * W + x] = mistNoise(x / 210 + 50, y / 70 + 20);   // the veil's own slow mottling, streaked along the sky
+    mistSoft[y * W + x] = 0.55 + 0.45 * mistNoise(x / 38 + 30, y / 26 + 70);   // an even mottle for the veil haze: the fibres are the tails' alone (the haze came out striped, the user, 2026-10-22)
+  }
+}
 export function drawCirrusMist(g, env, off = 0, skyPix = null) {
+  if (!cirrus) return;
   const t = cirrus.tiles[0];
   const k = Math.min(1, env.sky.cirrus + (env.sky.veilHigh || 0));   // all the high cover: the veil is mist too, denser
   const { tones } = cloudTones(env, 1);
@@ -550,18 +621,7 @@ export function drawCirrusMist(g, env, off = 0, skyPix = null) {
   const cut = 0.5 - 0.42 * k;                // the tile density under which nothing shows
   const dir = combDir(env);
   const dens = mistDensity(t, dir);
-  const mkey = dir.dx + ',' + dir.dy;
-  if (!mistMottle || mistMottleKey !== mkey) {
-    mistMottle = new Float32Array(W * VANISH); mistSlow = new Float32Array(W * VANISH); mistSoft = new Float32Array(W * VANISH); mistMottleKey = mkey;
-    const n = Math.hypot(dir.dx, dir.dy), ux = dir.dx / n, uy = dir.dy / n;
-    for (let y = 0; y < VANISH; y++) for (let x = 0; x < W; x++) {
-      // fibres: the noise stretched along the comb direction, fine across it
-      const along = x * ux + y * uy, across = -x * uy + y * ux;
-      mistMottle[y * W + x] = 0.5 + 0.5 * mistNoise(along / 150, across / 7);
-      mistSlow[y * W + x] = mistNoise(x / 210 + 50, y / 70 + 20);   // the veil's own slow mottling, streaked along the sky
-      mistSoft[y * W + x] = 0.55 + 0.45 * mistNoise(x / 38 + 30, y / 26 + 70);   // an even mottle for the veil haze: the fibres are the tails' alone (the haze came out striped, the user, 2026-10-22)
-    }
-  }
+  mistFields(dir);
   // the cirrostratus veil as mist too: the tile has dense cirrus over a few percent of its
   // frame, and a veil is a milky haze over the whole sky with blue through it, so under the
   // hooks a slow mottled haze grows with the veil amount (never more than the stipple's cap,
@@ -676,7 +736,7 @@ export function drawDeckMist(g, env, off = 0) {
   // the flat stratus takes the rain sky's texture in lighter tones (the stratus photo was set aside; the drawn sheet was "cartoony blobs of grey", the user, 2026-10-22)
   const want = [['strato', env.sky.strato || 0], ['stratus', env.sky.stratus || 0], ['nimbo', env.sky.nimbo || 0]].filter(([, a]) => a > 0.01);
   if (!want.length) { g.putImageData(deckImg, 0, 0); return; }
-  if (!mistMottle) drawCirrusMist(g, env, off);   // the noise fields are made there
+  mistFields(combDir(env));   // the noise fields, shared with the mist
   const shift = Math.round(off);
   // the haze toward the horizon colour, which at sunset is the ember: a deck takes it only on
   // the sun's side of the frame (w, 0..1 by distance from the sun's place) and a desaturated

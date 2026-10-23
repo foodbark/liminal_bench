@@ -124,6 +124,10 @@ function buildField(c) {
 
 // Five tones from the palette: white tops down to a blue-gray base, hazed toward the horizon for
 // distant clouds and tinted by sunset color when the sun is low.
+// the night ramp as multiples of the sky's brightness (lit top .. deepest shade), and what a
+// full moon high up adds to each step
+const NIGHT_STEPS = [1.75, 1.38, 1.06, 0.82, 0.64];
+const MOON_SILVER = [[58, 62, 78], [30, 33, 42], [10, 11, 14], [0, 0, 0], [0, 0, 0]];
 export function cloudTones(env, depth, moonNear = 0) {
   const { ambient, horizon, sunColor } = env.pal;
   const alt = env.sun.altitude;
@@ -139,6 +143,9 @@ export function cloudTones(env, depth, moonNear = 0) {
   const phaseB = 1 - Math.abs(env.moon.phase - 0.5) * 2;
   const moonK = nightK * clamp(env.moon.altitude / 15, 0, 1) * (0.1 + 0.9 * phaseB);
   const haze = clamp((1.2 - depth) * 0.35, 0, 0.45);
+  // the night sky's own colour, which the night tones are steps of; a cloud near the moon takes more silver
+  const skyN = lerpRGB(env.pal.top || horizon, horizon, 0.35 + haze);
+  const nearK = 1 + 1.4 * moonNear;
   const tones = base.map((t, i) => {
     let c = mulRGB(t, ambient);
     const k = i / 4;
@@ -146,10 +153,15 @@ export function cloudTones(env, depth, moonNear = 0) {
     if (glow > 0) c = lerpRGB(c, i < 2 ? lerpRGB(sunColor, [255, 214, 170], 0.5) : sunColor, glow * (i < 2 ? 0.45 : 0.2));
     if (under > 0) c = lerpRGB(c, ember, under * (i >= 3 ? 0.8 : i === 2 ? 0.45 : 0.1));
     if (dusk > 0) c = lerpRGB(c, [70, 62, 96], dusk * 0.35 * (0.5 + k));
-    if (moonK > 0) {
-      // moonlit tops, and a cloud near the moon glows silver through its edges
-      const near = 1 + 1.6 * moonNear;
-      c = [c[0] + 120 * moonK * (i < 2 ? 0.5 : 0.2) * near, c[1] + 140 * moonK * (i < 2 ? 0.5 : 0.2) * near, c[2] + 200 * moonK * (i < 2 ? 0.5 : 0.2) * near];
+    if (nightK > 0) {
+      // Night tones come from the sky, not from the day's ramp dimmed (the user, 2026-10-22: the
+      // moonlit cumulus was a bright blue-white cutout, brighter than the moon's halo). A cloud
+      // at night is mostly a dark shape seen against the sky's own brightness: its middle tones
+      // sit near the sky, the lit side a step or two above, the shade below it, and the moon
+      // adds a modest silver to the lit steps, more when the cloud is near the moon.
+      const night = NIGHT_STEPS[i];
+      const nc = [skyN[0] * night + moonK * MOON_SILVER[i][0] * nearK, skyN[1] * night + moonK * MOON_SILVER[i][1] * nearK, skyN[2] * night + moonK * MOON_SILVER[i][2] * nearK];
+      c = lerpRGB(c, nc, nightK);
     }
     if (env.cond.storm) c = scaleRGB(c, i < 2 ? 0.75 : 0.62);
     return c.map((v) => clamp(v, 0, 255));
@@ -157,7 +169,12 @@ export function cloudTones(env, depth, moonNear = 0) {
   // rim: the silhouette facing the light, brighter and warmer than the top tone
   let rim = lerpRGB(tones[0], [255, 255, 255], 0.4);
   if (glow > 0) rim = lerpRGB(rim, lerpRGB(sunColor, [255, 240, 210], 0.3), glow * 0.8);
-  if (moonK > 0) rim = lerpRGB(rim, [235, 242, 255], Math.min(1, moonK * (0.7 + 0.6 * moonNear)));
+  if (nightK > 0) {
+    // at night the rim is the moon's: the silhouette on the moon's side, silver, strongest
+    // when the cloud stands near the moon; with no moon only a faint lift over the sky
+    const nr = [skyN[0] * 2.1 + moonK * 95 * nearK, skyN[1] * 2.1 + moonK * 100 * nearK, skyN[2] * 2.0 + moonK * 115 * nearK];
+    rim = lerpRGB(rim, nr, nightK);
+  }
   tones.push(rim.map((v) => clamp(v, 0, 255)));
   const key = tones.map((c) => c.map((v) => v >> 3).join('.')).join('|');
   return { tones, key };
