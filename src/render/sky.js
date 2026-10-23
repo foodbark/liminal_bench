@@ -317,7 +317,7 @@ export function drawMoon(ctx, env, coverAt = null) {
     // a density falling off from the disc, then quantized through the blue noise in nine
     // steps, so it is a soft shaded glow and not a stipple ("the moon halo is still grainy",
     // the user, 2026-10-22)
-    const R = Math.round(r * 2.8);
+    const R = Math.round(r * 4.4);   // wide, with a long faint tail: the outer ring dithers out through the tone steps instead of stopping ("it needs to dither out more", the user, 2026-10-22)
     const x0 = Math.max(0, p.x - R), y0 = Math.max(0, p.y - R), x1 = Math.min(W - 1, p.x + R), y1 = Math.min(H - 1, p.y + R);
     if (x1 > x0 && y1 > y0) {
       const img = ctx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1), d = img.data, iw = x1 - x0 + 1;
@@ -326,8 +326,8 @@ export function drawMoon(ctx, env, coverAt = null) {
         for (let x = x0; x <= x1; x++) {
           const dist = Math.hypot(x - p.x, y - p.y) / R;
           if (dist > 1) continue;
-          const a = haloK * (0.75 * (1 - dist) * (1 - dist) + 0.15 * (1 - dist)) * (0.7 + 0.3 * bright);
-          if (a < 0.03) continue;
+          const a = haloK * (0.6 * Math.pow(1 - dist, 2.4) + 0.16 * (1 - dist)) * (0.7 + 0.3 * bright);
+          if (a < 0.004) continue;
           const o = ((y - y0) * iw + (x - x0)) * 4, dn = blue(x, y);
           for (let i = 0; i < 3; i++) {
             const tone = inner[i] + (outer[i] - inner[i]) * dist;
