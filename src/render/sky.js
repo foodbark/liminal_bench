@@ -309,29 +309,50 @@ export function drawMoon(ctx, env, coverAt = null) {
   // altostratus veil, or fog; and then faint. Clear nights get the bare disc.
   const haloK = Math.min(1, ((sk && sk.veilHigh) || 0) * 1.0 + ((sk && sk.veilMid) || 0) * 0.6 + (env.cond.fog ? 0.7 : 0));
   if (nf > 0.3 && bright > 0.3 && haloK > 0.15) {
-    // the halo as mist, the way the cirrus is now: a glow falling off from the disc, stippled
-    // through the blue noise at a fixed screen position and fading into the sky's own colour,
-    // instead of the two Bayer-dithered discs, which read as a lattice round the moon against
-    // the misty veil ("this moon haze is our old style", the user, 2026-10-22)
-    // the halo the way the mist is drawn now: the pixels under it blended toward the glow by
-    // a density falling off from the disc, then quantized through the blue noise in nine
-    // steps, so it is a soft shaded glow and not a stipple ("the moon halo is still grainy",
-    // the user, 2026-10-22)
-    const R = Math.round(r * 4.4);   // wide, with a long faint tail: the outer ring dithers out through the tone steps instead of stopping ("it needs to dither out more", the user, 2026-10-22)
-    const x0 = Math.max(0, p.x - R), y0 = Math.max(0, p.y - R), x1 = Math.min(W - 1, p.x + R), y1 = Math.min(H - 1, p.y + R);
+    // The true things round a moon in thin cloud (the user, 2026-10-22): the aureole, light
+    // diffracted by droplets or small ice, a bright bluish-white disc of a few degrees with a
+    // faint brownish-red rim; the lit cloud, a broad soft brightening of the haze near the moon
+    // falling off over ten degrees; and under an ice veil only, with a bright moon, the 22°
+    // halo, a thin ring at the sky's own scale with a sharp reddish inner edge fading outward.
+    // All three are the pixels under them blended toward their tone and quantized through the
+    // blue noise, so they shade and dither out rather than stipple. The moon's drawn radius is
+    // cheated, so the aureole is sized from it where the true few degrees would sit inside the disc.
+    const ice = (sk && sk.veilHigh) || 0;
+    const Ra = Math.max(r * 1.7, 3 * PX_PER_DEG), Rh = 10 * PX_PER_DEG, R22 = 22 * PX_PER_DEG, w22 = 0.9 * PX_PER_DEG;
+    const ringK = ice > 0.25 && bright > 0.6 ? Math.min(1, (ice - 0.25) / 0.5) * (bright - 0.6) / 0.4 * (0.25 + 0.75 * nf) : 0;
+    const Rmax = Math.round(ringK > 0 ? R22 + 2.4 * w22 : Rh);
+    const x0 = Math.max(0, p.x - Rmax), y0 = Math.max(0, p.y - Rmax), x1 = Math.min(W - 1, p.x + Rmax), y1 = Math.min(H - 1, p.y + Rmax);
     if (x1 > x0 && y1 > y0) {
       const img = ctx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1), d = img.data, iw = x1 - x0 + 1;
-      const inner = [207, 215, 238], outer = [185, 196, 224];
+      const white = [210, 218, 240], rim = [206, 176, 166], ringIn = [228, 196, 186], ringOut = [205, 212, 236];
+      const lit = 0.7 + 0.3 * bright;
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
-          const dist = Math.hypot(x - p.x, y - p.y) / R;
-          if (dist > 1) continue;
-          const a = haloK * (0.6 * Math.pow(1 - dist, 2.4) + 0.16 * (1 - dist)) * (0.7 + 0.3 * bright);
+          const dist = Math.hypot(x - p.x, y - p.y);
+          let a = 0, tr = 0, tg = 0, tb = 0;
+          // the aureole
+          if (dist < Ra) {
+            const t = dist / Ra, k = haloK * lit * 0.85 * Math.pow(1 - t, 1.6);
+            const rimK = t > 0.72 ? (t - 0.72) / 0.28 : 0;
+            const c = [0, 1, 2].map((i) => white[i] + (rim[i] - white[i]) * rimK);
+            a += k; tr += c[0] * k; tg += c[1] * k; tb += c[2] * k;
+          }
+          // the lit cloud, a long faint tail
+          if (dist < Rh) {
+            const t = dist / Rh, k = haloK * lit * 0.16 * (1 - t) * (1 - t);
+            a += k; tr += white[0] * k; tg += white[1] * k; tb += white[2] * k;
+          }
+          // the 22° ring: a sharp inner edge, fading outward
+          if (ringK > 0 && dist >= R22 - 1 && dist < R22 + 2.4 * w22) {
+            const t = Math.max(0, (dist - R22) / (2.4 * w22)), k = ringK * 0.32 * (1 - t) * (1 - t);
+            const c = [0, 1, 2].map((i) => ringIn[i] + (ringOut[i] - ringIn[i]) * Math.min(1, t * 3));
+            a += k; tr += c[0] * k; tg += c[1] * k; tb += c[2] * k;
+          }
           if (a < 0.004) continue;
+          const tone = [tr / a, tg / a, tb / a], aa = Math.min(0.92, a);
           const o = ((y - y0) * iw + (x - x0)) * 4, dn = blue(x, y);
           for (let i = 0; i < 3; i++) {
-            const tone = inner[i] + (outer[i] - inner[i]) * dist;
-            const v = (d[o + i] + (tone - d[o + i]) * a) / 9 + dn;
+            const v = (d[o + i] + (tone[i] - d[o + i]) * aa) / 9 + dn;
             d[o + i] = (v < 0 ? 0 : v > 28.4 ? 28 : v | 0) * 9;
           }
         }
