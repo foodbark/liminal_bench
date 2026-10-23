@@ -606,7 +606,7 @@ export function drawCirrusMist(g, env, off = 0, skyPix = null) {
   // slow mottle opens clear patches, so there is plain sky to rest on and stars to twinkle
   // between the clouds; the coverage is kept per pixel for the stars to read.
   const nightK = clamp((-env.sun.altitude - 2) / 6, 0, 1);
-  const aMax = 0.85 - 0.3 * nightK;
+  const aMax = 0.76 - 0.3 * nightK;   // a touch dimmer than the first blend ("a little bright maybe", the user, 2026-10-22)
   const SKY_BOTTOM = HORIZON + 24;
   const topCol = env.pal.top || horizon;
   const toneBand = [0, 1, 2, 3, 4, 5, 6, 7].map((band) => { const d = 1 / (1 - (band + 0.5) / 8), hz = Math.min(0.55, (1 - 1 / d) * 0.55); return [0, 1, 2].map((i) => tones[0][i] + (horizon[i] - tones[0][i]) * hz); });

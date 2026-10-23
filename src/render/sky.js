@@ -313,18 +313,30 @@ export function drawMoon(ctx, env, coverAt = null) {
     // through the blue noise at a fixed screen position and fading into the sky's own colour,
     // instead of the two Bayer-dithered discs, which read as a lattice round the moon against
     // the misty veil ("this moon haze is our old style", the user, 2026-10-22)
-    const R = Math.round(r * 2.8), sky = env.pal.top || env.pal.horizon;
-    const inner = [207, 215, 238], outer = [185, 196, 224];
-    const tones = [0, 1, 2, 3, 4, 5].map((i) => rgb(lerpRGB(lerpRGB(inner, outer, i / 5), sky, 0.15 + 0.5 * i / 5)));
-    for (let y = p.y - R; y <= p.y + R; y++) {
-      for (let x = p.x - R; x <= p.x + R; x++) {
-        const d = Math.hypot(x - p.x, y - p.y) / R;
-        if (d > 1) continue;
-        const density = haloK * (0.7 * (1 - d) * (1 - d) + 0.2 * (1 - d));
-        if (blue(x, y) >= density) continue;
-        ctx.fillStyle = tones[Math.min(5, Math.floor(d * 6))];
-        ctx.fillRect(x, y, 1, 1);
+    // the halo the way the mist is drawn now: the pixels under it blended toward the glow by
+    // a density falling off from the disc, then quantized through the blue noise in nine
+    // steps, so it is a soft shaded glow and not a stipple ("the moon halo is still grainy",
+    // the user, 2026-10-22)
+    const R = Math.round(r * 2.8);
+    const x0 = Math.max(0, p.x - R), y0 = Math.max(0, p.y - R), x1 = Math.min(W - 1, p.x + R), y1 = Math.min(H - 1, p.y + R);
+    if (x1 > x0 && y1 > y0) {
+      const img = ctx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1), d = img.data, iw = x1 - x0 + 1;
+      const inner = [207, 215, 238], outer = [185, 196, 224];
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const dist = Math.hypot(x - p.x, y - p.y) / R;
+          if (dist > 1) continue;
+          const a = haloK * (0.75 * (1 - dist) * (1 - dist) + 0.15 * (1 - dist)) * (0.7 + 0.3 * bright);
+          if (a < 0.03) continue;
+          const o = ((y - y0) * iw + (x - x0)) * 4, dn = blue(x, y);
+          for (let i = 0; i < 3; i++) {
+            const tone = inner[i] + (outer[i] - inner[i]) * dist;
+            const v = (d[o + i] + (tone - d[o + i]) * a) / 9 + dn;
+            d[o + i] = (v < 0 ? 0 : v > 28.4 ? 28 : v | 0) * 9;
+          }
+        }
       }
+      ctx.putImageData(img, x0, y0);
     }
   }
   const spr = moonSprite(m.phase, r);
