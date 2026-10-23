@@ -219,26 +219,35 @@ function recolored(s, tones, key, env, dark, range = sheet, sunlit = 1, light = 
 // (the user rejected an outline once before, 2026-10-20).
 function moonRim(g, w, h, light, env, tones) {
   const nightK = clamp((-env.sun.altitude - 3) / 5, 0, 1);
+  if (nightK <= 0.02) return;
   const k0 = light.k * nightK;
-  if (k0 <= 0.02) return;
   const img = g.getImageData(0, 0, w, h), d = img.data;
   const rimCol = tones[5] || tones[0];
-  const edge = new Uint8Array(w * h);
+  // the silhouette: any transparent neighbour (for the feathering), and whether that
+  // neighbour is on the moon's side or above (for the rim)
+  const edge = new Uint8Array(w * h), lit = new Uint8Array(w * h);
+  const opaque = (x, y) => x >= 0 && x < w && y >= 0 && y < h && d[(y * w + x) * 4 + 3] > 0;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     if (!d[i * 4 + 3]) continue;
-    const nx = x + light.side, up = y - 1;
-    if ((nx < 0 || nx >= w || !d[(y * w + nx) * 4 + 3]) || (up < 0 || !d[(up * w + x) * 4 + 3])) edge[i] = 1;
+    if (!opaque(x - 1, y) || !opaque(x + 1, y) || !opaque(x, y - 1) || !opaque(x, y + 1)) edge[i] = 1;
+    if (!opaque(x + light.side, y) || !opaque(x, y - 1)) lit[i] = 1;
   }
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     if (!d[i * 4 + 3]) continue;
+    // the ring just inside the silhouette
+    const inner = !edge[i] && (edge[i - 1] || edge[i + 1] || (y > 0 && edge[i - w]) || (y < h - 1 && edge[i + w]));
+    // soft night edges (the user, 2026-10-23): a hard outline is a daytime signal, so at
+    // night the silhouette feathers a step into the sky, the edge pixel half there and the
+    // ring inside it mostly there
+    if (edge[i]) d[i * 4 + 3] = Math.round(d[i * 4 + 3] * (1 - 0.5 * nightK));
+    else if (inner) d[i * 4 + 3] = Math.round(d[i * 4 + 3] * (1 - 0.2 * nightK));
+    // the moon's rim, on the moon's side
+    if (k0 <= 0.02) continue;
     let r = 0;
-    if (edge[i]) r = 1;
-    else {
-      const bx = x + light.side, by = y - 1;   // the pixel just inside an edge pixel
-      if ((bx >= 0 && bx < w && edge[y * w + bx]) || (by >= 0 && edge[by * w + x])) r = 0.45;
-    }
+    if (lit[i]) r = 1;
+    else if (inner) { const bx = x + light.side; if ((bx >= 0 && bx < w && lit[y * w + bx]) || (y > 0 && lit[i - w])) r = 0.45; }
     if (!r) continue;
     const facing = clamp(0.5 + (x / w - 0.5) * light.side * 1.5, 0, 1);
     const k = r * k0 * (0.3 + 0.6 * facing) * 0.8;
@@ -248,7 +257,7 @@ function moonRim(g, w, h, light, env, tones) {
 }
 
 export function photoCloudSprite(c, tones, key, env, light = null) {
-  if (light) key = key + '|' + light.side + '|' + light.k.toFixed(1);
+  if (light) key = key + '|' + light.side + '|' + light.k.toFixed(1) + '|' + (light.earth || 0).toFixed(2);
   if (c.sprite && c.spriteKey === key) return c.sprite;
   // the same hour's tones with the moon down: what the cloud's bulk is at night, the moon's
   // silver being kept for the crowns (paint)
@@ -324,6 +333,11 @@ function paint(data, img, tones, env, cb = false, dark = null, range = sheet, su
   // silver scales up and the shade scales down, and the silhouette's pixels on the moon's side
   // take the rim tone; the photo's own shading from the sun stays underneath
   const sideK = light && nightK > 0 ? light.k * nightK : 0;
+  // the earthlight: a cool light from below on the undersides and into the shade, from the
+  // moonlit ground, strongest on a snowy night; it lifts the base of the cloud the way the
+  // town's glow does but silver, and the two together are what keep an underside from black
+  const earthK = light && nightK > 0 ? (light.earth || 0) * nightK : 0;
+  const earthCol = [196, 206, 232];
   for (let i = 0; i < src.length; i += 4) {
     if (!src[i + 3]) { out[i + 3] = 0; continue; }
     const L = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
@@ -340,11 +354,13 @@ function paint(data, img, tones, env, cb = false, dark = null, range = sheet, su
     const lit = silver ? clamp((ln - 0.6) / 0.35, 0, 1) * (sideK > 0 ? 0.3 + 0.7 * facing : 1) : 0;   // the crowns, on the moon's side
     const shade = sideK > 0 ? 1 - sideK * 0.3 * (1 - facing) : 1;                                     // the far side falls into shade
     const glow = glowK > 0 ? glowK * yF * yF * (1 - ln * 0.7) : 0;         // the bases, from below
+    const earth = earthK > 0 ? earthK * Math.pow(yF, 1.5) * (1 - ln * 0.6) * 0.5 : 0;   // the undersides, from the ground
     for (let ch = 0; ch < 3; ch++) {
       const q = ratio[k][ch] + (ratio[k + 1][ch] - ratio[k][ch]) * f;
       let v = src[i + ch] * q * shade;
       if (lit > 0) v += silver[ch] * lit * (src[i + ch] / 255);
       if (glow > 0) v += glowCol[ch] * glow;
+      if (earth > 0) v += (earthCol[ch] - v) * earth;
       out[i + ch] = clamp(Math.round(v), 0, 255);
     }
     out[i + 3] = 255;

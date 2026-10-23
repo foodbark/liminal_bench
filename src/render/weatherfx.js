@@ -235,11 +235,15 @@ export class WeatherFX {
       // at night, which side of this cloud the moon is on (in the sprite's own frame, which is
       // mirrored for a flipped cloud), and how strongly it lights: the moon's height and phase
       let light = null;
-      if (moonP) {
+      if (env.sun.altitude < -6) {
         const cx = c.x + c.w / 2;
-        const side = (moonP.x >= cx ? 1 : -1) * (c.flip ? -1 : 1);
-        const k = clamp(env.moon.altitude / 15, 0, 1) * (0.1 + 0.9 * (1 - Math.abs(env.moon.phase - 0.5) * 2));
-        light = { side, k };
+        const side = moonP ? (moonP.x >= cx ? 1 : -1) * (c.flip ? -1 : 1) : 1;
+        const k = moonP ? clamp(env.moon.altitude / 15, 0, 1) * (0.1 + 0.9 * (1 - Math.abs(env.moon.phase - 0.5) * 2)) : 0;
+        // the ground's light on the undersides (the user, 2026-10-22: the moonlight reflecting
+        // off the earth lights the clouds): a snowy valley under a moon throws most of it back
+        // up, bare ground a little, the town's glow being separate and there every night
+        const earth = k * (env.groundSnow ? 0.6 : 0.12);
+        light = { side, k, earth };
       }
       const sprite = c.photo || c.parts ? photoCloudSprite(c, tones, key, env, light) : cloudSprite(c, tones, key, lightX, lightY);
       if (c.flip) { ctx.save(); ctx.translate(Math.round(c.x) + c.w, c.y); ctx.scale(-1, 1); ctx.drawImage(sprite, 0, 0); ctx.restore(); }
