@@ -298,8 +298,23 @@ export function drawMoon(ctx, env) {
   // altostratus veil, or fog; and then faint. Clear nights get the bare disc.
   const haloK = Math.min(1, ((sk && sk.veilHigh) || 0) * 1.0 + ((sk && sk.veilMid) || 0) * 0.6 + (env.cond.fog ? 0.7 : 0));
   if (nf > 0.3 && bright > 0.3 && haloK > 0.15) {
-    ctx.fillStyle = ditherPattern(ctx, '#b9c4e0', haloK > 0.6 ? 2 : 1); fillCircle(ctx, p.x, p.y, Math.round(r * 2.4));
-    ctx.fillStyle = ditherPattern(ctx, '#cfd7ee', haloK > 0.6 ? 3 : 2); fillCircle(ctx, p.x, p.y, Math.round(r * 1.5));
+    // the halo as mist, the way the cirrus is now: a glow falling off from the disc, stippled
+    // through the blue noise at a fixed screen position and fading into the sky's own colour,
+    // instead of the two Bayer-dithered discs, which read as a lattice round the moon against
+    // the misty veil ("this moon haze is our old style", the user, 2026-10-22)
+    const R = Math.round(r * 2.8), sky = env.pal.top || env.pal.horizon;
+    const inner = [207, 215, 238], outer = [185, 196, 224];
+    const tones = [0, 1, 2, 3, 4, 5].map((i) => rgb(lerpRGB(lerpRGB(inner, outer, i / 5), sky, 0.15 + 0.5 * i / 5)));
+    for (let y = p.y - R; y <= p.y + R; y++) {
+      for (let x = p.x - R; x <= p.x + R; x++) {
+        const d = Math.hypot(x - p.x, y - p.y) / R;
+        if (d > 1) continue;
+        const density = haloK * (0.7 * (1 - d) * (1 - d) + 0.2 * (1 - d));
+        if (blue(x, y) >= density) continue;
+        ctx.fillStyle = tones[Math.min(5, Math.floor(d * 6))];
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
   }
   const spr = moonSprite(m.phase, r);
   // opaque at night so nothing shows through the disc; it only fades in daylight

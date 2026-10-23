@@ -476,7 +476,7 @@ function blurField(src, w, h, r) {
 // pixel, and once per page: the mottling noise per screen pixel. A render is then lookups and
 // compares (the first version did the interpolation and a pow per pixel and took 180 ms at
 // full size, a hitch every few seconds of drift).
-let mistMottle = null, mistSlow = null, mistGrain = null, mistMottleKey = '';
+let mistMottle = null, mistSlow = null, mistGrain = null, mistSoft = null, mistMottleKey = '';
 // Mares' tails (the user, 2026-10-21): cirrus uncinus is a dense hooked head with a fibrous
 // tail combed out behind it by the wind shear, hanging a little below. The tile's hooks are the
 // heads; the comb makes every dense cell trail a fading streak downwind (a decaying maximum
@@ -546,13 +546,14 @@ export function drawCirrusMist(g, env, off = 0) {
   const dens = mistDensity(t, dir);
   const mkey = dir.dx + ',' + dir.dy;
   if (!mistMottle || mistMottleKey !== mkey) {
-    mistMottle = new Float32Array(W * VANISH); mistSlow = new Float32Array(W * VANISH); mistMottleKey = mkey;
+    mistMottle = new Float32Array(W * VANISH); mistSlow = new Float32Array(W * VANISH); mistSoft = new Float32Array(W * VANISH); mistMottleKey = mkey;
     const n = Math.hypot(dir.dx, dir.dy), ux = dir.dx / n, uy = dir.dy / n;
     for (let y = 0; y < VANISH; y++) for (let x = 0; x < W; x++) {
       // fibres: the noise stretched along the comb direction, fine across it
       const along = x * ux + y * uy, across = -x * uy + y * ux;
       mistMottle[y * W + x] = 0.5 + 0.5 * mistNoise(along / 150, across / 7);
       mistSlow[y * W + x] = mistNoise(x / 210 + 50, y / 70 + 20);   // the veil's own slow mottling, streaked along the sky
+      mistSoft[y * W + x] = 0.55 + 0.45 * mistNoise(x / 38 + 30, y / 26 + 70);   // an even mottle for the veil haze: the fibres are the tails' alone (the haze came out striped, the user, 2026-10-22)
     }
   }
   // the cirrostratus veil as mist too: the tile has dense cirrus over a few percent of its
@@ -605,7 +606,7 @@ export function drawCirrusMist(g, env, off = 0) {
       // the density eased so the thin reaches stay thin, mottled with a slow noise the way the
       // Milky Way is with its rifts (at 70% cover the dense parts had gone to flat pale slabs),
       // and never more than two thirds lit, so sky always shows through
-      const mc = Math.max(e, hz) * mistMottle[y * W + x];
+      const mc = Math.max(e * mistMottle[y * W + x], hz * mistSoft[y * W + x]);
       // lit where the fixed noise falls under the density: dense in a core, points at the edge
       const thr = Math.max(Math.min(0.66, mc * 0.9), Math.min(0.82, sc * 1.25));
       if (blue(x, y) >= thr) continue;
