@@ -650,7 +650,10 @@ export function drawCirrusMist(g, env, off = 0, skyPix = null) {
       v = (skyG + (tn[1] - skyG) * a) / 9 + dn; out[o + 1] = (v < 0 ? 0 : v > 28.4 ? 28 : v | 0) * 9;
       v = (skyB + (tn[2] - skyB) * a) / 9 + dn; out[o + 2] = (v < 0 ? 0 : v > 28.4 ? 28 : v | 0) * 9;
       out[o + 3] = 255;
-      mistCover[i] = a * 255;
+      // the stars read the cloud's density, not how pale it is painted: the blend is faint at
+      // night by design, and read as coverage it let Saturn and Fomalhaut through a full veil
+      // (the user, 2026-10-22); a clear patch is still clear, since the density is zero there
+      mistCover[i] = Math.min(1, Math.max(mc, sc) * 1.6) * 255;
     }
   }
   g.putImageData(cirrusImg, 0, 0);

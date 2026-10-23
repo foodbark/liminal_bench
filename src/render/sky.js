@@ -121,7 +121,10 @@ export function drawStars(ctx, env, t) {
   // (below), and only the low decks dim them all; without it the total cover does as before
   const sk = env.sky;
   const decks = sk && mistCoverFn ? Math.min(1, (sk.strato || 0) + (sk.stratus || 0) + (sk.nimbo || 0)) : env.cond.cover;
-  const nf = clamp((-env.sun.altitude - 3) / 9, 0, 1) * (1 - decks) * (env.cond.fog ? 0.4 : 1);
+  // and a veil takes a little from every star even in its clear patches, the way a thin
+  // cirrostratus does; the patches still show the stars, the haze between them does not
+  const veilAll = sk && mistCoverFn ? 0.3 * (sk.veilHigh || 0) + 0.5 * (sk.veilMid || 0) : 0;
+  const nf = clamp((-env.sun.altitude - 3) / 9, 0, 1) * (1 - decks) * (1 - veilAll) * (env.cond.fog ? 0.4 : 1);
   if (nf <= 0.02 || !CATALOG) return;
   if (!starLayer) { [starLayer, starCtx] = makeCanvas(W, HORIZON); }
   const stamp = Math.floor(t * 10);
@@ -145,8 +148,12 @@ export function drawStars(ctx, env, t) {
       const p = skyXY(pos.azimuth, pos.altitude);
       if (p.y < 0 || p.y >= HORIZON || p.x < 0 || p.x >= W) continue;
       if (terrainMask && terrainMask[(p.y * W + p.x) * 4] !== 0) continue;
-      const under = mistCoverFn ? mistCoverFn(p.x, p.y) : 0;   // the mist over this star
-      const ext = (pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1) * (1 - 0.9 * under);   // haze dims them near the ridge, and the mist where it is
+      // the mist over this star: the blend's coverage is at most about 0.4 at night, and a linear
+      // dim left Fomalhaut and Saturn at two thirds under a full veil (the user, 2026-10-22:
+      // showing through too much), so a veil of any weight takes most of a star
+      const under = mistCoverFn ? mistCoverFn(p.x, p.y) : 0;
+      const veilDim = clamp(1 - under * 2.6, 0, 1);
+      const ext = (pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1) * veilDim;   // haze dims them near the ridge, and the mist where it is
       const b0 = (0.22 + 0.78 * clamp((5.2 - st[2]) / 6.2, 0, 1)) * nf * ext;   // magnitude 5 faint .. Sirius bright
       // whether a star shows is decided before the twinkle: at dusk the first stars sit right on
       // the cutoff, and a twinkle that could carry them across it blinked them on and off ten
@@ -190,11 +197,15 @@ export function drawStars(ctx, env, t) {
       const p = skyXY(pos.azimuth, pos.altitude);
       if (p.y < 0 || p.y >= HORIZON || p.x < 0 || p.x >= W) continue;
       if (terrainMask && terrainMask[(p.y * W + p.x) * 4] !== 0) continue;
-      const ext = pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1;
+      // the planets never read the mist before: a planet under a veil dims like a star, and its
+      // disc goes toward the veil's gray rather than keeping its full tint
+      const underP = mistCoverFn ? mistCoverFn(p.x, p.y) : 0;
+      const veilDimP = clamp(1 - underP * 2.6, 0, 1);
+      const ext = (pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1) * veilDimP;
       const b = (0.22 + 0.78 * clamp((5.2 - pl.mag) / 6.2, 0, 1)) * nf * ext;
       if (b < 0.1) continue;
       const v = clamp(b, 0, 1);
-      g.fillStyle = `rgb(${(pl.tint[0] * (0.62 + 0.38 * v)) | 0},${(pl.tint[1] * (0.62 + 0.38 * v)) | 0},${(pl.tint[2] * (0.62 + 0.38 * v)) | 0})`;
+      g.fillStyle = `rgb(${(pl.tint[0] * (0.62 + 0.38 * v) * (0.5 + 0.5 * veilDimP)) | 0},${(pl.tint[1] * (0.62 + 0.38 * v) * (0.5 + 0.5 * veilDimP)) | 0},${(pl.tint[2] * (0.62 + 0.38 * v) * (0.5 + 0.5 * veilDimP)) | 0})`;
       const u = Math.max(1, Math.round(SCALE * 0.6)), x = p.x, y = p.y;
       // a planet is a disc: no points, no twinkle. Venus and Jupiter a little bigger than any
       // star's core, Saturn and a bright Mars the size of one, the dim ones smaller.
