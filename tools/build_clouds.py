@@ -157,7 +157,7 @@ def build_fields(cfg, tmp, small):
     field out by the photo's own arrangement and thin it by the feed's cover (src/render/photoclouds.js).
     The drawn altocumulus was identical ovals on a grid; a real field is cloudlets of every size
     in irregular rippled rows with open sky between them, which is what the photo has."""
-    fields = [e for e in (cfg.get('fields') or []) if e.get('type', 'alto') != 'cirrus']
+    fields = [e for e in (cfg.get('fields') or []) if e.get('type', 'alto') == 'alto']   # the decks and the cirrus have builds of their own
     pieces = []
     for fi, e in enumerate(fields):
         im = ImageOps.exif_transpose(Image.open(os.path.join(ROOT, 'art', e['photo']))).convert('RGB')
@@ -258,12 +258,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--art', help='config name (default: art/current)')
     ap.add_argument('--decks', action='store_true', help='build only the overcast deck tiles')
+    ap.add_argument('--cirrus', action='store_true', help='build only the cirrus tiles')
+    ap.add_argument('--fields', action='store_true', help='build only the cloud fields')
     a = ap.parse_args()
     name = a.art or open(os.path.join(ROOT, 'art', 'current')).read().strip()
     cfg = json.load(open(os.path.join(ROOT, 'art', name + '.json')))
-    if a.decks:
+    if a.decks or a.cirrus or a.fields:
         small = os.path.join(ROOT, 'assets/small'); os.makedirs(small, exist_ok=True)
-        build_decks(cfg, small); return
+        if a.decks: build_decks(cfg, small)
+        if a.cirrus: build_cirrus(cfg, small)
+        if a.fields: build_fields(cfg, tempfile.mkdtemp(prefix='clouds-'), small)
+        return
     entries = cfg.get('clouds')
     if not entries: sys.exit(f'no "clouds" in art/{name}.json')
     tmp = tempfile.mkdtemp(prefix='clouds-')

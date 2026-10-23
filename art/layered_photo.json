@@ -818,45 +818,43 @@
  ],
  "fields": [
   {
-   "photo": "clouds/alto_cummulus.jpg",
+   "photo": "clouds/overcast_04.jpg",
    "box": [
-    0.0,
-    0.35,
-    1.0,
-    0.79
+    0,
+    0,
+    1,
+    0.52
    ],
-   "horizon": [
-    [
-     0.0,
-     0.745
-    ],
-    [
-     0.18,
-     0.74
-    ],
-    [
-     0.28,
-     0.75
-    ],
-    [
-     0.34,
-     0.78
-    ],
-    [
-     0.5,
-     0.785
-    ],
-    [
-     0.75,
-     0.79
-    ],
-    [
-     1.0,
-     0.79
-    ]
+   "horizon": 0.52,
+   "scale": 1.0,
+   "type": "alto",
+   "cloud": 0.08
+  },
+  {
+   "photo": "clouds/cirrus_03.jpg",
+   "box": [
+    0,
+    0,
+    1,
+    1
    ],
    "scale": 0.4,
-   "type": "alto"
+   "span": 0.2,
+   "dy": 0,
+   "type": "cirrus"
+  },
+  {
+   "photo": "clouds/cirrus_05.jpg",
+   "box": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "scale": 1.0,
+   "span": 0.2,
+   "dy": 0,
+   "type": "cirrus"
   },
   {
    "photo": "clouds/cirrus_02.jpg",
@@ -868,8 +866,8 @@
    ],
    "scale": 0.4,
    "span": 0.2,
-   "type": "cirrus",
-   "dy": -0.3
+   "dy": -0.3,
+   "type": "cirrus"
   },
   {
    "photo": "clouds/overcast_01.jpg",

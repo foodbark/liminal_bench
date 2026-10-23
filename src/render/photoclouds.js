@@ -570,7 +570,10 @@ function mistDensity(t, dir) {
   if (t.dens && t.densKey === key) return t.dens;
   const td = t.data.data, tw = t.w, th = t.h, CELL = 4;
   const cw = Math.floor(tw / CELL), chh = Math.floor(th / CELL);
-  const raw = (cx, cy) => td[((Math.min(chh - 1, Math.max(0, cy)) * CELL + 1) * tw + Math.min(cw - 1, Math.max(0, cx)) * CELL + 1) * 4 + 3];
+  // wrapping in x, since the tile repeats across the sky: clamped at the edge, the comb
+  // painted a solid band the width of its reach down the tile's dense left side (cirrus_03,
+  // 2026-10-23)
+  const raw = (cx, cy) => td[((Math.min(chh - 1, Math.max(0, cy)) * CELL + 1) * tw + (((cx % cw) + cw) % cw) * CELL + 1) * 4 + 3];
   // the comb: each cell is the most of what lies upwind of it along the direction, decayed
   const grid = new Float32Array(cw * chh);
   const n = Math.hypot(dir.dx, dir.dy), ux = dir.dx / n, uy = dir.dy / n;
@@ -688,7 +691,7 @@ export function drawCirrusMist(g, env, off = 0, skyPix = null) {
   const toneBand = [0, 1, 2, 3, 4, 5, 6, 7].map((band) => { const d = 1 / (1 - (band + 0.5) / 8), hz = Math.min(0.55, (1 - 1 / d) * 0.55); return [0, 1, 2].map((i) => tones[0][i] + (horizon[i] - tones[0][i]) * hz); });
   if (!mistCover) mistCover = new Uint8Array(W * VANISH); else mistCover.fill(0);
   const patch0 = 0.42 - 0.17 * k;   // the slow noise under which the veil is clear sky
-  const OVm = Math.min(160, tw >> 2), Pm = tw - OVm;   // the crossfade's overlap and the period it leaves
+  const OVm = tw >> 2, Pm = tw - OVm;   // the crossfade's overlap, a quarter of the tile, and the period it leaves
   for (let y = 0; y < VANISH; y++) {
     const d = VANISH / Math.max(1, VANISH - y);
     const band = Math.min(7, Math.floor((1 - 1 / d) * 8));
@@ -718,7 +721,9 @@ export function drawCirrusMist(g, env, off = 0, skyPix = null) {
       const hz = hazeK > 0 ? hazeK * open * (0.45 + 0.55 * sl) : 0;
       const sc = scales ? scales[y * W + wrapW(x - shift)] / 255 * mistGrain[i] : 0;
       const mc = Math.max(e * mistMottle[i], hz * mistSoft[i]);
-      const a = Math.max(mc * aMax, Math.min(0.95, sc * (aMax + 0.1)));
+      // the scales at night sit well below their daytime weight: a mackerel field under a full
+      // moon is a dim texture, and at full strength it was a bright blanket over the sky (2026-10-23)
+      const a = Math.max(mc * aMax, Math.min(0.95, sc * (aMax + 0.1) * (1 - 0.5 * nightK)));
       if (a < 0.03) continue;
       const dn = blue(x, y);
       const o = i * 4;

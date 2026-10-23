@@ -1,1 +1,1 @@
-{"tiles": [{"x": 0, "y": 0, "w": 800, "h": 600, "photo": "clouds/cirrus_02.jpg", "scale": 0.4, "dy": -0.3}]}
+{"tiles": [{"x": 0, "y": 0, "w": 800, "h": 600, "photo": "clouds/cirrus_03.jpg", "scale": 0.4, "dy": 0}, {"x": 0, "y": 601, "w": 336, "h": 446, "photo": "clouds/cirrus_05.jpg", "scale": 1.0, "dy": 0}, {"x": 0, "y": 1048, "w": 800, "h": 600, "photo": "clouds/cirrus_02.jpg", "scale": 0.4, "dy": -0.3}]}
