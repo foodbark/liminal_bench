@@ -1,7 +1,7 @@
 import { ASSET_DIR, SCALE, W, HORIZON } from '../state.js';
-import { makeCanvas, clamp, blue } from '../util/pixel.js';
+import { makeCanvas, clamp, blue, quant } from '../util/pixel.js';
 import { cloudTones } from './clouds.js';
-import { skyXY } from './sky.js';
+import { skyXY, setMistCover } from './sky.js';
 import { valueNoise2D } from '../util/noise.js';
 const mistNoise = valueNoise2D(8191);   // mottling for the cirrus mist, like the Milky Way's rifts
 
@@ -361,6 +361,12 @@ export function drawField(g, env) {
 // since the sheet scrolls and a scrolling stipple dances (the user, 2026-10-11). The drawn
 // filaments (sheets.js) stand in until the tile is loaded.
 let cirrusImg = null;
+// how much mist is over each sky pixel after the last render (0..255), for the stars: a star
+// under a hook dims, one in a clear patch twinkles on
+let mistCover = null;
+export const mistCoverAt = (x, y) => (mistCover && y >= 0 && y < VANISH && x >= 0 && x < W ? mistCover[y * W + x] / 255 : 0);
+export function clearMistCover() { if (mistCover) mistCover.fill(0); }
+setMistCover(mistCoverAt);
 // Fish scales (the user, 2026-10-21): the mackerel sky, small cloudlets in rippled rows, as a
 // stand-in from the altocumulus photo's cloudlets until a cirrocumulus photo comes: the
 // cloudlets' alpha, weighted by their lightness, laid out as drawField lays the sprites (the
@@ -520,7 +526,7 @@ function mistDensity(t, dir) {
   t.dens = dens; t.densKey = key;
   return dens;
 }
-export function drawCirrusMist(g, env, off = 0) {
+export function drawCirrusMist(g, env, off = 0, skyPix = null) {
   const t = cirrus.tiles[0];
   const k = Math.min(1, env.sky.cirrus + (env.sky.veilHigh || 0));   // all the high cover: the veil is mist too, denser
   const { tones } = cloudTones(env, 1);
@@ -590,30 +596,61 @@ export function drawCirrusMist(g, env, off = 0) {
     return c;
   };
   const shift = Math.round(off);
+  // The blend (the user, 2026-10-22, "two and four"): a stipple of single pixels switched on
+  // or off read as sand at night and as low resolution everywhere, so the mist is a field
+  // now: the sky is blended toward the veil tone by the density and the result is quantized
+  // through the blue noise in nine steps the way the sky gradient is, so a hook's core is a
+  // solid pale tone, its edge two or three stepped tones with grain only along each step, and
+  // the veil a milky shift of the sky with soft mottles. Sky shows through by the blend, not by
+  // holes. At night the blend sits closer to the sky (the Milky Way's restraint). The veil's
+  // slow mottle opens clear patches, so there is plain sky to rest on and stars to twinkle
+  // between the clouds; the coverage is kept per pixel for the stars to read.
+  const nightK = clamp((-env.sun.altitude - 2) / 6, 0, 1);
+  const aMax = 0.85 - 0.3 * nightK;
+  const SKY_BOTTOM = HORIZON + 24;
+  const topCol = env.pal.top || horizon;
+  const toneBand = [0, 1, 2, 3, 4, 5, 6, 7].map((band) => { const d = 1 / (1 - (band + 0.5) / 8), hz = Math.min(0.55, (1 - 1 / d) * 0.55); return [0, 1, 2].map((i) => tones[0][i] + (horizon[i] - tones[0][i]) * hz); });
+  if (!mistCover) mistCover = new Uint8Array(W * VANISH); else mistCover.fill(0);
+  const patch0 = 0.42 - 0.17 * k;   // the slow noise under which the veil is clear sky
+  const OVm = Math.min(160, tw >> 2), Pm = tw - OVm;   // the crossfade's overlap and the period it leaves
   for (let y = 0; y < VANISH; y++) {
     const d = VANISH / Math.max(1, VANISH - y);
     const band = Math.min(7, Math.floor((1 - 1 / d) * 8));
+    const tn = toneBand[band];
+    // the sky under this row: the worker's own gradient when the renderer hands it over (the sun's
+    // glow and the Milky Way included, so a thin blend never comes out darker than the sky it
+    // sits on: an estimate left hard-edged dark blobs under the sun), else an estimate of it
+    const tt = Math.pow(y / SKY_BOTTOM, 1.45);
+    const skyR0 = topCol[0] + (horizon[0] - topCol[0]) * tt, skyG0 = topCol[1] + (horizon[1] - topCol[1]) * tt, skyB0 = topCol[2] + (horizon[2] - topCol[2]) * tt;
+    const sp = skyPix && skyPix.height > y ? skyPix.data : null;
     for (let x = 0; x < W; x++) {
-      const xs = ((x - shift) % (Pp * 2) + Pp * 2) % (Pp * 2);
-      const copy = Math.floor(xs / Pp), u = xs - copy * Pp;
-      const tx = copy % 2 ? Pp - 1 - u : u;
-      const ty = y - oy - (copy % 2 ? drop : 0);
-      const e = ty < 0 || ty >= th ? 0 : eased[dens[ty * tw + Math.min(tw - 1, Math.max(0, tx))]];
-      const hz = hazeK > 0 ? hazeK * (0.35 + 0.65 * mistSlow[y * W + x]) : 0;
-      // the scales: denser than cirrus, so they may go nearly solid in a cloudlet's heart
-      const sc = scales ? scales[y * W + wrapW(x - shift)] / 255 * mistGrain[y * W + x] : 0;
-      if (e === 0 && hz < 0.02 && sc < 0.03) continue;
-      // the density eased so the thin reaches stay thin, mottled with a slow noise the way the
-      // Milky Way is with its rifts (at 70% cover the dense parts had gone to flat pale slabs),
-      // and never more than two thirds lit, so sky always shows through
-      const mc = Math.max(e * mistMottle[y * W + x], hz * mistSoft[y * W + x]);
-      // lit where the fixed noise falls under the density: dense in a core, points at the edge
-      const thr = Math.max(Math.min(0.66, mc * 0.9), Math.min(0.82, sc * 1.25));
-      if (blue(x, y) >= thr) continue;
-      const m = Math.max(mc, Math.min(1, sc * 1.4));   // the scales whiter than mist of the same density
-      const c = toneAt(Math.min(5, Math.floor(m * 6)), band);
-      const o = (y * W + x) * 4;
-      out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255;
+      const i = y * W + x;
+      const skyR = sp ? sp[i * 4] : skyR0, skyG = sp ? sp[i * 4 + 1] : skyG0, skyB = sp ? sp[i * 4 + 2] : skyB0;
+      // the tile's copies crossfade over an overlap, as the decks' do: a mirrored copy paired
+      // the hooks into a butterfly, and dropping it to break that left a step along the whole
+      // join column once the mist became a blended field (2026-10-22)
+      const u = ((x - shift) % Pm + Pm) % Pm;
+      const ty = y - oy;
+      let e = 0;
+      if (ty >= 0 && ty < th) {
+        let dv = dens[ty * tw + u];
+        if (u < OVm) { const f = u / OVm; dv = dens[ty * tw + Pm + u] * (1 - f) + dv * f; }
+        e = eased[dv | 0];
+      }
+      const sl = mistSlow[i];
+      const open = clamp((sl - patch0) / 0.4, 0, 1);
+      const hz = hazeK > 0 ? hazeK * open * (0.45 + 0.55 * sl) : 0;
+      const sc = scales ? scales[y * W + wrapW(x - shift)] / 255 * mistGrain[i] : 0;
+      const mc = Math.max(e * mistMottle[i], hz * mistSoft[i]);
+      const a = Math.max(mc * aMax, Math.min(0.95, sc * (aMax + 0.1)));
+      if (a < 0.03) continue;
+      const dn = blue(x, y);
+      const o = i * 4;
+      let v = (skyR + (tn[0] - skyR) * a) / 9 + dn; out[o] = (v < 0 ? 0 : v > 28.4 ? 28 : v | 0) * 9;
+      v = (skyG + (tn[1] - skyG) * a) / 9 + dn; out[o + 1] = (v < 0 ? 0 : v > 28.4 ? 28 : v | 0) * 9;
+      v = (skyB + (tn[2] - skyB) * a) / 9 + dn; out[o + 2] = (v < 0 ? 0 : v > 28.4 ? 28 : v | 0) * 9;
+      out[o + 3] = 255;
+      mistCover[i] = a * 255;
     }
   }
   g.putImageData(cirrusImg, 0, 0);

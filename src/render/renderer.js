@@ -16,9 +16,9 @@ import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, 
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
-import { photoField, photoCirrus, photoDecks, drawField, drawCirrusMist, drawDeckMist, VANISH as MIST_H } from './photoclouds.js';
+import { photoField, photoCirrus, photoDecks, drawField, drawCirrusMist, drawDeckMist, clearMistCover, mistCoverAt, VANISH as MIST_H } from './photoclouds.js';
 
-const MIST_STEP = 3;   // pixels of drift between re-renders of the cirrus mist
+const MIST_STEP = 5;   // pixels of drift between re-renders of the cirrus mist (a render costs most of a frame at full size; every five pixels is a hitch every few seconds instead of every other)
 
 export class Renderer {
   constructor(canvas, assets) {
@@ -257,8 +257,12 @@ export class Renderer {
     if (fieldOn && env.sheetKey !== this.fieldKey) { drawField(this.fieldCtx, env); this.fieldKey = env.sheetKey; }
     if (mistOn) {
       const mistKey = env.sheetKey + '|' + Math.floor(this.sheetX / MIST_STEP);
-      if (mistKey !== this.mistKey) { drawCirrusMist(this.mistCtx, env, this.sheetX); this.mistKey = mistKey; lap('mist'); }
-    }
+      if (mistKey !== this.mistKey) {
+        // the sky's own pixels for the blend, read once per rendered sky
+        if (this.skyPixKey !== this.skyKey) { this.skyPix = this.skyCtx.getImageData(0, 0, W, MIST_H); this.skyPixKey = this.skyKey; }
+        drawCirrusMist(this.mistCtx, env, this.sheetX, this.skyPix); this.mistKey = mistKey; lap('mist');
+      }
+    } else if (this.mistKey) { this.mistKey = ''; clearMistCover(); }   // no mist: the stars' coverage map goes clear
     const drawSheets = () => {
       const ox = Math.round(this.sheetX);
       // the mist and the field are the high and middle cloud: under a low deck (stratocumulus,
@@ -280,6 +284,8 @@ export class Renderer {
     if (thin) drawSheets();
     // the sun comes back over the high sheets: a cirrostratus veil leaves the disc, with a halo
     if (thin && sunOverSheets(sk)) { drawSun(c, env, true); lap('sun'); }
+    // the moon comes back over the mist too, dimmed by what the mist has over it
+    if (thin && mistOn && env.moon.altitude > 0) { drawMoon(c, env, mistCoverAt); lap('moon'); }
     drawStars(c, env, t); lap('stars');
     const meteors = this.fx.meteors.length > 0;
     if (meteors) { this.fx.drawMeteors(c); lap('meteors'); }

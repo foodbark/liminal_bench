@@ -110,11 +110,18 @@ const STAR_TINT = [[155, 190, 255], [180, 205, 255], [222, 234, 255], [255, 248,
 let spread = null, glint = null;   // per catalog star: how smeared its light is right now, and a glint in progress
 let terrainMask = null;
 export function setStarMask(mask) { terrainMask = mask; }
+// the mist's coverage per sky pixel (photoclouds.js), so a star dims under a hook and twinkles in a clear patch
+let mistCoverFn = null;
+export function setMistCover(fn) { mistCoverFn = fn; }
 let starLayer = null, starCtx = null, starStamp = -1, starKey = '';
 // the planets on screen right now, for the hover caption: { x, y, label }
 export let planetSpots = [];
 export function drawStars(ctx, env, t) {
-  const nf = clamp((-env.sun.altitude - 3) / 9, 0, 1) * (1 - env.cond.cover) * (env.cond.fog ? 0.4 : 1);
+  // with the photographed mist up, the high and middle cloud dim each star by what is over it
+  // (below), and only the low decks dim them all; without it the total cover does as before
+  const sk = env.sky;
+  const decks = sk && mistCoverFn ? Math.min(1, (sk.strato || 0) + (sk.stratus || 0) + (sk.nimbo || 0)) : env.cond.cover;
+  const nf = clamp((-env.sun.altitude - 3) / 9, 0, 1) * (1 - decks) * (env.cond.fog ? 0.4 : 1);
   if (nf <= 0.02 || !CATALOG) return;
   if (!starLayer) { [starLayer, starCtx] = makeCanvas(W, HORIZON); }
   const stamp = Math.floor(t * 10);
@@ -138,7 +145,8 @@ export function drawStars(ctx, env, t) {
       const p = skyXY(pos.azimuth, pos.altitude);
       if (p.y < 0 || p.y >= HORIZON || p.x < 0 || p.x >= W) continue;
       if (terrainMask && terrainMask[(p.y * W + p.x) * 4] !== 0) continue;
-      const ext = pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1;   // haze dims them near the ridge
+      const under = mistCoverFn ? mistCoverFn(p.x, p.y) : 0;   // the mist over this star
+      const ext = (pos.altitude < 10 ? clamp((pos.altitude + 8) / 18, 0.25, 1) : 1) * (1 - 0.9 * under);   // haze dims them near the ridge, and the mist where it is
       const b0 = (0.22 + 0.78 * clamp((5.2 - st[2]) / 6.2, 0, 1)) * nf * ext;   // magnitude 5 faint .. Sirius bright
       // whether a star shows is decided before the twinkle: at dusk the first stars sit right on
       // the cutoff, and a twinkle that could carry them across it blinked them on and off ten
@@ -282,7 +290,7 @@ function moonSprite(phase, r) {
   moonCanvas = c; moonKey = key; return c;
 }
 
-export function drawMoon(ctx, env) {
+export function drawMoon(ctx, env, coverAt = null) {
   const m = env.moon;
   if (m.altitude < -1) return;
   const p = skyXY(m.azimuth, m.altitude);
@@ -290,7 +298,10 @@ export function drawMoon(ctx, env) {
   // veils dim it, sheets hide it; cumulus are drawn in front and simply cover it
   const sk = env.sky;
   const sheet = sk ? Math.min(1, (sk.veilHigh || 0) * 0.45 + (sk.veilMid || 0) * 0.75 + (sk.strato || 0) * 0.9 + (sk.stratus || 0) + (sk.nimbo || 0)) : env.cond.cover * 0.9;
-  const vis = (0.25 + 0.75 * nf) * (1 - sheet);
+  // drawn a second time over the mist (the renderer, with the mist's coverage): dimmed by what
+  // is over it, since the mist's blended pixels would otherwise cover the disc
+  const under = coverAt ? coverAt(p.x, p.y) : 0;
+  const vis = (0.25 + 0.75 * nf) * (1 - sheet) * (1 - 0.8 * under);
   if (vis < 0.05) return;
   const r = moonRadius(m.altitude);
   const bright = 1 - Math.abs(m.phase - 0.5) * 2;
@@ -318,7 +329,7 @@ export function drawMoon(ctx, env) {
   }
   const spr = moonSprite(m.phase, r);
   // opaque at night so nothing shows through the disc; it only fades in daylight
-  ctx.globalAlpha = nf > 0.4 ? 1 : vis;
+  ctx.globalAlpha = coverAt ? vis : (nf > 0.4 ? 1 : vis);
   ctx.drawImage(spr, p.x - (spr.width >> 1), p.y - (spr.height >> 1));
   ctx.globalAlpha = 1;
 }
