@@ -12,7 +12,7 @@ function envForWorker(env) {
     photoAlto: !!photoField(), photoCirrus: !!photoCirrus(), photoDecks: !!photoDecks(),
   };
 }
-import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
+import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, drawGhostNote, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
@@ -226,6 +226,10 @@ export class Renderer {
     const fb = this.fx.flights.bands(), flights = fb.any;
     const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}` : '';
     if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
+    // the paper being placed follows the pointer: a frame whenever it moves
+    const pl = state.placing && state.placing.note;
+    const placingKey = pl ? `${pl.x}|${pl.y}|${pl.w}|${pl.h}|${pl.text}` : '';
+    if (placingKey !== this.placingKey) { this.placingKey = placingKey; this.dirty = true; }
     const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0 || gliders || flights;
     if (!this.dirty && !animated && camKey === this.camKey) return;
     this.dirty = false; this.camKey = camKey;
@@ -305,7 +309,11 @@ export class Renderer {
     // the red beacons on the masts, in front of the mountain and the fog on it, behind the rain
     if (beaconsOn(env)) { drawBeacons(c, env, t); lap('beacons'); }
     drawLampGlow(c, env); lap('lamp');
-    if (cuId) { c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0); c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup'); }
+    if (cuId) {
+      c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0);
+      if (pl && cuId === 'board') drawGhostNote(c, pl, CLOSEUPS.board, env.pal.ambient.map((v) => (v + (1 - v) * 0.45) * 255));
+      c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup');
+    }
     this.fx.drawPrecip(c, env); lap('precip');
     c.setTransform(1, 0, 0, 1, 0, 0);
     // a poster held up to look at, over everything, the scene dimmed behind it

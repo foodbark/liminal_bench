@@ -164,6 +164,20 @@ export function closeupNotes(state, cu) {
 export function drawCloseupNotes(ctx, state, cu) {
   for (const big of closeupNotes(state, cu)) drawNote(ctx, big, big.u, true);
 }
+// The paper being placed, carried over the cork under the pointer: drawn on its own small
+// canvas and lit by the same ambient as the close-up, so at night it is no brighter than the
+// board it is about to go on.
+export function drawGhostNote(ctx, note, cu, ambient) {
+  const [big] = closeupNotes({ notes: [note] }, cu);
+  const s = Math.max(1, Math.round(big.u)), pad = 2 * s + 2;
+  const [c, g] = makeCanvas(big.w + 2 * pad + 2 * s, big.h + 2 * pad + 2 * s);
+  const [m, mg] = makeCanvas(c.width, c.height);
+  drawNote(g, { ...big, x: pad, y: pad }, big.u, true);
+  mg.drawImage(c, 0, 0);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = rgb(ambient); g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0);
+  ctx.drawImage(c, big.x - pad, big.y - pad);
+}
 
 // Sun shadows on the ground, drawn as crisp dithered scanlines.
 export function drawShadows(ctx, env) {

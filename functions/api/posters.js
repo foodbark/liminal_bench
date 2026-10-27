@@ -2,14 +2,14 @@
 // and pinned beside the notes. Stored in D1 as the small PNG the page made (base64 text), read
 // back by id from posters/[id].js. Torn down through DELETE api/notes { poster }.
 //
-//   POST /api/posters { png, k }  -> pins one (201) and returns the board (?v=2 shape); k is the size
+//   POST /api/posters { png, k, x?, y? } -> pins one (201) and returns the board (?v=2 shape); k is the size
 //                                 chosen (1 handbill, 2 flyer, 3 big sheet; 0 or absent: the board picks); 400 when the
 //                                 picture is not a small PNG, 429 at the limits, 409 when the board is full
 //
 // The limits are loose for now (the user's call, 2026-10-10): twenty an hour per address, sixty
 // an hour in all; tearing down is the moderation. The size cap and the pixel cap are what the
 // page produces, with a little room; anything else is refused.
-import { board, json, wantsV2, whoHash, paperCount, FULL, NO_PIN, HOUR } from './_board.js';
+import { board, json, wantsV2, whoHash, paperCount, placeOf, FULL, NO_PIN, HOUR } from './_board.js';
 const MAX_BYTES = 48 * 1024, MAX_SIDE = 224, MIN_SIDE = 16;
 const PER_ADDRESS_HOUR = 20, ALL_HOUR = 60;
 
@@ -36,6 +36,7 @@ export async function onRequestPost({ request, env }) {
   if (mine >= PER_ADDRESS_HOUR) return json({ error: 'you have papered the board enough for now. come back in a while.' }, 429, { 'retry-after': '3600' });
   if (all >= ALL_HOUR) return json({ error: 'the board is papered over for now. come back later.' }, 429, { 'retry-after': '3600' });
   // never swept: a poster stays until it is torn down or buried under newer ones (2026-10-27)
-  await env.DB.prepare('INSERT INTO posters (png, w, h, k, at, who) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(b64, w, h, k, now, who).run();
+  const [x, y] = placeOf(body);
+  await env.DB.prepare('INSERT INTO posters (png, w, h, k, at, who, x, y) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)').bind(b64, w, h, k, now, who, x, y).run();
   return json(await board(env.DB, wantsV2(request)), 201);
 }

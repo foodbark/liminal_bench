@@ -53,6 +53,8 @@ npx wrangler pages secret put SALT            # any long random string; salts th
 The salt is optional (the function falls back to a constant) but without it the daily hashes are
 guessable, which only matters if someone wants to know whether two notes came from one address.
 
+Schema changes since the first deploy are one-off ALTERs noted in `db/schema.sql` beside the table (the posters' size column, 2026-10-10; the `x`, `y` position columns on notes and posters, 2026-10-27): run each once against the remote database before the code that needs it goes live, or a pin fails with a 500.
+
 ## 2. The Pages project
 
 Dashboard: Workers & Pages, Create, Pages, Connect to Git, pick `foodbark/liminal_bench`,

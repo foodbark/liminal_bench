@@ -1,7 +1,7 @@
-import { W, H, META, formatTime } from './state.js';
+import { W, H, SCALE, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -64,7 +64,23 @@ export function setupUI(state, canvas) {
     const hit = closeupNotes(state, CLOSEUPS.board).reverse().find((n) => mx >= n.x && mx < n.x + n.w && my >= n.y && my < n.y + n.h);
     return hit ? hit.note : null;
   }
+  // the pointer over the board's close-up as fractions of its cork (the close-up is drawn in
+  // canvas pixels, under no camera); null off the cork
+  function corkAt(e) {
+    const cu = CLOSEUPS.board; if (!cu) return null;
+    const r = canvas.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width * W, my = (e.clientY - r.top) / r.height * H;
+    const m = 24 * SCALE;   // a little slack past the cork's edge: the paper is held inside it anyway
+    if (mx < cu.cork.x - m || mx > cu.cork.x + cu.cork.w + m || my < cu.cork.y - m || my > cu.cork.y + cu.cork.h + m) return null;
+    return { fx: Math.min(1, Math.max(0, (mx - cu.cork.x) / cu.cork.w)), fy: Math.min(1, Math.max(0, (my - cu.cork.y) / cu.cork.h)) };
+  }
   canvas.addEventListener('mousemove', (e) => {
+    if (state.placing) {   // carrying the paper: it follows the pointer over the cork
+      const p = corkAt(e);
+      if (p) { state.placing.fx = p.fx; state.placing.fy = p.fy; state.placing.note = ghostNote(state.placing, p.fx, p.fy); }
+      canvas.classList.toggle('hot', !!p);
+      return;
+    }
     if (state.view !== 'scene') {
       const n = state.view === 'board' && !panelShown && !state.poster ? noteAt(e) : null;
       state.hover = n ? 'note' : null; state.hoverLabel = n ? (n.poster ? 'a poster' : `a note: “${n.text}”`) : '';
@@ -80,6 +96,7 @@ export function setupUI(state, canvas) {
     if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h && VIEWS[h.id]) enter(h.id); return; }
     if (!twoStep(state.view)) { leave(); return; }         // a panel view: any click steps back
     if (state.poster) { putBack(); return; }               // holding a poster: any click puts it back
+    if (state.placing) { placeAt(e); return; }             // carrying the paper: this is where it goes
     const n = state.view === 'board' ? noteAt(e) : null;   // a note on the cork: offer to tear it down; a poster: hold it up
     if (panelShown) { hidePanel(); if (!n) return; }       // a click off the form puts it away
     if (settled) n ? (n.poster ? holdUp(n) : tearPanel(n)) : (state.view === 'board' ? compose : showPanel)(state.view);
@@ -87,13 +104,35 @@ export function setupUI(state, canvas) {
   window.addEventListener('keydown', (e) => {
     // typing into the board's note field must not drive the scene
     if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) { if (e.key === 'Escape') e.target.blur(); return; }
-    if (e.key === 'Escape') { if (state.poster) putBack(); else leave(); }
+    if (e.key === 'Escape') { if (state.poster) putBack(); else if (state.placing) backToForm(); else leave(); }
     if (e.key === 'd' || e.key === 'D') { const d = $('debug'); d.hidden = !d.hidden; }
   });
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
   function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); }
-  function leave() { state.view = 'scene'; state.closeup = null; state.poster = null; phone.hangUp(); hidePanel(); }
+  function leave() { state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); hidePanel(); }
+  // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
+  // paper to the pointer, the panel goes away, the paper rides over the cork as a ghost drawn by
+  // the renderer, and a click pins it there, over whatever is there. A click off the cork, or
+  // Escape, carries it back to the form with the words kept.
+  function startPlacing(draft) {
+    state.placing = { ...draft, ghostId: -Date.now(), fx: null, fy: null, note: null };
+    hidePanel(); state.hover = null;
+  }
+  function backToForm(err = '') {
+    const draft = state.placing; state.placing = null; canvas.classList.remove('hot');
+    if (draft) compose({ ...draft, error: err });
+  }
+  async function placeAt(e) {
+    const draft = state.placing, p = corkAt(e);
+    if (!p) { backToForm(); return; }
+    state.placing = null; canvas.classList.remove('hot');
+    try {
+      const place = { x: p.fx, y: p.fy };
+      if (draft.poster) await postPoster(draft.poster.png, draft.poster.w, draft.poster.h, draft.poster.k, place); else await postNote(draft.text, place);
+      state.notes = buildNotes(); state.notesVersion++;
+    } catch (err) { state.placing = draft; backToForm(err.message || 'the pin would not go in'); }
+  }
   // A poster held up: the second zoom, the picture large over the dimmed board. Its panel offers
   // to tear it down; a click anywhere, or Escape, puts it back.
   function holdUp(n) {
@@ -135,8 +174,10 @@ export function setupUI(state, canvas) {
     if (CLOSEUPS[view] && COMPACT.matches) panel.classList.add('compact');
     panel.hidden = false;
   }
-  // Pinning a note: a scrap of paper, a pencil, one line. Enter or "pin it" posts it.
-  function compose() {
+  // Pinning a note: a scrap of paper, a pencil, one line. Enter or "put it up" hands it to the
+  // pointer to place (`draft` brings the words and the picture back from a placing that was
+  // called off, with any error to show).
+  function compose(draft = null) {
     panelShown = true; panelFor = 'board';
     panel.className = 'dock-' + (VIEWS.board.dock || 'center');   // no compact: the form needs its words and its field
     panel.hidden = false;
@@ -156,20 +197,31 @@ export function setupUI(state, canvas) {
     lead.textContent = 'A pencil stub hangs on a string. You find a blank scrap under the others.';
     const input = document.createElement('input');
     input.id = 'note-text'; input.maxLength = NOTE_MAX; input.placeholder = 'write something'; input.autocomplete = 'off'; input.spellcheck = false;
+    if (draft && draft.text) input.value = draft.text;
     const err = document.createElement('div'); err.className = 'note-err';
+    if (draft && draft.error) err.textContent = draft.error;
     // or a poster: a picture from this device, made into pixel art here before it goes anywhere
     const or = document.createElement('div'); or.className = 'dim poster-or'; or.textContent = 'or pin a picture, if you brought one:';
     const file = document.createElement('input'); file.type = 'file'; file.accept = 'image/*'; file.id = 'poster-file';
     const preview = document.createElement('canvas'); preview.className = 'poster-preview'; preview.hidden = true;
     // its size on the board: a handbill, a flyer or a big sheet, one pre-chosen the way the board would
     const sizes = document.createElement('div'); sizes.className = 'poster-sizes'; sizes.hidden = true;
-    let sizeK = pickPosterSize();
+    let sizeK = draft && draft.poster ? draft.poster.k : pickPosterSize();
     const sizeButtons = POSTER_SIZES_NAMED.map(([k, name]) => {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.classList.toggle('chosen', k === sizeK);
       b.onclick = () => { sizeK = k; sizeButtons.forEach((o, i) => o.classList.toggle('chosen', POSTER_SIZES_NAMED[i][0] === k)); };
       sizes.appendChild(b); return b;
     });
     let poster = null;   // { png, w, h } once a picture is pixelated
+    const showPreview = (png, w, h) => {
+      const k = Math.max(1, Math.floor(Math.min(240 / w, 240 / h)));
+      preview.width = w * k; preview.height = h * k;
+      const im = new Image();
+      im.onload = () => { const g = preview.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(im, 0, 0, preview.width, preview.height); };
+      im.src = png;
+      preview.hidden = false; sizes.hidden = false;
+    };
+    if (draft && draft.poster) { poster = { png: draft.poster.png, w: draft.poster.w, h: draft.poster.h }; showPreview(poster.png, poster.w, poster.h); }
     file.addEventListener('change', async () => {
       poster = null; preview.hidden = true; sizes.hidden = true; err.textContent = '';
       const f = file.files && file.files[0]; if (!f) return;
@@ -180,28 +232,24 @@ export function setupUI(state, canvas) {
         const art = pixelate(bmp, { kind: 'prop' }); bmp.close();
         const c = document.createElement('canvas'); c.width = art.width; c.height = art.height; c.getContext('2d').putImageData(art, 0, 0);
         const png = c.toDataURL('image/png');
-        const k = Math.max(1, Math.floor(Math.min(240 / art.width, 240 / art.height)));
-        preview.width = art.width * k; preview.height = art.height * k;
-        const g = preview.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(c, 0, 0, preview.width, preview.height);
-        preview.hidden = false; sizes.hidden = false; err.textContent = `${art.width} by ${art.height}, ${art.colors} colors`;
+        showPreview(png, art.width, art.height); err.textContent = `${art.width} by ${art.height}, ${art.colors} colors`;
         poster = { png, w: art.width, h: art.height };
       } catch (e) { err.textContent = 'that picture would not take'; }
     });
     pBody.append(lead, input, or, file, preview, sizes, err);
     pActions.innerHTML = '';
-    const pin = document.createElement('button'); pin.textContent = 'pin it';
+    const pin = document.createElement('button'); pin.textContent = 'put it up';
     // with the board's close-up the form simply goes away and the cork is there to read
     const done = () => twoStep('board') ? hidePanel() : showPanel('board');
     const never = document.createElement('button'); never.textContent = 'never mind'; never.onclick = done;
     pActions.append(pin, never);
     if (twoStep('board')) { const back = document.createElement('button'); back.textContent = 'step back'; back.onclick = leave; pActions.append(back); }
-    const submit = async () => {
-      if (pin.disabled) return;
-      pin.disabled = true; err.textContent = '';
-      try {
-        if (poster && !input.value.trim()) await postPoster(poster.png, poster.w, poster.h, sizeK); else await postNote(input.value);
-        state.notes = buildNotes(); state.notesVersion++; done();
-      } catch (e) { err.textContent = e.message || 'the pin would not go in'; pin.disabled = false; }
+    // "put it up": the paper goes to the pointer and the board takes it where it is clicked
+    const submit = () => {
+      const text = input.value.trim();
+      if (poster && !text) startPlacing({ text: '', poster: { ...poster, k: sizeK } });
+      else if (text) startPlacing({ text, poster: null });
+      else err.textContent = 'nothing to pin';
     };
     pin.onclick = submit;
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
@@ -343,7 +391,7 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
+      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (COMPACT.matches ? 'tap where it goes' : 'put it where you like · click to pin it there · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
       if (state.view === 'scene' && state.hover === 'flight' && line.includes(' · ')) {
         // a flight's callsign in capitals, the rest of its line in the caption's lowercase (the user, 2026-10-22)
         const cut = line.indexOf(' · ');

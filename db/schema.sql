@@ -5,8 +5,12 @@ CREATE TABLE IF NOT EXISTS notes (
   id   INTEGER PRIMARY KEY AUTOINCREMENT,
   text TEXT    NOT NULL,      -- one line, 80 chars at most
   at   INTEGER NOT NULL,      -- ms since the epoch, when it was pinned
-  who  TEXT    NOT NULL       -- salted daily hash of the poster's address, for the rate limit only
+  who  TEXT    NOT NULL,      -- salted daily hash of the poster's address, for the rate limit only
+  x    REAL,                  -- where it was placed by hand (2026-10-27): the paper's center as
+  y    REAL                   -- fractions of the cork; null takes a slot
 );
+-- tables from before the placing (2026-10-27) take the columns once, by hand:
+--   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN x REAL; ALTER TABLE notes ADD COLUMN y REAL; ALTER TABLE posters ADD COLUMN x REAL; ALTER TABLE posters ADD COLUMN y REAL"
 CREATE INDEX IF NOT EXISTS notes_at ON notes (at);
 CREATE INDEX IF NOT EXISTS notes_who_at ON notes (who, at);
 
@@ -47,7 +51,9 @@ CREATE TABLE IF NOT EXISTS posters (
   h    INTEGER NOT NULL,
   k    INTEGER NOT NULL DEFAULT 0,   -- the size chosen: 1 handbill, 2 flyer, 3 big sheet; 0 lets the board pick
   at   INTEGER NOT NULL,      -- ms since the epoch
-  who  TEXT    NOT NULL       -- salted daily hash of the poster's address, for the rate limit only
+  who  TEXT    NOT NULL,      -- salted daily hash of the poster's address, for the rate limit only
+  x    REAL,                  -- placed by hand, as for notes
+  y    REAL
 );
 -- a posters table from before the size column (2026-10-10) takes it once, by hand:
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE posters ADD COLUMN k INTEGER NOT NULL DEFAULT 0"

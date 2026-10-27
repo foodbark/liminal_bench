@@ -6,6 +6,13 @@ export const LIFE_DAYS = 16;   // a torn default note's time down
 // 2026-10-27: a limit, but part of the board). Nothing is ever swept; the oldest are only buried.
 export const FULL = 40;
 export const NO_PIN = 'there is not a pin left, and not a bare inch of cork. something will have to come down first.';
+// Where a pin was placed by hand (2026-10-27): the paper's center as fractions of the cork,
+// or nulls for a slot. A number out of range is a slot too.
+export const placeOf = (body) => {
+  const x = body && typeof body.x === 'number' && body.x >= 0 && body.x <= 1 ? Math.round(body.x * 1e4) / 1e4 : null;
+  const y = body && typeof body.y === 'number' && body.y >= 0 && body.y <= 1 ? Math.round(body.y * 1e4) / 1e4 : null;
+  return x != null && y != null ? [x, y] : [null, null];
+};
 export const paperCount = async (db) => {
   const [n, p] = await db.batch([db.prepare('SELECT count(*) AS n FROM notes'), db.prepare('SELECT count(*) AS n FROM posters')]);
   return (n.results[0].n || 0) + (p.results[0].n || 0);
@@ -25,12 +32,12 @@ export const wantsV2 = (request) => new URL(request.url).searchParams.get('v') =
 // A torn default note alone keeps a clock, LIFE_DAYS, and then comes back.
 export async function board(db, v2) {
   const now = Date.now(), since = now - LIFE_DAYS * DAY;
-  const { results } = await db.prepare('SELECT id, text, at FROM notes ORDER BY at DESC LIMIT ?1').bind(FULL).all();
+  const { results } = await db.prepare('SELECT id, text, at, x, y FROM notes ORDER BY at DESC LIMIT ?1').bind(FULL).all();
   const notes = results.reverse();
   if (!v2) return notes;
   const [t, p] = await db.batch([
     db.prepare("SELECT key, max(at) AS at FROM torn WHERE key LIKE 'seed:%' AND at > ?1 GROUP BY key").bind(since),
-    db.prepare('SELECT id, w, h, k, at FROM posters ORDER BY at DESC LIMIT ?1').bind(FULL),
+    db.prepare('SELECT id, w, h, k, at, x, y FROM posters ORDER BY at DESC LIMIT ?1').bind(FULL),
   ]);
   return { notes, torn: t.results.map((r) => ({ seed: Number(r.key.slice(5)), at: r.at })), posters: p.results.reverse(), full: FULL };
 }

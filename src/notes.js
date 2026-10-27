@@ -14,7 +14,11 @@ import { hash2 } from './util/noise.js';
 // goes for good, one of the painting's default notes stays down for a while (TORN_DAYS) and
 // then comes back. A poster is a picture someone brought, pixelated here (src/pixelate.js) and
 // pinned like a note: it takes a slot the same way, bleaches on the same clock, and is torn
-// down the same way.
+// down the same way. Paper is placed by hand (the user, 2026-10-27: "place them very
+// specifically"; write first, then place): a pin carries `x`, `y`, the paper's center as
+// fractions of the cork, so it survives a repaint and the half-size build, and a placed note or
+// poster sits exactly there, over whatever is there, newest on top; paper with no position (the
+// default notes, what was pinned before, an old page's pin) takes a slot as before.
 const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.posters';
 const API = 'api/notes';   // relative: the site may live at a path prefix
 export const NOTE_MAX = 80;
@@ -37,6 +41,18 @@ export function pickPosterSize(r = Math.random()) {
   for (let i = 0; i < POSTER_ODDS.length; i++) { acc += POSTER_ODDS[i]; if (r < acc) return POSTER_SCALES[i]; }
   return POSTER_SCALES[2];
 }
+// A posted note's scrap: its size and paper from a hash of its words, since both are needed
+// before the server has given it a time or an id, and the same everywhere it is seen.
+const strHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
+export function noteBox(text, cx, cy) {
+  const h = strHash(text), s = META.notes[h % META.notes.length];
+  const w = s[2], hh = s[3];
+  const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - hh / 2), CORK.y + 2, CORK.y + CORK.h - hh - 2);
+  return { x, y, w, h: hh, paper: (h >>> 8) % 6 };
+}
+// Where a position's fractions fall on the scene's cork.
+export const corkPoint = (fx, fy) => ({ cx: CORK.x + clamp(fx, 0, 1) * CORK.w, cy: CORK.y + clamp(fy, 0, 1) * CORK.h });
+const hasPlace = (n) => typeof n.x === 'number' && typeof n.y === 'number' && n.x >= 0 && n.x <= 1 && n.y >= 0 && n.y <= 1;
 function posterBox(p, cx, cy) {
   // the size is set in the full build's close-up pixels; the half-size build (phones) has half
   // the pixels, and a poster sized in its own pixels came out twice as big against the board
@@ -106,18 +122,22 @@ async function ensureApi() {
 const OUT_OF_REACH = 'the board is out of reach right now. try again in a minute.';
 
 // Pinning a poster: `png` is the data URL of the art pixels the page made, `w` by `h`.
-export async function postPoster(png, w, h, k = 0) {
+// `place` is { x, y }, the paper's center as fractions of the cork, or null for a slot.
+export async function postPoster(png, w, h, k = 0, place = null) {
   if (!/^data:image\/png;base64,/.test(png || '')) throw new Error('nothing to pin');
   if (boardFull()) throw new Error(NO_PIN);
+  const at = place && hasPlace(place) ? { x: place.x, y: place.y } : {};
   if (await ensureApi()) {
-    const r = await fetch(POSTER_API + '?v=2', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ png, k }) });
+    let r;
+    try { r = await fetch(POSTER_API + '?v=2', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ png, k, ...at }) }); }
+    catch (e) { throw new Error(OUT_OF_REACH); }
     const body = await r.json().catch(() => null);
     if (!r.ok) throw new Error((body && body.error) || 'the pin would not go in');
     takeBoard(body);
     return posters;
   }
   const now = Date.now();
-  posters = [...posters, { id: now, w, h, k, at: now, src: png }];
+  posters = [...posters, { id: now, w, h, k, at: now, src: png, ...at }];
   writePosters(posters);
   return posters;
 }
@@ -133,21 +153,22 @@ export function posterImage(p) {
   return im.ready ? im : null;
 }
 
-export async function postNote(text) {
+export async function postNote(text, place = null) {
   text = cleanText(text);
   if (!text) throw new Error('nothing to pin');
   if (boardFull()) throw new Error(NO_PIN);
+  const at = place && hasPlace(place) ? { x: place.x, y: place.y } : {};
   if (await ensureApi()) {
     let r;
-    try { r = await fetch(API_V2, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }); }
+    try { r = await fetch(API_V2, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, ...at }) }); }
     catch (e) { throw new Error(OUT_OF_REACH); }
     const body = await r.json().catch(() => null);
     if (!r.ok) throw new Error((body && body.error) || 'the pin would not go in');
-    if (!takeBoard(body)) posted = sortByAt([...posted, { id: Date.now(), text, at: Date.now() }]);
+    if (!takeBoard(body)) posted = sortByAt([...posted, { id: Date.now(), text, at: Date.now(), ...at }]);
     return posted;
   }
   const now = Date.now();
-  posted = [...posted, { id: now, text, at: now }];
+  posted = [...posted, { id: now, text, at: now, ...at }];
   writeLocal(posted);
   return posted;
 }
@@ -174,6 +195,25 @@ export async function tearDown(note) {
 // out, and what people have pinned takes those slots over, empty slots first (where a default
 // note was torn down), then most faded first, so a fresh note always covers the oldest paper.
 // Ages are computed from the time of posting. A torn-down slot with nothing pinned is bare cork.
+// Paper placed by hand sits where it was put, in posting order with the slots' newest, so the
+// newest piece on the board is always on top.
+// One pinned item as a note on the scene's cork, in a slot `s` (askew by dx, dy) or at the
+// point (cx, cy) it was placed; `ghost` is the draft while it is being placed.
+function placedItem(n, now, s, dx = 0, dy = 0, cx = null, cy = null) {
+  const atPoint = cx != null;
+  const box = n.poster ? posterBox(n.poster, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy)
+    : atPoint ? noteBox(n.text, cx, cy) : { x: s.x + dx, y: s.y + dy };
+  const paper = atPoint && !n.poster ? box.paper : Math.floor(n.at / 1000) % 6;
+  return { ...(s || {}), ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null, placed: atPoint };
+}
+export function ghostNote(draft, fx, fy, now = Date.now()) {
+  const { cx, cy } = corkPoint(fx, fy);
+  // the draft's picture is cached by id like any poster's, so each draft carries its own
+  const gid = draft.ghostId ?? -1;
+  const n = draft.poster ? { id: gid, at: now, poster: { id: gid, w: draft.poster.w, h: draft.poster.h, k: draft.poster.k, src: draft.poster.png } } : { id: gid, at: now, text: cleanText(draft.text) };
+  const s = placedItem(n, now, null, 0, 0, cx, cy);
+  return Object.assign(makeNote(s.text, s), { mine: true, at: s.at, id: null, seed: null, poster: s.poster, placed: true, k: s.k, ghost: true });
+}
 export function buildNotes(now = Date.now()) {
   const slots = META.notes.map(([x, y, w, h, paper, age], i) => ({ x, y, w, h, paper, age, text: SEED_TEXTS[i % SEED_TEXTS.length], seed: i }));
   const down = new Set(torn.filter((t) => stillDown(t, now)).map((t) => t.seed));
@@ -181,12 +221,10 @@ export function buildNotes(now = Date.now()) {
   // notes and posters share the slots, in the order they went up: the latest take the slots,
   // and everything older piles up beneath them, each a little askew, newest on top; nothing
   // blows away, the oldest is only buried
-  const items = sortByAt([...posted, ...posters.map((p) => ({ ...p, poster: p }))]);
+  const all = sortByAt([...posted, ...posters.map((p) => ({ ...p, poster: p }))]);
+  const byHand = all.filter(hasPlace), items = all.filter((n) => !hasPlace(n));
   const top = items.slice(-slots.length), under = items.slice(0, Math.max(0, items.length - slots.length));
-  const placed = (n, s, dx = 0, dy = 0) => {
-    const box = n.poster ? posterBox(n.poster, s.x + s.w / 2 + dx, s.y + s.h / 2 + dy) : { x: s.x + dx, y: s.y + dy };
-    return { ...s, ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper: Math.floor(n.at / 1000) % 6, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null };
-  };
+  const placed = (n, s, dx = 0, dy = 0) => placedItem(n, now, s, dx, dy);
   const pile = under.map((n, k) => {
     const s = slots[order[k % slots.length]];
     const seed = Math.abs(Math.round(n.id ?? n.at)) % 9973;
@@ -194,6 +232,9 @@ export function buildNotes(now = Date.now()) {
     return { ...placed(n, s, dx, dy), under: true };
   });
   top.forEach((n, k) => { slots[order[k]] = placed(n, slots[order[k]]); });
-  const make = (s) => Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under, k: s.k });
-  return [...pile.map(make), ...slots.filter((s) => s.mine || !down.has(s.seed)).map(make)];
+  const make = (s) => Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under, k: s.k, placed: !!s.placed });
+  // the pile, then the painting's own flyers, then everything pinned in the order it went up
+  const defaults = slots.filter((s) => !s.mine && !down.has(s.seed));
+  const live = [...slots.filter((s) => s.mine), ...byHand.map((n) => { const { cx, cy } = corkPoint(n.x, n.y); return placedItem(n, now, null, 0, 0, cx, cy); })].sort((a, b) => a.at - b.at);
+  return [...pile.map(make), ...defaults.map(make), ...live.map(make)];
 }

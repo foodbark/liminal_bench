@@ -4,7 +4,7 @@
 // browser. See docs/deploy.md.
 //
 //   GET    /api/notes              -> the notes on the board, oldest first: [{ id, text, at }]
-//   POST   /api/notes {text}       -> pins one (201) and returns the board; 429 when the limits are hit,
+//   POST   /api/notes {text, x?, y?} -> pins one (201) and returns the board; 429 when the limits are hit,
 //                                     409 when the board is full (FULL pieces of paper, notes and posters)
 //   DELETE /api/notes {id | seed | poster}  -> tears one down (a posted note by id, a default note
 //                                     by its slot, a poster by id) and returns the board; 429 at the limits
@@ -16,7 +16,7 @@
 // salted daily hash so no address is stored; and a global cap so a crowd cannot flood it either.
 // Tearing down is limited the same way, loosely: a person can clear the board in an hour, which
 // is just life on a public board; a script cannot keep it bare.
-import { board, json, wantsV2, whoHash, paperCount, FULL, NO_PIN, LIFE_DAYS, DAY, HOUR } from './_board.js';
+import { board, json, wantsV2, whoHash, paperCount, placeOf, FULL, NO_PIN, LIFE_DAYS, DAY, HOUR } from './_board.js';
 const MAX_LEN = 80;
 const PER_ADDRESS_HOUR = 3, ALL_HOUR = 30;
 const TEAR_HOUR = 6, ALL_TEAR_HOUR = 60;
@@ -41,7 +41,8 @@ export async function onRequestPost({ request, env }) {
   if (mine >= PER_ADDRESS_HOUR) return json({ error: 'you have pinned enough for now. come back in a while.' }, 429, { 'retry-after': '3600' });
   if (all >= ALL_HOUR) return json({ error: 'the board is full for now. come back later.' }, 429, { 'retry-after': '3600' });
   // a note is never swept: it stays until it is torn down or buried (2026-10-27)
-  await env.DB.prepare('INSERT INTO notes (text, at, who) VALUES (?1, ?2, ?3)').bind(text, now, who).run();
+  const [x, y] = placeOf(body);
+  await env.DB.prepare('INSERT INTO notes (text, at, who, x, y) VALUES (?1, ?2, ?3, ?4, ?5)').bind(text, now, who, x, y).run();
   return json(await board(env.DB, wantsV2(request)), 201);
 }
 
