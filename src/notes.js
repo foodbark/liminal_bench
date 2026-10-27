@@ -18,7 +18,14 @@ import { hash2 } from './util/noise.js';
 const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.posters';
 const API = 'api/notes';   // relative: the site may live at a path prefix
 export const NOTE_MAX = 80;
-const PILE = 24;   // notes, and posters, the board carries: past the slots they pile up, newest on top
+// The board holds FULL pieces of paper, notes and posters together: past the slots they pile up,
+// newest on top, the oldest buried, and at FULL there is not a pin left and no bare cork, so a
+// pin is refused until someone pulls something down (the user, 2026-10-27: a limit, but part of
+// the board; the server says the same, functions/api/_board.js).
+export const FULL = 40;
+export const NO_PIN = 'there is not a pin left, and not a bare inch of cork. something will have to come down first.';
+export const paperCount = () => posted.length + posters.length;
+export const boardFull = () => paperCount() >= FULL;
 // A poster comes in one of three sizes, a handbill, a flyer or a big sheet (its picture at 1, 2
 // or 3 close-up pixels per art pixel), chosen on the pin form (`k`), or picked by its id when
 // nothing was chosen so a board is a mix; its box sits on the slot's center, held inside the
@@ -82,9 +89,9 @@ export async function loadPosted() {
   } catch (e) { /* no API here */ }
   mode = 'local';
   const now = Date.now();
-  posted = sortByAt(readLocal()).slice(-PILE);
+  posted = sortByAt(readLocal()).slice(-FULL);
   torn = readTorn().filter((t) => stillDown(t, now));
-  posters = sortByAt(readPosters()).slice(-PILE);
+  posters = sortByAt(readPosters()).slice(-FULL);
   writeLocal(posted); writeTorn(torn); writePosters(posters);
   return posted;
 }
@@ -101,6 +108,7 @@ const OUT_OF_REACH = 'the board is out of reach right now. try again in a minute
 // Pinning a poster: `png` is the data URL of the art pixels the page made, `w` by `h`.
 export async function postPoster(png, w, h, k = 0) {
   if (!/^data:image\/png;base64,/.test(png || '')) throw new Error('nothing to pin');
+  if (boardFull()) throw new Error(NO_PIN);
   if (await ensureApi()) {
     const r = await fetch(POSTER_API + '?v=2', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ png, k }) });
     const body = await r.json().catch(() => null);
@@ -109,7 +117,7 @@ export async function postPoster(png, w, h, k = 0) {
     return posters;
   }
   const now = Date.now();
-  posters = [...posters, { id: now, w, h, k, at: now, src: png }].slice(-PILE);
+  posters = [...posters, { id: now, w, h, k, at: now, src: png }];
   writePosters(posters);
   return posters;
 }
@@ -128,6 +136,7 @@ export function posterImage(p) {
 export async function postNote(text) {
   text = cleanText(text);
   if (!text) throw new Error('nothing to pin');
+  if (boardFull()) throw new Error(NO_PIN);
   if (await ensureApi()) {
     let r;
     try { r = await fetch(API_V2, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }); }
@@ -138,7 +147,7 @@ export async function postNote(text) {
     return posted;
   }
   const now = Date.now();
-  posted = [...posted, { id: now, text, at: now }].slice(-PILE);
+  posted = [...posted, { id: now, text, at: now }];
   writeLocal(posted);
   return posted;
 }

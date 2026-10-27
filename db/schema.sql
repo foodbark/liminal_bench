@@ -37,7 +37,9 @@ CREATE INDEX IF NOT EXISTS torn_who_at ON torn (who, at);
 -- Posters (2026-10-10): pictures people bring, pixelated in their browser (src/pixelate.js) and
 -- pinned beside the notes (functions/api/posters.js). The PNG the page made, as base64 text:
 -- a few tens of kilobytes each. Nothing on the board is swept (2026-10-27): a note or a poster
--- stays, fading over a year, until it is torn down; past the board's pile the oldest are buried.
+-- stays, fading over a year, until it is torn down, the oldest buried under the newer; at FULL
+-- pieces of paper (40, notes and posters together, _board.js) there is not a pin left and a
+-- pin is refused until someone pulls something down.
 CREATE TABLE IF NOT EXISTS posters (
   id   INTEGER PRIMARY KEY AUTOINCREMENT,
   png  TEXT    NOT NULL,      -- the picture, base64

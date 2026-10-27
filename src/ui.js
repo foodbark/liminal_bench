@@ -1,7 +1,7 @@
 import { W, H, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -143,6 +143,16 @@ export function setupUI(state, canvas) {
     pTitle.textContent = 'bulletin board';
     pBody.innerHTML = '';
     const lead = document.createElement('div');
+    if (boardFull()) {   // the board is full: not a pin left, no bare cork; something has to come down first
+      lead.textContent = 'You feel along the rail for a pin. There is not one left, and not a bare inch of cork. Something will have to come down first.';
+      pBody.append(lead);
+      pActions.innerHTML = '';
+      const done = () => twoStep('board') ? hidePanel() : showPanel('board');
+      const never = document.createElement('button'); never.textContent = 'all right'; never.onclick = done;
+      pActions.append(never);
+      if (twoStep('board')) { const back = document.createElement('button'); back.textContent = 'step back'; back.onclick = leave; pActions.append(back); }
+      return;
+    }
     lead.textContent = 'A pencil stub hangs on a string. You find a blank scrap under the others.';
     const input = document.createElement('input');
     input.id = 'note-text'; input.maxLength = NOTE_MAX; input.placeholder = 'write something'; input.autocomplete = 'off'; input.spellcheck = false;
