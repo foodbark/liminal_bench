@@ -7,15 +7,18 @@ import { hash2 } from './util/noise.js';
 // page is served with the notes API behind it (Cloudflare Pages with functions/api/notes.js, see
 // docs/deploy.md), in which case the same calls go to the server and the board is shared. The
 // API is probed once at load; GitHub Pages and the dev server answer 404 and the board stays
-// single-player. A note yellows and curls over two weeks and is gone a couple of days after.
-// Anyone can tear any note down, the way a real board works: a posted note goes for good, one
-// of the painting's default notes stays down for a note's life and then comes back.
-// A poster is a picture someone brought, pixelated here (src/pixelate.js) and pinned like a note:
-// it takes a slot the same way, ages the same way, and is torn down the same way.
+// single-player. Nothing on the board ages off it (the user, 2026-10-27: notes, posters,
+// everything lives forever and just gets more faded, slowly): a note yellows and curls over a
+// year and is still readable at the end of it, and stays until someone tears it down or newer
+// paper buries it. Anyone can tear any note down, the way a real board works: a posted note
+// goes for good, one of the painting's default notes stays down for a while (TORN_DAYS) and
+// then comes back. A poster is a picture someone brought, pixelated here (src/pixelate.js) and
+// pinned like a note: it takes a slot the same way, bleaches on the same clock, and is torn
+// down the same way.
 const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.posters';
 const API = 'api/notes';   // relative: the site may live at a path prefix
 export const NOTE_MAX = 80;
-const PILE = 24;   // posters the board carries: past the slots they pile up, newest on top
+const PILE = 24;   // notes, and posters, the board carries: past the slots they pile up, newest on top
 // A poster comes in one of three sizes, a handbill, a flyer or a big sheet (its picture at 1, 2
 // or 3 close-up pixels per art pixel), chosen on the pin form (`k`), or picked by its id when
 // nothing was chosen so a board is a mix; its box sits on the slot's center, held inside the
@@ -36,8 +39,8 @@ function posterBox(p, cx, cy) {
   const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - h / 2), CORK.y + 2, CORK.y + CORK.h - h - 2);
   return { x, y, w, h, k };
 }
-export const NOTE_LIFE_DAYS = 16;
-const FADE_DAYS = 14, DAY = 86400e3;
+export const TORN_DAYS = 16;   // a default note torn down comes back after this
+const FADE_DAYS = 365, DAY = 86400e3;   // a note is fully faded, still readable, after a year
 const SEED_TEXTS = ['lost: orange cat, answers to "biscuit"', 'free piano. you haul.', 'open mic thursdays', 'room for rent, quiet house', 'the river is low this year', 'call me'];
 
 let mode = 'local';   // 'local' | 'api'
@@ -49,7 +52,7 @@ let onPosterLoad = () => {};
 export const whenPosterLoads = (fn) => { onPosterLoad = fn; };
 export const notesMode = () => mode;
 export const noteAge = (at, now = Date.now()) => clamp((now - at) / (FADE_DAYS * DAY), 0, 1);
-const alive = (n, now) => now - n.at < NOTE_LIFE_DAYS * DAY;
+const stillDown = (t, now) => now - t.at < TORN_DAYS * DAY;
 export const cleanText = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
 
 function readJSON(key) { try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
@@ -79,9 +82,9 @@ export async function loadPosted() {
   } catch (e) { /* no API here */ }
   mode = 'local';
   const now = Date.now();
-  posted = sortByAt(readLocal()).filter((n) => alive(n, now));
-  torn = readTorn().filter((t) => alive(t, now));
-  posters = sortByAt(readPosters()).filter((p) => alive(p, now));
+  posted = sortByAt(readLocal()).slice(-PILE);
+  torn = readTorn().filter((t) => stillDown(t, now));
+  posters = sortByAt(readPosters()).slice(-PILE);
   writeLocal(posted); writeTorn(torn); writePosters(posters);
   return posted;
 }
@@ -106,7 +109,7 @@ export async function postPoster(png, w, h, k = 0) {
     return posters;
   }
   const now = Date.now();
-  posters = [...posters, { id: now, w, h, k, at: now, src: png }].filter((p) => alive(p, now)).slice(-PILE);
+  posters = [...posters, { id: now, w, h, k, at: now, src: png }].slice(-PILE);
   writePosters(posters);
   return posters;
 }
@@ -135,7 +138,7 @@ export async function postNote(text) {
     return posted;
   }
   const now = Date.now();
-  posted = [...posted, { id: now, text, at: now }].filter((n) => alive(n, now)).slice(-META.notes.length);
+  posted = [...posted, { id: now, text, at: now }].slice(-PILE);
   writeLocal(posted);
   return posted;
 }
@@ -164,20 +167,21 @@ export async function tearDown(note) {
 // Ages are computed from the time of posting. A torn-down slot with nothing pinned is bare cork.
 export function buildNotes(now = Date.now()) {
   const slots = META.notes.map(([x, y, w, h, paper, age], i) => ({ x, y, w, h, paper, age, text: SEED_TEXTS[i % SEED_TEXTS.length], seed: i }));
-  const down = new Set(torn.filter((t) => alive(t, now)).map((t) => t.seed));
+  const down = new Set(torn.filter((t) => stillDown(t, now)).map((t) => t.seed));
   const order = slots.map((s, i) => i).sort((a, b) => (down.has(b) - down.has(a)) || (slots[b].age - slots[a].age));
   // notes and posters share the slots, in the order they went up: the latest take the slots,
-  // and older posters past that pile up beneath them, each a little askew, newest on top (an old
-  // text note simply blows away)
-  const items = sortByAt([...posted.filter((n) => alive(n, now)), ...posters.filter((p) => alive(p, now)).map((p) => ({ ...p, poster: p }))]);
-  const top = items.slice(-slots.length), under = items.slice(0, Math.max(0, items.length - slots.length)).filter((n) => n.poster);
+  // and everything older piles up beneath them, each a little askew, newest on top; nothing
+  // blows away, the oldest is only buried
+  const items = sortByAt([...posted, ...posters.map((p) => ({ ...p, poster: p }))]);
+  const top = items.slice(-slots.length), under = items.slice(0, Math.max(0, items.length - slots.length));
   const placed = (n, s, dx = 0, dy = 0) => {
     const box = n.poster ? posterBox(n.poster, s.x + s.w / 2 + dx, s.y + s.h / 2 + dy) : { x: s.x + dx, y: s.y + dy };
     return { ...s, ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper: Math.floor(n.at / 1000) % 6, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null };
   };
   const pile = under.map((n, k) => {
     const s = slots[order[k % slots.length]];
-    const dx = Math.round((hash2(n.poster.id % 9973, 1, 2) - 0.5) * 20), dy = Math.round((hash2(n.poster.id % 9973, 2, 3) - 0.5) * 16);
+    const seed = Math.abs(Math.round(n.id ?? n.at)) % 9973;
+    const dx = Math.round((hash2(seed, 1, 2) - 0.5) * 20), dy = Math.round((hash2(seed, 2, 3) - 0.5) * 16);
     return { ...placed(n, s, dx, dy), under: true };
   });
   top.forEach((n, k) => { slots[order[k]] = placed(n, slots[order[k]]); });

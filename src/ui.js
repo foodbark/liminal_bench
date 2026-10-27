@@ -368,7 +368,7 @@ const PANELS = {
     body: 'Paper, pins, sun-bleached corners. Some of these have been here a long time.'
       // with a close-up painting the notes are readable on the cork itself; otherwise list them
       + (CLOSEUPS.board ? '' : '<ul class="list">' + state.notes.map((n) => `<li>${escapeHtml(n.text)} <span>${n.mine ? 'yours · ' : ''}${ageLabel(n.age)}</span></li>`).join('') + '</ul>')
-      + '\n<span class="dim">' + (notesMode() === 'api' ? 'Anyone who stops here can read these.' : 'Whatever you pin stays in this browser, for a couple of weeks.') + '</span>',
+      + '\n<span class="dim">' + (notesMode() === 'api' ? 'Anyone who stops here can read these.' : 'Whatever you pin stays in this browser.') + '</span>',
     actions: [
       ['pin a note', api.compose],
       ['step back', api.leave],
@@ -384,5 +384,5 @@ const PANELS = {
     };
   },
 };
-function ageLabel(a) { return a < 0.15 ? 'new' : a < 0.4 ? 'a few days' : a < 0.7 ? 'weeks' : 'faded'; }
+function ageLabel(a) { return a < 0.08 ? 'new' : a < 0.3 ? 'a while' : a < 0.7 ? 'months' : 'faded'; }
 function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }

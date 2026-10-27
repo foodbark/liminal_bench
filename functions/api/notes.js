@@ -3,7 +3,7 @@
 // the board is shared; where it is absent (GitHub Pages, the dev server) the board stays in the
 // browser. See docs/deploy.md.
 //
-//   GET    /api/notes              -> the notes still on the board, oldest first: [{ id, text, at }]
+//   GET    /api/notes              -> the notes on the board, oldest first: [{ id, text, at }]
 //   POST   /api/notes {text}       -> pins one (201) and returns the board; 429 when the limits are hit
 //   DELETE /api/notes {id | seed | poster}  -> tears one down (a posted note by id, a default note
 //                                     by its slot, a poster by id) and returns the board; 429 at the limits
@@ -38,10 +38,8 @@ export async function onRequestPost({ request, env }) {
   ]);
   if (mine >= PER_ADDRESS_HOUR) return json({ error: 'you have pinned enough for now. come back in a while.' }, 429, { 'retry-after': '3600' });
   if (all >= ALL_HOUR) return json({ error: 'the board is full for now. come back later.' }, 429, { 'retry-after': '3600' });
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO notes (text, at, who) VALUES (?1, ?2, ?3)').bind(text, now, who),
-    env.DB.prepare('DELETE FROM notes WHERE at < ?1').bind(now - 2 * LIFE_DAYS * DAY),   // long since blown away
-  ]);
+  // a note is never swept: it stays until it is torn down or buried (2026-10-27)
+  await env.DB.prepare('INSERT INTO notes (text, at, who) VALUES (?1, ?2, ?3)').bind(text, now, who).run();
   return json(await board(env.DB, wantsV2(request)), 201);
 }
 

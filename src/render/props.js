@@ -30,12 +30,12 @@ export function makeNote(text, opts = {}) {
   return { text, x: opts.x ?? CORK.x + 8, y: opts.y ?? CORK.y + 8, w: opts.w ?? 30, h: opts.h ?? 38, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b' };
 }
 // A note is a scrap of paper at unit `u` (1 on the scene; the close-up's scale, where the text is
-// set for real). Aging yellows and curls it.
+// set for real). Aging yellows and curls it, over a year, and the ink stays readable at the end.
 function drawNote(ctx, n, u = 1, legible = false) {
   if (n.poster) return drawPosterNote(ctx, n, u, legible);
   const fade = clamp(n.age, 0, 1);
   const paper = lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], fade * 0.75);
-  const ink = lerpRGB([80, 82, 96], [150, 130, 105], fade);
+  const ink = lerpRGB([80, 82, 96], [128, 106, 82], fade);
   const x = n.x, y = n.y, w = n.w, h = n.h, s = Math.max(1, Math.round(u));
   const edge = rgb(lerpRGB(paper, [0, 0, 0], 0.18));
   px(ctx, '#5a4030', x + s, y + s, w, h);            // shadow on the cork
@@ -60,7 +60,28 @@ function drawNote(ctx, n, u = 1, legible = false) {
 
 // A poster: the picture with a thin white border, the paper cut to it, centered in its slot.
 // On the scene the picture is averaged down to fit (a hard shrink drops rows of its pixels); up
-// close it is laid at a whole-number scale so its pixels stay square. The border yellows with age.
+// close it is laid at a whole-number scale so its pixels stay square. The border yellows with age
+// and the picture bleaches the way a poster does in the sun, its warm inks going first so it
+// cools and pales, over the same year as a note, and stays recognizable at the end.
+const BLEACH_STEPS = 8, BLEACH = 0.6, bleached = new Map();   // `id|step` -> the bleached picture
+function posterPicture(p, age) {
+  const im = posterImage(p);
+  const step = Math.round(clamp(age, 0, 1) * BLEACH_STEPS);
+  if (!im || !step) return im;
+  const key = p.id + '|' + step;
+  let c = bleached.get(key);
+  if (!c) {
+    const [cv, g] = makeCanvas(im.width, im.height);
+    g.drawImage(im, 0, 0);
+    let img;
+    try { img = g.getImageData(0, 0, im.width, im.height); } catch (e) { return im; }   // a picture the canvas may not read stays as it is
+    const d = img.data, f = step / BLEACH_STEPS * BLEACH;
+    for (let i = 0; i < d.length; i += 4) { d[i] += (216 - d[i]) * f; d[i + 1] += (218 - d[i + 1]) * f * 0.9; d[i + 2] += (224 - d[i + 2]) * f * 0.75; }
+    g.putImageData(img, 0, 0);
+    c = cv; bleached.set(key, c);
+  }
+  return c;
+}
 // A size in screen pixels, as canvas pixels: the canvas is shown scaled by --s (shrunk on most
 // screens), and a border sized in canvas pixels came out a hair wide on one machine and gone on
 // the next.
@@ -70,7 +91,7 @@ function screenPx(px) {
   return Math.max(1, Math.round(px / css));
 }
 function drawPosterNote(ctx, n, u = 1, legible = false) {
-  const im = posterImage(n.poster);
+  const im = posterPicture(n.poster, n.age);
   const s = Math.max(1, Math.round(u)), b = n.border ?? screenPx(legible ? 2 : 1.5);
   const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
   let dw, dh;
