@@ -1,6 +1,5 @@
 import { W, H, HORIZON, SCALE, META } from '../state.js';
 import { ditherPattern, fillCircle, clamp, rgb, lerpRGB, hex, makeCanvas } from '../util/pixel.js';
-import { hash2 } from '../util/noise.js';
 import { posterImage } from '../notes.js';
 
 // The bench, bulletin board, pay phone and pole are part of the painting (art/concept_art_03.png,
@@ -35,21 +34,15 @@ function drawNote(ctx, n, u = 1, legible = false) {
   if (n.poster) return drawPosterNote(ctx, n, u, legible);
   const fade = clamp(n.age, 0, 1);
   const paper = lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], fade * 0.75);
-  const ink = lerpRGB([80, 82, 96], [128, 106, 82], fade);
+  const hand = handFor(n.text), ink = lerpRGB(hand.ink, [128, 106, 82], fade);
   const x = n.x, y = n.y, w = n.w, h = n.h, s = Math.max(1, Math.round(u));
   const edge = rgb(lerpRGB(paper, [0, 0, 0], 0.18));
   px(ctx, '#5a4030', x + s, y + s, w, h);            // shadow on the cork
   px(ctx, rgb(paper), x, y, w, h);
   px(ctx, edge, x + w - s, y, s, h);
   px(ctx, edge, x, y + h - s, w, s);
-  if (legible) {
-    drawNoteText(ctx, n.text, x + 4 * s, y + 4 * s, w - 8 * s, h - 8 * s, rgb(ink), u);
-  } else {
-    // a heading and scribbled lines of "text"
-    ctx.fillStyle = rgb(ink); ctx.fillRect(x + 4, y + 5, Math.max(4, (w >> 1) - (hash2(x, y, 6) * 6 | 0)), 2);
-    ctx.fillStyle = ditherPattern(ctx, rgb(ink), fade > 0.6 ? 6 : 12);
-    for (let ly = y + 10; ly < y + h - 4; ly += 3) ctx.fillRect(x + 4, ly, w - 8 - (hash2(ly, x, 5) * 10 | 0), 1);
-  }
+  if (legible) drawNoteText(ctx, n.text, x + 4 * s, y + 4 * s, w - 8 * s, h - 8 * s, rgb(ink), u, hand);
+  else drawNoteText(ctx, n.text, x + 3, y + 5, w - 6, h - 8, rgb(ink), 1, hand, true);   // the same words, tiny
   // weathering: curled and torn corners, cork showing through
   const c = 3 * s, curl = rgb(lerpRGB(paper, [0, 0, 0], 0.3));
   if (fade > 0.35) { for (let i = 0; i < c; i++) px(ctx, '#8b6a4a', x, y + h - 1 - i, c - i, 1); px(ctx, curl, x + s, y + h - c, 2 * s, s); }
@@ -117,20 +110,53 @@ export function drawPosterView(ctx, n) {
   drawPosterNote(ctx, { ...n, x: (W - w) >> 1, y: (H - h) >> 1, w, h, border: b, k }, s, true);
 }
 
-// Text in the page's font, wrapped to the paper and snapped to hard pixels: the glyphs are set on
-// a scratch canvas and their coverage thresholded, so nothing anti-aliases on the cork.
-const NOTE_FONT = 'VT323';
-let fontAsked = false;
-export function noteFontReady() {
-  if (typeof document === 'undefined' || !document.fonts) return true;
-  if (!fontAsked) { fontAsked = true; document.fonts.load(`24px "${NOTE_FONT}"`).catch(() => {}); }
-  return document.fonts.check(`24px "${NOTE_FONT}"`);
+// Text wrapped to the paper and snapped to hard pixels: the glyphs are set on a scratch canvas
+// and their coverage thresholded, so nothing anti-aliases on the cork. Every note is in its own
+// hand (the user, 2026-10-28: "more handwritten, or a mix of hand writings"), picked from a hash
+// of its words so a note is in the same hand everywhere and forever, with the hand's own ink: a
+// blue ballpoint, a black felt-tip, a pencil. A fifth of the notes stay typed, since a real
+// board has printed sheets too. On the scene the same words are set tiny in the same hand, not
+// readable, as from the bench, but a looping cursive tells from a fat marker from a typed sheet,
+// and walking up to the board shows the same lines bigger.
+const BLUE = [38, 52, 128], BLACK = [40, 40, 46], PENCIL = [92, 92, 100], TYPED = [80, 82, 96];
+const HANDS = [
+  { face: 'VT323', ink: TYPED, size: 1, line: 0.92, mono: true },
+  { face: 'Patrick Hand', ink: BLUE, size: 1.05, line: 1 },
+  { face: 'Kalam', ink: BLACK, size: 1, line: 1.05 },
+  { face: 'Caveat', ink: BLUE, size: 1.2, line: 0.9 },
+  { face: 'Shadows Into Light', ink: PENCIL, size: 1.1, line: 1 },
+  { face: 'Homemade Apple', ink: BLUE, size: 0.85, line: 1.3 },
+  { face: 'Permanent Marker', ink: BLACK, size: 0.95, line: 1.05 },
+  { face: 'Rock Salt', ink: BLACK, size: 0.72, line: 1.3 },
+];
+const HAND_PICK = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1];   // VT323 twice in ten
+const wordsHash = (t) => { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) >>> 0; return h; };
+export function handFor(text) { return HANDS[HAND_PICK[(wordsHash(String(text || '')) >>> 16) % HAND_PICK.length]]; }
+
+// Which faces have arrived. The key goes into the props and close-up keys so both redraw as the
+// faces land; a face is counted only when the browser says its file loaded (`check` says yes for
+// a face it has never heard of, which drew a fallback once).
+const loaded = new Set();
+let handsAsked = false, handsKeyStr = '';
+export function handsKey() {
+  if (typeof document === 'undefined' || !document.fonts) return 'all';
+  if (!handsAsked) {
+    handsAsked = true;
+    const ask = (face, again) => document.fonts.load(`24px "${face}"`).then((fs) => {
+      if (fs.length) { loaded.add(face); handsKeyStr = [...loaded].join(','); }
+      else if (again) setTimeout(() => ask(face, false), 2500);   // the stylesheet was not in yet
+    }).catch(() => {});
+    for (const h of HANDS) ask(h.face, true);
+  }
+  return handsKeyStr;
 }
-function drawNoteText(ctx, text, x, y, w, h, color, u) {
-  const size = Math.round(clamp(w / 6.5, 6 * u, 14 * u)), lineH = Math.round(size * 0.92);
-  if (size < 6 || w < 8 || h < lineH) return;
+export function noteFontReady() { return handsKey().includes('VT323'); }
+function drawNoteText(ctx, text, x, y, w, h, color, u, hand = HANDS[0], tiny = false) {
+  const base = tiny ? clamp(w / 8, 5, 9) : clamp(w / 6.5, 6 * u, 14 * u);
+  const size = Math.round(base * hand.size), lineH = Math.round(size * hand.line);
+  if (size < 4 || w < 8 || h < lineH) return;
   const [c, g] = makeCanvas(w, h);
-  g.font = `${size}px "${NOTE_FONT}", "Courier New", monospace`;
+  g.font = `${size}px "${hand.face}", ${hand.mono ? '"Courier New", monospace' : 'cursive'}`;
   g.textBaseline = 'top'; g.fillStyle = color;
   const fits = (t) => g.measureText(t).width <= w;
   const lines = [];
@@ -149,8 +175,8 @@ function drawNoteText(ctx, text, x, y, w, h, color, u) {
   if (line) lines.push(line);
   const max = Math.floor(h / lineH);
   lines.slice(0, max).forEach((t, i) => g.fillText(t, 0, i * lineH));
-  const img = g.getImageData(0, 0, w, h), d = img.data;
-  for (let i = 3; i < d.length; i += 4) d[i] = d[i] > 110 ? 255 : 0;
+  const img = g.getImageData(0, 0, w, h), d = img.data, cut = tiny ? 70 : 110;   // a thin stroke at 6 px keeps its pixels
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i] > cut ? 255 : 0;
   g.putImageData(img, 0, 0);
   ctx.drawImage(c, x, y);
 }

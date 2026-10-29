@@ -12,7 +12,7 @@ function envForWorker(env) {
     photoAlto: !!photoField(), photoCirrus: !!photoCirrus(), photoDecks: !!photoDecks(),
   };
 }
-import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, drawGhostNote, noteFontReady, CLOSEUPS, drawPosterView } from './props.js';
+import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, drawGhostNote, handsKey, CLOSEUPS, drawPosterView } from './props.js';
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
@@ -136,7 +136,7 @@ export class Renderer {
         this.worker.postMessage({ kind: 'sheets', key: env.sheetKey, env: envForWorker(env) });
       }
     }
-    const propsKey = env.sunSide + '|' + env.groundSnow + '|' + state.notesVersion;
+    const propsKey = env.sunSide + '|' + env.groundSnow + '|' + state.notesVersion + '|' + handsKey();
     if (propsKey !== this.propsKey) { drawProps(this.propsCtx, state, env.sunSide, env.groundSnow); this.propsKey = propsKey; this.tintKey = ''; this.dirty = true; }
     const tintKey = env.ambientKey;
     if (tintKey !== this.tintKey) {
@@ -192,7 +192,7 @@ export class Renderer {
     // Standing at a prop: its close-up painting over the zoomed scene, notes set legibly on its
     // cork, lit by the same ambient as the props. Rebuilt only when something on it changes.
     const cuId = state.closeup && CLOSEUPS[state.closeup] && this.closeupImgs[state.closeup] ? state.closeup : null;
-    const cuKey = cuId ? `${cuId}|${this.tintKey}|${state.notesVersion}|${noteFontReady()}` : '';
+    const cuKey = cuId ? `${cuId}|${this.tintKey}|${state.notesVersion}|${handsKey()}` : '';
     if (cuKey !== this.closeupKey) {
       this.closeupKey = cuKey; this.dirty = true;
       if (cuId) {
