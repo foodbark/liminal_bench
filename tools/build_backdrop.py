@@ -98,18 +98,57 @@ def classify(rgb):
     return tan, green, dark, navy
 
 
-def clear_cork(rgb, cork):
-    """Replace the painted notes on the cork with cork texture sampled from the rest of the cork."""
+def clear_cork(rgb, cork, boxes=()):
+    """Replace the painted notes on the cork with cork texture copied from the rest of the cork.
+    The paper (pale, or red ink, or the gray of a photo), the config's note boxes grown for their
+    drop shadows, and a rim around all of it are filled with small blocks copied whole from
+    clean cork, so the fill keeps the cork's own mottle; a per-pixel pool fill left a speckle
+    with the painted notes' lines and shadows still showing through once a smaller scrap was
+    pinned over the slot (2026-10-28)."""
     out = rgb.copy(); rs = np.random.RandomState(9)
     x0, y0, x1, y1 = cork
-    sub = rgb[y0:y1, x0:x1].astype(int)
-    lum = 0.299 * sub[..., 0] + 0.587 * sub[..., 1] + 0.114 * sub[..., 2]
-    red = sub[..., 0] > sub[..., 1] + 50
-    paper = majority((lum > 138) | red, 2)
-    pool = sub[~paper & (lum > 55) & (lum < 130)]
-    if len(pool):
-        ys, xs = np.nonzero(paper)
-        out[y0 + ys, x0 + xs] = pool[rs.randint(0, len(pool), len(xs))]
+    sub = rgb[y0:y1, x0:x1].astype(int); H, W = sub.shape[:2]
+    r, g, b = sub[..., 0], sub[..., 1], sub[..., 2]
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    red = r > g + 50
+    gray = (np.abs(r - g) < 12) & (np.abs(g - b) < 12) & (lum > 95)
+    dirty = majority((lum > 138) | red | gray, 2) | (lum > 150)
+    for bx, by, bw, bh in boxes:
+        dirty[max(0, by - y0 - 3):min(H, by - y0 + bh + 6), max(0, bx - x0 - 3):min(W, bx - x0 + bw + 6)] = True
+    M = 8   # the cork's shaded rim under the rail stays as painted
+    inner = np.zeros_like(dirty); inner[M:H - M, M:W - M] = True
+    mid = np.median(lum[~dirty & inner])   # the cork's own tone
+    dirty |= (np.abs(lum - mid) > 22) & inner   # a note's shadow bar, a pale edge line
+    grown = dirty.copy()
+    for dy in (-2, -1, 0, 1, 2):
+        for dx in (-2, -1, 0, 1, 2): grown |= np.roll(np.roll(dirty, dy, 0), dx, 1)
+    dirty = grown & inner
+    clean = ~dirty & (lum > 55) & (lum < 130)
+    B = 6
+    ii = np.pad(np.cumsum(np.cumsum(clean.astype(np.int32), 0), 1), ((1, 0), (1, 0)))
+    ys, xs = np.mgrid[0:H - B + 1, 0:W - B + 1]
+    full = (ii[ys + B, xs + B] - ii[ys, xs + B] - ii[ys + B, xs] + ii[ys, xs]) == B * B
+    # copy only from smooth cork of the cork's own tone: the shaded margin by the rail and the
+    # dark spots made a mottle of blocks
+    li = np.pad(np.cumsum(np.cumsum(lum, 0), 1), ((1, 0), (1, 0)))
+    l2 = np.pad(np.cumsum(np.cumsum(lum * lum, 0), 1), ((1, 0), (1, 0)))
+    bsum = li[ys + B, xs + B] - li[ys, xs + B] - li[ys + B, xs] + li[ys, xs]
+    bsq = l2[ys + B, xs + B] - l2[ys, xs + B] - l2[ys + B, xs] + l2[ys, xs]
+    bmean = bsum / (B * B); bstd = np.sqrt(np.maximum(0, bsq / (B * B) - bmean * bmean))
+    src = np.argwhere(full & (np.abs(bmean - mid) < 5) & (bstd < 9))
+    if not len(src): src = np.argwhere(full)
+    if not len(src):
+        return out
+    filled = 0
+    for by in range(0, H, B):
+        for bx in range(0, W, B):
+            blk = dirty[by:by + B, bx:bx + B]
+            if not blk.any(): continue
+            sy, sx = src[rs.randint(0, len(src))]
+            patch = sub[sy:sy + blk.shape[0], sx:sx + blk.shape[1]]
+            tgt = out[y0 + by:y0 + by + blk.shape[0], x0 + bx:x0 + bx + blk.shape[1]]
+            tgt[blk] = patch[blk]; filled += int(blk.sum())
+    print(f'cork: cleared {filled} px of painted notes with {len(src)} clean blocks to copy from')
     return out
 
 
@@ -255,7 +294,7 @@ def main():
         if pf.size != art.size: pf = pf.resize(art.size, Image.NEAREST)
         pf = pad(pf)
         rgb = rgb.copy(); rgb[prop] = pf[prop]
-    rgb = clear_cork(rgb, CORK)
+    rgb = clear_cork(rgb, CORK, [[S(v) for v in n[:4]] for n in cfg['notes']])
     yy, xx = np.mgrid[0:H, 0:W]
     peak = poly_mask(PEAK, W, H)
 

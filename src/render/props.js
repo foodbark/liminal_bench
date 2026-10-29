@@ -119,19 +119,64 @@ export function drawPosterView(ctx, n) {
 // readable, as from the bench, but a looping cursive tells from a fat marker from a typed sheet,
 // and walking up to the board shows the same lines bigger.
 const BLUE = [38, 52, 128], BLACK = [40, 40, 46], PENCIL = [92, 92, 100], TYPED = [80, 82, 96];
+// `cw`, `cwU`, `asc`, `desc` are each face's measured mean glyph advance (lowercase, capitals)
+// and its tallest ascent and descent, as fractions of the font size, for sizing a scrap to its
+// words before the face has loaded. `bold` strokes a thin face a little heavier before the
+// threshold, `cut` is its own threshold.
 const HANDS = [
-  { face: 'VT323', ink: TYPED, size: 1, line: 0.92, mono: true },
-  { face: 'Patrick Hand', ink: BLUE, size: 1.05, line: 1 },
-  { face: 'Kalam', ink: BLACK, size: 1, line: 1.05 },
-  { face: 'Caveat', ink: BLUE, size: 1.2, line: 0.9 },
-  { face: 'Shadows Into Light', ink: PENCIL, size: 1.1, line: 1 },
-  { face: 'Homemade Apple', ink: BLUE, size: 0.85, line: 1.3 },
-  { face: 'Permanent Marker', ink: BLACK, size: 0.95, line: 1.05 },
-  { face: 'Rock Salt', ink: BLACK, size: 0.72, line: 1.3 },
+  { face: 'VT323', ink: TYPED, size: 1, line: 0.92, cw: 0.4, cwU: 0.4, asc: 0.56, desc: 0.16, mono: true },
+  { face: 'Patrick Hand', ink: BLUE, size: 1.05, line: 1, cw: 0.353, cwU: 0.447, asc: 0.72, desc: 0.31 },
+  { face: 'Kalam', ink: BLACK, size: 1, line: 1.05, cw: 0.422, cwU: 0.571, asc: 0.8, desc: 0.25 },
+  { face: 'Caveat', ink: BLUE, size: 1.2, line: 0.95, cw: 0.329, cwU: 0.474, asc: 0.71, desc: 0.25 },
+  { face: 'Shadows Into Light', ink: PENCIL, size: 1.1, line: 1.2, cw: 0.374, cwU: 0.502, asc: 0.9, desc: 0.44 },
+  { face: 'Homemade Apple', ink: BLUE, size: 0.9, line: 1.4, cw: 0.544, cwU: 0.702, asc: 0.99, desc: 0.85, bold: 0.05, cut: 80 },
+  { face: 'Permanent Marker', ink: BLACK, size: 0.95, line: 1, cw: 0.5, cwU: 0.627, asc: 0.75, desc: 0.06 },
+  { face: 'Rock Salt', ink: BLACK, size: 0.72, line: 1.35, cw: 0.62, cwU: 0.84, asc: 1.04, desc: 0.3 },
 ];
 const HAND_PICK = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1];   // VT323 twice in ten
 const wordsHash = (t) => { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) >>> 0; return h; };
 export function handFor(text) { return HANDS[HAND_PICK[(wordsHash(String(text || '')) >>> 16) % HAND_PICK.length]]; }
+
+// The font size for a scrap `w` wide at unit `u`; tiny is the scene's unreadable setting.
+const fontSize = (w, u, hand, tiny) => (tiny ? clamp(w / 8, 5, 9) : clamp(w / 6.5, 6 * u, 14 * u)) * hand.size;
+// Words wrapped to a width by a measure; a word wider than the paper breaks where it must.
+function wrapLines(text, w, measure) {
+  const fits = (t) => measure(t) <= w, lines = [];
+  let line = '';
+  for (const word of String(text).split(' ')) {
+    if (!word) continue;
+    if (fits(line ? line + ' ' + word : word)) { line = line ? line + ' ' + word : word; continue; }
+    if (line) lines.push(line);
+    line = word;
+    while (!fits(line) && line.length > 1) {
+      let k = line.length - 1;
+      while (k > 1 && !fits(line.slice(0, k))) k--;
+      lines.push(line.slice(0, k)); line = line.slice(k);
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+// A scrap sized to its words (the user, 2026-10-28: short notes on less paper, and not all the
+// same size): the width grows with the length of the note, with a little of the hash in it, and
+// the height is what the words wrap to in the note's hand, estimated from the face's measured
+// glyph widths so it is known before the face has loaded, the same everywhere and forever.
+const SCRAP_MIN = 34, SCRAP_MAX = 88, MARGIN = 4;
+export function scrapFor(text) {
+  const t = String(text || ''), hand = handFor(t), hh = wordsHash(t);
+  const j = (k) => ((hh >>> (k * 5)) & 31) / 31;
+  const est = (s, fs) => { let x = 0; for (const ch of s) x += (ch >= 'A' && ch <= 'Z' ? hand.cwU : hand.cw) * fs; return x; };
+  let w = Math.round(clamp(30 + Math.sqrt(t.length) * 5.4 + (j(1) - 0.5) * 16, SCRAP_MIN, SCRAP_MAX));
+  let fs = fontSize(w, 1, hand, false), inner = w - 2 * MARGIN;
+  for (let k = 0; k < 4; k++) {   // widen for a word wider than the paper, if there is room
+    const longest = Math.max(0, ...t.split(' ').map((s) => est(s, fs)));
+    if (longest <= inner || w >= SCRAP_MAX) break;
+    w = Math.min(SCRAP_MAX, Math.ceil(longest + 2 * MARGIN + 2)); fs = fontSize(w, 1, hand, false); inner = w - 2 * MARGIN;
+  }
+  const lines = wrapLines(t, inner, (s) => est(s, fs)).length, lineH = Math.round(fs * hand.line);
+  const h = Math.round(2 * MARGIN + fs * hand.asc + (lines - 1) * lineH + fs * hand.desc + 2 + j(2) * 6);
+  return { w, h: clamp(h, 20, CORK.h - 4), paper: (hh >>> 8) % 6 };
+}
 
 // Which faces have arrived. The key goes into the props and close-up keys so both redraw as the
 // faces land; a face is counted only when the browser says its file loaded (`check` says yes for
@@ -151,31 +196,25 @@ export function handsKey() {
   return handsKeyStr;
 }
 export function noteFontReady() { return handsKey().includes('VT323'); }
+// The words set on the paper: wrapped in the hand, the first baseline set down by the face's
+// real ascent (set at the top, a tall hand's ascenders were cut off by the paper's edge), and
+// the size stepped down until the lines fit, since the scrap was sized by an estimate.
 function drawNoteText(ctx, text, x, y, w, h, color, u, hand = HANDS[0], tiny = false) {
-  const base = tiny ? clamp(w / 8, 5, 9) : clamp(w / 6.5, 6 * u, 14 * u);
-  const size = Math.round(base * hand.size), lineH = Math.round(size * hand.line);
-  if (size < 4 || w < 8 || h < lineH) return;
+  let size = Math.round(fontSize(w, u, hand, tiny));
+  if (size < 4 || w < 8 || h < 4) return;
   const [c, g] = makeCanvas(w, h);
-  g.font = `${size}px "${hand.face}", ${hand.mono ? '"Courier New", monospace' : 'cursive'}`;
-  g.textBaseline = 'top'; g.fillStyle = color;
-  const fits = (t) => g.measureText(t).width <= w;
-  const lines = [];
-  let line = '';
-  for (const word of String(text).split(' ')) {
-    if (!word) continue;
-    if (fits(line ? line + ' ' + word : word)) { line = line ? line + ' ' + word : word; continue; }
-    if (line) lines.push(line);
-    line = word;
-    while (!fits(line) && line.length > 1) {   // a word wider than the paper breaks where it must
-      let k = line.length - 1;
-      while (k > 1 && !fits(line.slice(0, k))) k--;
-      lines.push(line.slice(0, k)); line = line.slice(k);
-    }
+  g.textBaseline = 'alphabetic'; g.fillStyle = color; g.strokeStyle = color; g.lineJoin = 'round';
+  for (let k = 0; ; k++) {
+    g.font = `${size}px "${hand.face}", ${hand.mono ? '"Courier New", monospace' : 'cursive'}`;
+    const lines = wrapLines(text, w, (t) => g.measureText(t).width);
+    const m = g.measureText('Hbdfghjklpqy'), asc = Math.ceil(m.actualBoundingBoxAscent), desc = Math.ceil(m.actualBoundingBoxDescent);
+    const lineH = Math.round(size * hand.line), max = Math.max(1, 1 + Math.floor((h - asc - desc) / lineH));
+    if (lines.length > max && k < 4 && size > 4) { size = Math.max(4, Math.round(size * 0.88)); continue; }
+    if (hand.bold && !tiny) g.lineWidth = size * hand.bold;
+    lines.slice(0, max).forEach((t, i) => { g.fillText(t, 0, asc + i * lineH); if (hand.bold && !tiny) g.strokeText(t, 0, asc + i * lineH); });
+    break;
   }
-  if (line) lines.push(line);
-  const max = Math.floor(h / lineH);
-  lines.slice(0, max).forEach((t, i) => g.fillText(t, 0, i * lineH));
-  const img = g.getImageData(0, 0, w, h), d = img.data, cut = tiny ? 70 : 110;   // a thin stroke at 6 px keeps its pixels
+  const img = g.getImageData(0, 0, w, h), d = img.data, cut = tiny ? 70 : (hand.cut ?? 110);   // a thin stroke at 6 px keeps its pixels
   for (let i = 3; i < d.length; i += 4) d[i] = d[i] > cut ? 255 : 0;
   g.putImageData(img, 0, 0);
   ctx.drawImage(c, x, y);

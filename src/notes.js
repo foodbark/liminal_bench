@@ -1,5 +1,5 @@
 import { META, SMALL } from './state.js';
-import { makeNote, CORK, CLOSEUPS } from './render/props.js';
+import { makeNote, scrapFor, CORK, CLOSEUPS } from './render/props.js';
 import { clamp } from './util/pixel.js';
 import { hash2 } from './util/noise.js';
 
@@ -43,12 +43,10 @@ export function pickPosterSize(r = Math.random()) {
 }
 // A posted note's scrap: its size and paper from a hash of its words, since both are needed
 // before the server has given it a time or an id, and the same everywhere it is seen.
-const strHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
 export function noteBox(text, cx, cy) {
-  const h = strHash(text), s = META.notes[h % META.notes.length];
-  const w = s[2], hh = s[3];
-  const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - hh / 2), CORK.y + 2, CORK.y + CORK.h - hh - 2);
-  return { x, y, w, h: hh, paper: (h >>> 8) % 6 };
+  const { w, h, paper } = scrapFor(text);   // sized to its words, in its hand
+  const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - h / 2), CORK.y + 2, CORK.y + CORK.h - h - 2);
+  return { x, y, w, h, paper };
 }
 // Where a position's fractions fall on the scene's cork.
 export const corkPoint = (fx, fy) => ({ cx: CORK.x + clamp(fx, 0, 1) * CORK.w, cy: CORK.y + clamp(fy, 0, 1) * CORK.h });
@@ -202,7 +200,7 @@ export async function tearDown(note) {
 function placedItem(n, now, s, dx = 0, dy = 0, cx = null, cy = null) {
   const atPoint = cx != null;
   const box = n.poster ? posterBox(n.poster, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy)
-    : atPoint ? noteBox(n.text, cx, cy) : { x: s.x + dx, y: s.y + dy };
+    : noteBox(n.text, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy);   // a note in a slot is sized to its words too, on the slot's center
   const paper = atPoint && !n.poster ? box.paper : Math.floor(n.at / 1000) % 6;
   return { ...(s || {}), ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null, placed: atPoint };
 }
@@ -232,7 +230,7 @@ export function buildNotes(now = Date.now()) {
     return { ...placed(n, s, dx, dy), under: true };
   });
   top.forEach((n, k) => { slots[order[k]] = placed(n, slots[order[k]]); });
-  const make = (s) => Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under, k: s.k, placed: !!s.placed });
+  const make = (s0) => { const s = s0.mine || s0.poster ? s0 : { ...s0, ...noteBox(s0.text, s0.x + s0.w / 2, s0.y + s0.h / 2), paper: s0.paper }; return Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under, k: s.k, placed: !!s.placed }); };
   // the pile, then the painting's own flyers, then everything pinned in the order it went up
   const defaults = slots.filter((s) => !s.mine && !down.has(s.seed));
   const live = [...slots.filter((s) => s.mine), ...byHand.map((n) => { const { cx, cy } = corkPoint(n.x, n.y); return placedItem(n, now, null, 0, 0, cx, cy); })].sort((a, b) => a.at - b.at);
