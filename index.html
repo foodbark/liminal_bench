@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>a place, sort of. . .</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=VT323&family=Caveat&family=Homemade+Apple&family=Kalam&family=Patrick+Hand&family=Permanent+Marker&family=Rock+Salt&family=Shadows+Into+Light&display=block" rel="stylesheet">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -21,13 +20,7 @@
   </div>
 </div>
 <div id="loading"><div id="loading-title">a place, sort of.</div><div id="loading-status">loading the painting<span id="loading-dots"></span></div></div>
-<script>
-// the loading screen's words wait for the face they are set in (a fallback font that then
-// swaps was the first thing seen); after a few seconds they show in whatever there is
-(function () { var l = document.getElementById('loading'), show = function () { l.classList.add('font'); };
-  if (document.fonts && document.fonts.load) document.fonts.load('24px "VT323"').then(show, show); else show();
-  setTimeout(show, 4000); })();
-</script>
+<script src="src/loading.js"></script>
 <div id="rotate">turn your phone sideways</div>
 <div id="debug" hidden>
   <div class="row"><b>debug</b> <span class="hint">(press D to hide)</span></div>
