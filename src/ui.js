@@ -1,5 +1,5 @@
 import { W, H, SCALE, META, formatTime } from './state.js';
-import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
+import { HOTSPOTS, CLOSEUPS, CORK, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
 import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
@@ -74,16 +74,25 @@ export function setupUI(state, canvas) {
     if (mx < cu.cork.x - m || mx > cu.cork.x + cu.cork.w + m || my < cu.cork.y - m || my > cu.cork.y + cu.cork.h + m) return null;
     return { fx: Math.min(1, Math.max(0, (mx - cu.cork.x) / cu.cork.w)), fy: Math.min(1, Math.max(0, (my - cu.cork.y) / cu.cork.h)) };
   }
+  // where the carried paper's center goes for this pointer: a held piece keeps the grip it was
+  // picked up by (`held.ox`, `held.oy`: its center's offset from the pointer, in cork fractions),
+  // so it neither jumps at the pickup nor lands anywhere but where it is seen; null off the cork
+  function carriedTo(e) {
+    const p = corkAt(e); if (!p) return null;
+    const h = state.placing.held;
+    return h ? { fx: Math.min(1, Math.max(0, p.fx + h.ox)), fy: Math.min(1, Math.max(0, p.fy + h.oy)) } : p;
+  }
+  // carrying the paper: it follows the pointer over the cork
+  function carry(e) {
+    const p = carriedTo(e);
+    if (p) { state.placing.fx = p.fx; state.placing.fy = p.fy; state.placing.note = ghostNote(state.placing, p.fx, p.fy); }
+    canvas.classList.toggle('hot', !!p && !state.placing.held);
+  }
   canvas.addEventListener('mousemove', (e) => {
-    if (state.placing) {   // carrying the paper: it follows the pointer over the cork
-      const p = corkAt(e);
-      if (p) { state.placing.fx = p.fx; state.placing.fy = p.fy; state.placing.note = ghostNote(state.placing, p.fx, p.fy); }
-      canvas.classList.toggle('hot', !!p);
-      return;
-    }
+    if (state.placing) { if (!state.placing.held) carry(e); return; }   // a held piece follows the pointer events
     if (state.view !== 'scene') {
       const n = state.view === 'board' && !panelShown && !state.poster ? noteAt(e) : null;
-      state.hover = n ? 'note' : null; state.hoverLabel = n ? (n.poster ? 'a poster' : `a note: “${n.text}”`) : '';
+      state.hover = n ? 'note' : null; state.hoverLabel = n ? (n.poster ? 'a poster' : `a note: “${n.text}”`) + ' · hold to pick it up' : '';
       canvas.classList.toggle('hot', !!n);
       return;
     }
@@ -92,7 +101,53 @@ export function setupUI(state, canvas) {
     canvas.classList.toggle('hot', !!h && !!VIEWS[h.id]);
   });
   canvas.addEventListener('mouseleave', () => { state.hover = null; canvas.classList.remove('hot'); });
+  // Picking a piece up (the user, 2026-10-29: "why can't we just click and hold to pick a note
+  // up"): press on a note or a poster on the board's close-up and hold a beat, or just start
+  // dragging it, and it lifts onto the pointer; let go and it is pinned there, on top. Let go
+  // where it was picked up, or off the cork, or press Escape, and it goes back. A plain click
+  // is still a click (the tear panel, a poster held up). Pointer events, so a finger does the same.
+  const HOLD_MS = 220, DRAG_PX = 5;
+  let press = null, swallowClick = 0;
+  const pressed = (e) => press && e.pointerId === press.id;
+  function lift(e) {
+    if (!press) return;
+    const { note, id } = press; clearTimeout(press.timer); press = null;
+    try { canvas.setPointerCapture(id); } catch (err) { /* a pointer already gone */ }
+    // the grip: the piece's center against the pointer, in cork fractions, kept while it is carried
+    const p = corkAt(e), g = p || { fx: 0, fy: 0 };
+    const ox = (note.x + note.w / 2 - CORK.x) / CORK.w - g.fx, oy = (note.y + note.h / 2 - CORK.y) / CORK.h - g.fy;
+    startMoving(note, { held: true, id, x: e.clientX, y: e.clientY, ox: p ? ox : 0, oy: p ? oy : 0 });
+    carry(e);
+  }
+  function dropHeld(e) {
+    const held = state.placing.held;
+    swallowClick = Date.now();   // the click that follows the release is not a click on the board
+    canvas.classList.remove('grab');
+    // let go where it was picked up: nothing moved, it goes back without a word
+    if (Math.hypot(e.clientX - held.x, e.clientY - held.y) < DRAG_PX * 2) { backToForm(); return; }
+    placeAt(e);
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary || state.placing || state.poster || panelShown || state.view !== 'board') return;
+    const n = noteAt(e);
+    if (!n) return;
+    press = { note: n, id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(() => lift(e), HOLD_MS) };
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (pressed(e)) { if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_PX) lift(e); return; }
+    if (state.placing && state.placing.held && e.pointerId === state.placing.held.id) carry(e);
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (pressed(e)) { clearTimeout(press.timer); press = null; return; }   // a click: the click event follows
+    if (state.placing && state.placing.held && e.pointerId === state.placing.held.id) dropHeld(e);
+  });
+  canvas.addEventListener('pointercancel', (e) => {
+    if (pressed(e)) { clearTimeout(press.timer); press = null; }
+    if (state.placing && state.placing.held) { canvas.classList.remove('grab'); backToForm(); }
+  });
+  canvas.addEventListener('contextmenu', (e) => { if (press || state.placing) e.preventDefault(); });   // a long press on a touch screen
   canvas.addEventListener('click', (e) => {
+    if (swallowClick && Date.now() - swallowClick < 500) { swallowClick = 0; return; }
     if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h && VIEWS[h.id]) enter(h.id); return; }
     if (!twoStep(state.view)) { leave(); return; }         // a panel view: any click steps back
     if (state.poster) { putBack(); return; }               // holding a poster: any click puts it back
@@ -104,16 +159,16 @@ export function setupUI(state, canvas) {
   window.addEventListener('keydown', (e) => {
     // typing into the board's note field must not drive the scene
     if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) { if (e.key === 'Escape') e.target.blur(); return; }
-    if (e.key === 'Escape') { if (state.poster) putBack(); else if (state.placing) backToForm(); else leave(); }
+    if (e.key === 'Escape') { if (state.poster) putBack(); else if (state.placing) { if (state.placing.held) { swallowClick = Date.now(); canvas.classList.remove('grab'); } backToForm(); } else leave(); }
     if (e.key === 'd' || e.key === 'D') { const d = $('debug'); d.hidden = !d.hidden; }
   });
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
   const refresh = () => { state.notes = buildNotes(); state.notesVersion++; };
-  function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); }
+  function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
   function leave() {
     if (state.placing && state.placing.moving) { dropPaper(); refresh(); }   // a piece being carried goes back where it was
-    state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); hidePanel();
+    state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); hidePanel(); canvas.classList.remove('board', 'grab');
   }
   // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
   // paper to the pointer, the panel goes away, the paper rides over the cork as a ghost drawn by
@@ -134,7 +189,7 @@ export function setupUI(state, canvas) {
     compose({ ...draft, error: err });
   }
   async function placeAt(e) {
-    const draft = state.placing, p = corkAt(e);
+    const draft = state.placing, p = carriedTo(e);
     if (!p) { backToForm(); return; }
     state.placing = null; canvas.classList.remove('hot');
     try {
@@ -146,14 +201,15 @@ export function setupUI(state, canvas) {
     } catch (err) { state.placing = draft; backToForm(err.message || 'the pin would not go in'); }
   }
   // Moving (the user, 2026-10-29: pick up someone else's poster and move it to make room): the
-  // piece comes off the cork onto the pointer, rides over the board as the ghost the way a fresh
-  // pin does, and a click pins it there, on top of the pile; a click off the cork, or Escape,
-  // puts it back where it was. Anyone can move anything, the way anyone can tear anything down.
-  function startMoving(n) {
+  // piece comes off the cork onto the pointer (`held`: the pointer that holds it and where it
+  // was picked up), rides over the board as the ghost the way a fresh pin does, and letting go
+  // pins it there, on top of the pile; letting go off the cork, or Escape, puts it back where
+  // it was. Anyone can move anything, the way anyone can tear anything down.
+  function startMoving(n, held = null) {
     if (state.poster) putBack();
     liftPaper(n); refresh();
-    state.placing = { moving: n, text: n.text || '', poster: null, ghostId: null, fx: null, fy: null, note: null };
-    hidePanel(); state.hover = null; canvas.classList.remove('hot');
+    state.placing = { moving: n, held, text: n.text || '', poster: null, ghostId: null, fx: null, fy: null, note: null };
+    hidePanel(); state.hover = null; canvas.classList.remove('hot'); canvas.classList.toggle('grab', !!held);
   }
   // A poster held up: the second zoom, the picture large over the dimmed board. Its panel offers
   // to tear it down; a click anywhere, or Escape, puts it back.
@@ -168,10 +224,9 @@ export function setupUI(state, canvas) {
     const err = document.createElement('div'); err.className = 'note-err'; err.textContent = error;
     pBody.append(lead, err);
     pActions.innerHTML = '';
-    const move = document.createElement('button'); move.textContent = 'move it'; move.onclick = () => startMoving(n);
     const tear = document.createElement('button'); tear.textContent = 'tear it down';
     const back = document.createElement('button'); back.textContent = 'put it back'; back.onclick = putBack;
-    pActions.append(move, tear, back);
+    pActions.append(tear, back);
     tear.onclick = async () => {
       if (tear.disabled) return;
       tear.disabled = true; err.textContent = '';
@@ -292,10 +347,9 @@ export function setupUI(state, canvas) {
     const err = document.createElement('div'); err.className = 'note-err'; err.textContent = error;
     pBody.append(quote, lead, err);
     pActions.innerHTML = '';
-    const move = document.createElement('button'); move.textContent = 'move it'; move.onclick = () => startMoving(n);
     const tear = document.createElement('button'); tear.textContent = 'tear it down';
     const keep = document.createElement('button'); keep.textContent = 'leave it'; keep.onclick = hidePanel;
-    pActions.append(move, tear, keep);
+    pActions.append(tear, keep);
     tear.onclick = async () => {
       if (tear.disabled) return;
       tear.disabled = true; err.textContent = '';
@@ -415,7 +469,7 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (COMPACT.matches ? 'tap where it goes' : state.placing.moving ? 'carry it where you like · click to pin it there · esc to put it back' : 'put it where you like · click to pin it there · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
+      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (COMPACT.matches ? (state.placing.moving ? 'let go where it goes' : 'tap where it goes') : state.placing.moving ? 'carry it where you like · let go to pin it there · esc to put it back' : 'put it where you like · click to pin it there · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
       if (state.view === 'scene' && state.hover === 'flight' && line.includes(' · ')) {
         // a flight's callsign in capitals, the rest of its line in the caption's lowercase (the user, 2026-10-22)
         const cut = line.indexOf(' · ');

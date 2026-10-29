@@ -14,6 +14,8 @@ body { display: flex; align-items: center; justify-content: center; font-family:
   background: #000; cursor: default; touch-action: manipulation;
 }
 #scene.hot { cursor: pointer; }
+#scene.grab { cursor: grabbing; }   /* a piece of paper picked up off the board */
+#scene.board { touch-action: none; }   /* on the board's close-up a finger drags paper, not the page */
 #ui { position: absolute; inset: 0; pointer-events: none; }
 #caption {
   position: absolute; left: 0; right: 0; bottom: 0; height: calc(26px * var(--u) * var(--cap));
