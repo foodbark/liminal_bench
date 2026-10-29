@@ -11,6 +11,10 @@ on:
   schedule:
     - cron: '3 */5 * * *'
   workflow_dispatch:
+# the job holds the push key, so its token gets nothing more than reading the repository, and
+# the action is pinned to a commit rather than a moving tag (2026-10-29)
+permissions:
+  contents: read
 concurrency:
   group: push-flights
   cancel-in-progress: false
@@ -19,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 352
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
       - name: push the feed every 30 s for most of six hours
         env:
           FLIGHTS_PUSH_KEY: ${{ secrets.FLIGHTS_PUSH_KEY }}
