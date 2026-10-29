@@ -53,7 +53,7 @@ npx wrangler pages secret put SALT            # any long random string; salts th
 The salt is optional (the function falls back to a constant) but without it the daily hashes are
 guessable, which only matters if someone wants to know whether two notes came from one address.
 
-Schema changes since the first deploy are one-off ALTERs noted in `db/schema.sql` beside the table (the posters' size column, 2026-10-10; the `x`, `y` position columns on notes and posters, 2026-10-27; the `moved` column on both and the `placed` table for moving paper, 2026-10-29, the tables from the schema file itself): run each once against the remote database before the code that needs it goes live, or a pin fails with a 500.
+Schema changes since the first deploy are one-off ALTERs noted in `db/schema.sql` beside the table (the posters' size column, 2026-10-10; the `x`, `y` position columns on notes and posters, 2026-10-27; the `moved` column on both and the `placed` table for moving paper, 2026-10-29, the tables from the schema file itself): run each once against the remote database before the code that needs it goes live, or a pin fails with a 500; one ALTER per `--command`, since the remote API refused two statements in one (2026-10-29). Done on production: the size column (2026-10-10), x and y (2026-10-28), moved and the placed table (2026-10-29).
 
 ## 2. The Pages project
 

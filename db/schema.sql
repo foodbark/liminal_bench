@@ -12,8 +12,9 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 -- tables from before the placing (2026-10-27) take the columns once, by hand:
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN x REAL; ALTER TABLE notes ADD COLUMN y REAL; ALTER TABLE posters ADD COLUMN x REAL; ALTER TABLE posters ADD COLUMN y REAL"
--- and from before moving (2026-10-29):
---   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN moved INTEGER; ALTER TABLE posters ADD COLUMN moved INTEGER"
+-- and from before moving (2026-10-29), one statement per command (the remote API refused two in one):
+--   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN moved INTEGER"
+--   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE posters ADD COLUMN moved INTEGER"
 CREATE INDEX IF NOT EXISTS notes_at ON notes (at);
 CREATE INDEX IF NOT EXISTS notes_who_at ON notes (who, at);
 
