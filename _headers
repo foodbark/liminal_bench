@@ -17,7 +17,9 @@
 # images from here plus data: and blob: for a poster pixelated in the browser before it is pinned and
 # the browser-only board's pictures, sounds from here, connections to here and api.open-meteo.com.
 # No framing by anyone, no plugins, no <base>. Pages does not put these on a Function's response,
-# which is fine: the Functions answer JSON and PNG, never a page.
+# which is fine: the Functions answer JSON and PNG, never a page. Pages also injects its Web
+# Analytics beacon into the page (static.cloudflareinsights.com, reporting to cloudflareinsights.com),
+# so those two are allowed; turning analytics off in the Pages project would let them go.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self' https://api.open-meteo.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; worker-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self' https://api.open-meteo.com https://cloudflareinsights.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Frame-Options: DENY
