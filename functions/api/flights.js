@@ -20,6 +20,9 @@
 // in between. When no feed answers the last good copy is served, marked stale, for an hour.
 //
 //   GET /api/flights   -> { at, src, ttl, stale?, ac: [{ hex, flight, t, r, lat, lon, alt, gs, track, vr, seen }] }
+//   GET /api/flights?src=NAME  asks one feed directly (adsb.lol, adsb.fi, opensky), uncached, for a
+//                      check from the edge; it takes the same bearer key as the POST, since open
+//                      it let anyone spend the feeds' daily budgets from here (2026-10-29)
 //   POST /api/flights  the same shape, from a pusher with its own address (tools/push_flights.py
 //                      on the user's machine, which the community feeds answer freely), with
 //                      `authorization: Bearer FLIGHTS_PUSH_KEY` (a Pages secret); it becomes the
@@ -145,9 +148,10 @@ const ttlOf = (text) => { try { return JSON.parse(text).ttl || TTL; } catch (e) 
 export async function onRequestGet({ request, env, waitUntil }) {
   const url = new URL(request.url);
   // ?src=adsb.lol|adsb.fi|opensky asks one feed directly, for checking a feed from the edge;
-  // nothing is stored or cached on that path
+  // nothing is stored or cached on that path, so it is for the holder of the push key only
   const force = url.searchParams.get('src');
   if (force) {
+    if (!keyed(request, env)) return new Response('no', { status: 401, headers: { 'cache-control': 'no-store' } });
     const s = SOURCES.find((x) => x.name === force);
     if (!s) return new Response('no such feed', { status: 404, headers: { 'cache-control': 'no-store' } });
     const { body, tried } = await fetchUpstream(env, env && env.DB, [s]);
@@ -188,10 +192,15 @@ export async function onRequestGet({ request, env, waitUntil }) {
 }
 
 // a pushed copy from a machine with its own address: the best feed there is, while it runs
-export async function onRequestPost({ request, env }) {
+// the push key, `authorization: Bearer FLIGHTS_PUSH_KEY`; nothing opens without the secret set
+const keyed = (request, env) => {
   const want = env && env.FLIGHTS_PUSH_KEY;
   const got = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  if (!want || !got || got !== want) return new Response('no', { status: 401, headers: { 'cache-control': 'no-store' } });
+  return !!want && !!got && got === want;
+};
+
+export async function onRequestPost({ request, env }) {
+  if (!keyed(request, env)) return new Response('no', { status: 401, headers: { 'cache-control': 'no-store' } });
   let j;
   try { j = await request.json(); } catch (err) { return new Response('not json', { status: 400, headers: { 'cache-control': 'no-store' } }); }
   if (!j || !Array.isArray(j.ac)) return new Response('no ac', { status: 400, headers: { 'cache-control': 'no-store' } });

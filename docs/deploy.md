@@ -173,7 +173,14 @@ npx wrangler pages secret put OPENSKY_CLIENT_SECRET
 ```
 
 Check a feed from the edge with `/api/flights?src=adsb.lol` (or `adsb.fi`, `opensky`): it asks that
-feed directly and stores nothing. `?diag` on the page names the source of what it is showing.
+feed directly and stores nothing. It takes the push key, since an open check path let anyone spend
+the feeds' daily budgets from Cloudflare's addresses (2026-10-29):
+
+```
+curl -H "Authorization: Bearer $FLIGHTS_PUSH_KEY" 'https://liminalbench.net/api/flights?src=opensky'
+```
+
+`?diag` on the page names the source of what it is showing.
 
 ## Rate limits and abuse
 
