@@ -7,10 +7,13 @@ CREATE TABLE IF NOT EXISTS notes (
   at   INTEGER NOT NULL,      -- ms since the epoch, when it was pinned
   who  TEXT    NOT NULL,      -- salted daily hash of the poster's address, for the rate limit only
   x    REAL,                  -- where it was placed by hand (2026-10-27): the paper's center as
-  y    REAL                   -- fractions of the cork; null takes a slot
+  y    REAL,                  -- fractions of the cork; null takes a slot
+  moved INTEGER               -- ms, when it was last picked up and pinned elsewhere (2026-10-29); null never
 );
 -- tables from before the placing (2026-10-27) take the columns once, by hand:
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN x REAL; ALTER TABLE notes ADD COLUMN y REAL; ALTER TABLE posters ADD COLUMN x REAL; ALTER TABLE posters ADD COLUMN y REAL"
+-- and from before moving (2026-10-29):
+--   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN moved INTEGER; ALTER TABLE posters ADD COLUMN moved INTEGER"
 CREATE INDEX IF NOT EXISTS notes_at ON notes (at);
 CREATE INDEX IF NOT EXISTS notes_who_at ON notes (who, at);
 
@@ -53,12 +56,33 @@ CREATE TABLE IF NOT EXISTS posters (
   at   INTEGER NOT NULL,      -- ms since the epoch
   who  TEXT    NOT NULL,      -- salted daily hash of the poster's address, for the rate limit only
   x    REAL,                  -- placed by hand, as for notes
-  y    REAL
+  y    REAL,
+  moved INTEGER               -- as for notes
 );
 -- a posters table from before the size column (2026-10-10) takes it once, by hand:
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE posters ADD COLUMN k INTEGER NOT NULL DEFAULT 0"
 CREATE INDEX IF NOT EXISTS posters_at ON posters (at);
 CREATE INDEX IF NOT EXISTS posters_who_at ON posters (who, at);
+
+-- Moving (2026-10-29): anyone can pick a piece up and pin it elsewhere, to make room (the user:
+-- "pick up someone else's poster and move it to make room for mine"). A posted note or a
+-- poster takes the place and the time on its own row; a default note (seed:N) gets its place
+-- here, cleared when it is torn down so it comes back at its slot. `moves` records every move
+-- for the rate limit only and is swept after a day.
+CREATE TABLE IF NOT EXISTS placed (
+  key  TEXT    PRIMARY KEY,   -- seed:N
+  x    REAL    NOT NULL,      -- the paper's center as fractions of the cork
+  y    REAL    NOT NULL,
+  at   INTEGER NOT NULL       -- ms since the epoch, when it was moved there
+);
+CREATE TABLE IF NOT EXISTS moves (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  key  TEXT    NOT NULL,      -- note:ID, poster:ID or seed:N
+  at   INTEGER NOT NULL,      -- ms since the epoch
+  who  TEXT    NOT NULL       -- salted daily hash of the mover's address, for the rate limit only
+);
+CREATE INDEX IF NOT EXISTS moves_who_at ON moves (who, at);
+CREATE INDEX IF NOT EXISTS moves_at ON moves (at);
 
 -- One shared copy of a feed the Functions fetch for everyone (2026-10-21): the aircraft feed
 -- (functions/api/flights.js) keeps its last answer here so the upstream is asked once every

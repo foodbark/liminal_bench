@@ -18,8 +18,13 @@ import { hash2 } from './util/noise.js';
 // specifically"; write first, then place): a pin carries `x`, `y`, the paper's center as
 // fractions of the cork, so it survives a repaint and the half-size build, and a placed note or
 // poster sits exactly there, over whatever is there, newest on top; paper with no position (the
-// default notes, what was pinned before, an old page's pin) takes a slot as before.
-const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.posters';
+// default notes, what was pinned before, an old page's pin) takes a slot as before. Anything can
+// be picked up and pinned elsewhere (the user, 2026-10-29: "pick up someone else's poster and
+// move it to make room for mine"): a moved piece keeps its words, its paper and its age, takes
+// the new place, and goes on top of the pile the way a re-pinned sheet does (`moved`, the time
+// of the move; the pile is ordered by the later of the posting and the move); a moved default
+// note keeps its place (`placedSeeds`) until it is torn down, when it comes back at its slot.
+const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.posters', PLACED_KEY = 'liminal.placed';
 const API = 'api/notes';   // relative: the site may live at a path prefix
 export const NOTE_MAX = 80;
 // The board holds FULL pieces of paper, notes and posters together: past the slots they pile up,
@@ -68,6 +73,8 @@ let mode = 'local';   // 'local' | 'api'
 let posted = [];      // [{ id, text, at }], oldest first
 let torn = [];        // default notes torn down: [{ seed, at }]
 let posters = [];     // [{ id, w, h, at, src }], src the picture's URL (the API) or data URL (local)
+let placedSeeds = []; // default notes moved by hand: [{ seed, x, y, at }]
+let lifted = null;    // the key of the piece being carried, off the cork until it is pinned again
 const posterImgs = new Map();   // id -> Image, loading or loaded
 let onPosterLoad = () => {};
 export const whenPosterLoads = (fn) => { onPosterLoad = fn; };
@@ -80,16 +87,23 @@ function readJSON(key) { try { const v = JSON.parse(localStorage.getItem(key) ||
 function readLocal() { return readJSON(KEY).filter((n) => n && typeof n.text === 'string' && typeof n.at === 'number').map((n) => ({ id: n.id ?? n.at, ...n })); }
 function readTorn() { return readJSON(TORN_KEY).filter((t) => t && Number.isInteger(t.seed) && typeof t.at === 'number'); }
 function readPosters() { return readJSON(POSTER_KEY).filter((p) => p && typeof p.src === 'string' && typeof p.at === 'number').map((p) => ({ id: p.id ?? p.at, ...p })); }
+function readPlaced() { return readJSON(PLACED_KEY).filter((t) => t && Number.isInteger(t.seed) && typeof t.at === 'number' && hasPlace(t)); }
+function writePlaced(list) { try { localStorage.setItem(PLACED_KEY, JSON.stringify(list)); } catch (e) { /* as above */ } }
 function writePosters(list) { try { localStorage.setItem(POSTER_KEY, JSON.stringify(list)); } catch (e) { /* the storage is full or absent: the session still has it */ } }
 function writeLocal(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) { /* no storage: the session still has it */ } }
 function writeTorn(list) { try { localStorage.setItem(TORN_KEY, JSON.stringify(list)); } catch (e) { /* as above */ } }
-const sortByAt = (list) => [...list].sort((a, b) => a.at - b.at);
-// what the API answers: the board as { notes, torn }, or the plain array from the older function
+// where a piece stands in the pile: when it went up, or when it was last moved, whichever is later
+const rankOf = (n) => Math.max(n.at || 0, n.moved || 0);
+const sortByAt = (list) => [...list].sort((a, b) => rankOf(a) - rankOf(b));
+// the key a piece is carried and moved by: a posted note by id, a poster by id, a default note by its slot
+export const paperKey = (n) => n.poster ? `poster:${n.poster.id}` : n.id != null ? `note:${n.id}` : Number.isInteger(n.seed) ? `seed:${n.seed}` : null;
+// what the API answers: the board as { notes, torn, posters, placed }, or the plain array from the older function
 function takeBoard(body) {
-  if (Array.isArray(body)) { posted = sortByAt(body); torn = []; posters = []; return true; }
+  if (Array.isArray(body)) { posted = sortByAt(body); torn = []; posters = []; placedSeeds = []; return true; }
   if (body && Array.isArray(body.notes)) {
     posted = sortByAt(body.notes); torn = Array.isArray(body.torn) ? body.torn : [];
     posters = sortByAt(Array.isArray(body.posters) ? body.posters : []).map((p) => ({ ...p, src: `${POSTER_API}/${p.id}` }));
+    placedSeeds = Array.isArray(body.placed) ? body.placed.filter((t) => Number.isInteger(t.seed) && hasPlace(t)) : [];
     return true;
   }
   return false;
@@ -106,7 +120,8 @@ export async function loadPosted() {
   posted = sortByAt(readLocal()).slice(-FULL);
   torn = readTorn().filter((t) => stillDown(t, now));
   posters = sortByAt(readPosters()).slice(-FULL);
-  writeLocal(posted); writeTorn(torn); writePosters(posters);
+  placedSeeds = readPlaced();
+  writeLocal(posted); writeTorn(torn); writePosters(posters); writePlaced(placedSeeds);
   return posted;
 }
 
@@ -185,7 +200,37 @@ export async function tearDown(note) {
   const now = Date.now();
   if (what.poster != null) { posters = posters.filter((p) => p.id !== what.poster); writePosters(posters); }
   else if (what.id != null) { posted = posted.filter((n) => n.id !== what.id); writeLocal(posted); }
-  else { torn = [...torn.filter((t) => t.seed !== what.seed), { seed: what.seed, at: now }]; writeTorn(torn); }
+  else {
+    torn = [...torn.filter((t) => t.seed !== what.seed), { seed: what.seed, at: now }]; writeTorn(torn);
+    placedSeeds = placedSeeds.filter((t) => t.seed !== what.seed); writePlaced(placedSeeds);   // it comes back at its slot
+  }
+  return posted;
+}
+
+// Carrying a piece: it is off the cork while it rides on the pointer (`buildNotes` leaves it
+// out), and back on it, where it was or where it was dropped, when the carrying ends.
+export function liftPaper(n) { lifted = paperKey(n); }
+export function dropPaper() { lifted = null; }
+// Moving a piece to `place` ({ x, y }, the paper's center as fractions of the cork): a posted
+// note or a poster by id, a default note by its slot. It lands on top of the pile.
+export async function movePaper(note, place) {
+  const what = note.poster ? { poster: note.poster.id } : note.id != null ? { id: note.id } : Number.isInteger(note.seed) ? { seed: note.seed } : null;
+  if (!what) throw new Error('it will not come off');
+  if (!place || !hasPlace(place)) throw new Error('nowhere to put it');
+  const at = { x: place.x, y: place.y };
+  if (mode === 'api') {
+    let r;
+    try { r = await fetch(API_V2, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...what, ...at }) }); }
+    catch (e) { throw new Error(OUT_OF_REACH); }
+    const body = await r.json().catch(() => null);
+    if (!r.ok) throw new Error((body && body.error) || 'the pin would not go in');
+    takeBoard(body);
+    return posted;
+  }
+  const now = Date.now();
+  if (what.poster != null) { posters = sortByAt(posters.map((p) => (p.id === what.poster ? { ...p, ...at, moved: now } : p))); writePosters(posters); }
+  else if (what.id != null) { posted = sortByAt(posted.map((n) => (n.id === what.id ? { ...n, ...at, moved: now } : n))); writeLocal(posted); }
+  else { placedSeeds = [...placedSeeds.filter((t) => t.seed !== what.seed), { seed: what.seed, ...at, at: now }]; writePlaced(placedSeeds); }
   return posted;
 }
 
@@ -201,11 +246,22 @@ function placedItem(n, now, s, dx = 0, dy = 0, cx = null, cy = null) {
   const atPoint = cx != null;
   const box = n.poster ? posterBox(n.poster, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy)
     : noteBox(n.text, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy);   // a note in a slot is sized to its words too, on the slot's center
-  const paper = atPoint && !n.poster ? box.paper : Math.floor(n.at / 1000) % 6;
-  return { ...(s || {}), ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper, mine: true, at: n.at, id: n.poster ? null : n.id, seed: null, poster: n.poster || null, placed: atPoint };
+  // a posted note's paper is its words' (scrapFor), in a slot or placed, so a move never recolors it
+  const paper = n.poster ? 0 : box.paper;
+  return { ...(s || {}), ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper, mine: true, at: n.at, rank: rankOf(n), id: n.poster ? null : n.id, seed: null, poster: n.poster || null, placed: atPoint };
 }
 export function ghostNote(draft, fx, fy, now = Date.now()) {
   const { cx, cy } = corkPoint(fx, fy);
+  if (draft.moving) {   // a piece picked up off the board: the same paper, words and age, at the pointer
+    const m = draft.moving;
+    if (Number.isInteger(m.seed)) {
+      const s = { ...m, ...noteBox(m.text, cx, cy), paper: m.paper, age: m.age };
+      return Object.assign(makeNote(s.text, s), { mine: false, at: m.at, id: null, seed: m.seed, poster: null, placed: true, ghost: true });
+    }
+    const n = m.poster ? { id: m.poster.id, at: m.at, poster: m.poster } : { id: m.id, at: m.at, text: m.text };
+    const s = placedItem(n, now, null, 0, 0, cx, cy);
+    return Object.assign(makeNote(s.text, s), { mine: true, at: s.at, id: s.id, seed: null, poster: s.poster, placed: true, k: s.k, ghost: true });
+  }
   // the draft's picture is cached by id like any poster's, so each draft carries its own
   const gid = draft.ghostId ?? -1;
   const n = draft.poster ? { id: gid, at: now, poster: { id: gid, w: draft.poster.w, h: draft.poster.h, k: draft.poster.k, src: draft.poster.png } } : { id: gid, at: now, text: cleanText(draft.text) };
@@ -219,7 +275,7 @@ export function buildNotes(now = Date.now()) {
   // notes and posters share the slots, in the order they went up: the latest take the slots,
   // and everything older piles up beneath them, each a little askew, newest on top; nothing
   // blows away, the oldest is only buried
-  const all = sortByAt([...posted, ...posters.map((p) => ({ ...p, poster: p }))]);
+  const all = sortByAt([...posted, ...posters.map((p) => ({ ...p, poster: p }))]).filter((n) => paperKey(n) !== lifted);
   const byHand = all.filter(hasPlace), items = all.filter((n) => !hasPlace(n));
   const top = items.slice(-slots.length), under = items.slice(0, Math.max(0, items.length - slots.length));
   const placed = (n, s, dx = 0, dy = 0) => placedItem(n, now, s, dx, dy);
@@ -230,9 +286,14 @@ export function buildNotes(now = Date.now()) {
     return { ...placed(n, s, dx, dy), under: true };
   });
   top.forEach((n, k) => { slots[order[k]] = placed(n, slots[order[k]]); });
-  const make = (s0) => { const s = s0.mine || s0.poster ? s0 : { ...s0, ...noteBox(s0.text, s0.x + s0.w / 2, s0.y + s0.h / 2), paper: s0.paper }; return Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under, k: s.k, placed: !!s.placed }); };
-  // the pile, then the painting's own flyers, then everything pinned in the order it went up
-  const defaults = slots.filter((s) => !s.mine && !down.has(s.seed));
-  const live = [...slots.filter((s) => s.mine), ...byHand.map((n) => { const { cx, cy } = corkPoint(n.x, n.y); return placedItem(n, now, null, 0, 0, cx, cy); })].sort((a, b) => a.at - b.at);
+  const make = (s0) => { const s = s0.mine || s0.poster || s0.placed ? s0 : { ...s0, ...noteBox(s0.text, s0.x + s0.w / 2, s0.y + s0.h / 2), paper: s0.paper }; return Object.assign(makeNote(s.text, s), { mine: !!s.mine, at: s.at, id: s.id ?? null, seed: s.mine ? null : s.seed, poster: s.poster || null, under: !!s.under, k: s.k, placed: !!s.placed }); };
+  // the pile, then the painting's own flyers still in their slots, then everything pinned or
+  // moved by hand in the order it went up or was last moved, so the newest piece is on top;
+  // the piece being carried is off the cork
+  const movedSeed = new Map(placedSeeds.map((t) => [t.seed, t]));
+  const flyers = slots.filter((s) => !s.mine && !down.has(s.seed) && `seed:${s.seed}` !== lifted);
+  const defaults = flyers.filter((s) => !movedSeed.has(s.seed));
+  const movedFlyers = flyers.filter((s) => movedSeed.has(s.seed)).map((s) => { const t = movedSeed.get(s.seed), { cx, cy } = corkPoint(t.x, t.y); return { ...s, ...noteBox(s.text, cx, cy), paper: s.paper, placed: true, rank: t.at }; });
+  const live = [...slots.filter((s) => s.mine), ...movedFlyers, ...byHand.map((n) => { const { cx, cy } = corkPoint(n.x, n.y); return placedItem(n, now, null, 0, 0, cx, cy); })].sort((a, b) => (a.rank ?? a.at) - (b.rank ?? b.at));
   return [...pile.map(make), ...defaults.map(make), ...live.map(make)];
 }

@@ -1,7 +1,7 @@
 import { W, H, SCALE, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -109,8 +109,12 @@ export function setupUI(state, canvas) {
   });
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
+  const refresh = () => { state.notes = buildNotes(); state.notesVersion++; };
   function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); }
-  function leave() { state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); hidePanel(); }
+  function leave() {
+    if (state.placing && state.placing.moving) { dropPaper(); refresh(); }   // a piece being carried goes back where it was
+    state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); hidePanel();
+  }
   // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
   // paper to the pointer, the panel goes away, the paper rides over the cork as a ghost drawn by
   // the renderer, and a click pins it there, over whatever is there. A click off the cork, or
@@ -121,7 +125,13 @@ export function setupUI(state, canvas) {
   }
   function backToForm(err = '') {
     const draft = state.placing; state.placing = null; canvas.classList.remove('hot');
-    if (draft) compose({ ...draft, error: err });
+    if (!draft) return;
+    if (draft.moving) {   // a piece picked up goes back where it was; a refused move says why
+      dropPaper(); refresh();
+      if (err) draft.moving.poster ? holdUp(draft.moving, err) : tearPanel(draft.moving, err);
+      return;
+    }
+    compose({ ...draft, error: err });
   }
   async function placeAt(e) {
     const draft = state.placing, p = corkAt(e);
@@ -129,13 +139,25 @@ export function setupUI(state, canvas) {
     state.placing = null; canvas.classList.remove('hot');
     try {
       const place = { x: p.fx, y: p.fy };
-      if (draft.poster) await postPoster(draft.poster.png, draft.poster.w, draft.poster.h, draft.poster.k, place); else await postNote(draft.text, place);
-      state.notes = buildNotes(); state.notesVersion++;
+      if (draft.moving) { await movePaper(draft.moving, place); dropPaper(); }
+      else if (draft.poster) await postPoster(draft.poster.png, draft.poster.w, draft.poster.h, draft.poster.k, place);
+      else await postNote(draft.text, place);
+      refresh();
     } catch (err) { state.placing = draft; backToForm(err.message || 'the pin would not go in'); }
+  }
+  // Moving (the user, 2026-10-29: pick up someone else's poster and move it to make room): the
+  // piece comes off the cork onto the pointer, rides over the board as the ghost the way a fresh
+  // pin does, and a click pins it there, on top of the pile; a click off the cork, or Escape,
+  // puts it back where it was. Anyone can move anything, the way anyone can tear anything down.
+  function startMoving(n) {
+    if (state.poster) putBack();
+    liftPaper(n); refresh();
+    state.placing = { moving: n, text: n.text || '', poster: null, ghostId: null, fx: null, fy: null, note: null };
+    hidePanel(); state.hover = null; canvas.classList.remove('hot');
   }
   // A poster held up: the second zoom, the picture large over the dimmed board. Its panel offers
   // to tear it down; a click anywhere, or Escape, puts it back.
-  function holdUp(n) {
+  function holdUp(n, error = '') {
     state.poster = n; state.hover = null; canvas.classList.remove('hot');
     panelShown = true; panelFor = 'board';
     panel.className = 'dock-left';
@@ -143,12 +165,13 @@ export function setupUI(state, canvas) {
     pTitle.textContent = 'a poster';
     pBody.innerHTML = '';
     const lead = document.createElement('div'); lead.className = 'dim'; lead.textContent = 'Someone pinned this up.' + (n.mine && notesMode() !== 'api' ? ' It is yours.' : '');
-    const err = document.createElement('div'); err.className = 'note-err';
+    const err = document.createElement('div'); err.className = 'note-err'; err.textContent = error;
     pBody.append(lead, err);
     pActions.innerHTML = '';
+    const move = document.createElement('button'); move.textContent = 'move it'; move.onclick = () => startMoving(n);
     const tear = document.createElement('button'); tear.textContent = 'tear it down';
     const back = document.createElement('button'); back.textContent = 'put it back'; back.onclick = putBack;
-    pActions.append(tear, back);
+    pActions.append(move, tear, back);
     tear.onclick = async () => {
       if (tear.disabled) return;
       tear.disabled = true; err.textContent = '';
@@ -258,7 +281,7 @@ export function setupUI(state, canvas) {
 
   // Tearing a note down: anyone can, the way a real board works. A posted note is gone for good;
   // one of the painting's own comes back after a note's life, as if someone put up a fresh one.
-  function tearPanel(n) {
+  function tearPanel(n, error = '') {
     panelShown = true; panelFor = 'board';
     panel.className = 'dock-' + (VIEWS.board.dock || 'center');
     panel.hidden = false;
@@ -266,12 +289,13 @@ export function setupUI(state, canvas) {
     pBody.innerHTML = '';
     const quote = document.createElement('div'); quote.textContent = `“${n.text}”` + (n.mine ? ' (yours)' : '');
     const lead = document.createElement('div'); lead.className = 'dim'; lead.textContent = 'The pin is loose. Nobody would stop you.';
-    const err = document.createElement('div'); err.className = 'note-err';
+    const err = document.createElement('div'); err.className = 'note-err'; err.textContent = error;
     pBody.append(quote, lead, err);
     pActions.innerHTML = '';
+    const move = document.createElement('button'); move.textContent = 'move it'; move.onclick = () => startMoving(n);
     const tear = document.createElement('button'); tear.textContent = 'tear it down';
     const keep = document.createElement('button'); keep.textContent = 'leave it'; keep.onclick = hidePanel;
-    pActions.append(tear, keep);
+    pActions.append(move, tear, keep);
     tear.onclick = async () => {
       if (tear.disabled) return;
       tear.disabled = true; err.textContent = '';
@@ -391,7 +415,7 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !panelShown ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (COMPACT.matches ? 'tap where it goes' : 'put it where you like · click to pin it there · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
+      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (COMPACT.matches ? 'tap where it goes' : state.placing.moving ? 'carry it where you like · click to pin it there · esc to put it back' : 'put it where you like · click to pin it there · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
       if (state.view === 'scene' && state.hover === 'flight' && line.includes(' · ')) {
         // a flight's callsign in capitals, the rest of its line in the caption's lowercase (the user, 2026-10-22)
         const cut = line.indexOf(' · ');

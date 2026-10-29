@@ -25,21 +25,28 @@ export const json = (data, status = 200, extra = {}) => new Response(JSON.string
 
 export const wantsV2 = (request) => new URL(request.url).searchParams.get('v') === '2';
 
-// The board, oldest first; with v2 also the posters (their pictures fetched by id) and the
-// default notes torn down and not yet back. Nothing on the board ages off it (the user,
-// 2026-10-27: everything lives forever, fading slowly, until someone tears it down or covers
-// it): everything is served (FULL bounds it), and the page lays the older ones under the newer.
-// A torn default note alone keeps a clock, LIFE_DAYS, and then comes back.
+// The board, oldest first; with v2 also the posters (their pictures fetched by id), the
+// default notes torn down and not yet back, and where the default notes that were moved now
+// sit (`placed`, 2026-10-29). Nothing on the board ages off it (the user, 2026-10-27:
+// everything lives forever, fading slowly, until someone tears it down or covers it):
+// everything is served (FULL bounds it), and the page lays the older ones under the newer. A
+// torn default note alone keeps a clock, LIFE_DAYS, and then comes back. `moved` is when a
+// piece was last picked up and pinned elsewhere: the page orders the pile by the later of the
+// posting and the move, so a moved piece lands on top, while the fade runs from the posting.
 export async function board(db, v2) {
   const now = Date.now(), since = now - LIFE_DAYS * DAY;
-  const { results } = await db.prepare('SELECT id, text, at, x, y FROM notes ORDER BY at DESC LIMIT ?1').bind(FULL).all();
+  const { results } = await db.prepare('SELECT id, text, at, x, y, moved FROM notes ORDER BY at DESC LIMIT ?1').bind(FULL).all();
   const notes = results.reverse();
   if (!v2) return notes;
-  const [t, p] = await db.batch([
+  const [t, p, pl] = await db.batch([
     db.prepare("SELECT key, max(at) AS at FROM torn WHERE key LIKE 'seed:%' AND at > ?1 GROUP BY key").bind(since),
-    db.prepare('SELECT id, w, h, k, at, x, y FROM posters ORDER BY at DESC LIMIT ?1').bind(FULL),
+    db.prepare('SELECT id, w, h, k, at, x, y, moved FROM posters ORDER BY at DESC LIMIT ?1').bind(FULL),
+    db.prepare("SELECT key, x, y, at FROM placed WHERE key LIKE 'seed:%'"),
   ]);
-  return { notes, torn: t.results.map((r) => ({ seed: Number(r.key.slice(5)), at: r.at })), posters: p.results.reverse(), full: FULL };
+  return {
+    notes, torn: t.results.map((r) => ({ seed: Number(r.key.slice(5)), at: r.at })), posters: p.results.reverse(),
+    placed: pl.results.map((r) => ({ seed: Number(r.key.slice(5)), x: r.x, y: r.y, at: r.at })), full: FULL,
+  };
 }
 
 export async function whoHash(request, env) {

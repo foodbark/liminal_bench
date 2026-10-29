@@ -53,7 +53,7 @@ npx wrangler pages secret put SALT            # any long random string; salts th
 The salt is optional (the function falls back to a constant) but without it the daily hashes are
 guessable, which only matters if someone wants to know whether two notes came from one address.
 
-Schema changes since the first deploy are one-off ALTERs noted in `db/schema.sql` beside the table (the posters' size column, 2026-10-10; the `x`, `y` position columns on notes and posters, 2026-10-27): run each once against the remote database before the code that needs it goes live, or a pin fails with a 500.
+Schema changes since the first deploy are one-off ALTERs noted in `db/schema.sql` beside the table (the posters' size column, 2026-10-10; the `x`, `y` position columns on notes and posters, 2026-10-27; the `moved` column on both and the `placed` and `moves` tables for moving paper, 2026-10-29, the tables from the schema file itself): run each once against the remote database before the code that needs it goes live, or a pin fails with a 500.
 
 ## 2. The Pages project
 
@@ -185,7 +185,8 @@ curl -H "Authorization: Bearer $FLIGHTS_PUSH_KEY" 'https://liminalbench.net/api/
 ## Rate limits and abuse
 
 `functions/api/notes.js` allows three notes an hour per address (salted daily hash, no addresses
-stored) and thirty an hour in total, 80 characters each, control characters stripped. The board
-shows six; anything older than sixteen days is off the board and is deleted on the next post. If
-the board gets found, tighten `PER_ADDRESS_HOUR` and `ALL_HOUR` there, or put Cloudflare's WAF
-rate-limiting rule on `/api/notes` in the dashboard, which needs no deploy.
+stored) and thirty an hour in total, 80 characters each, control characters stripped; tearing
+down six an hour per address and sixty in all; moving paper twenty an hour per address and a
+hundred and twenty in all. Nothing ages off the board: it holds forty pieces of paper and refuses
+a pin past that. If the board gets found, tighten the limits there, or put Cloudflare's WAF
+rate-limiting rule on `/api/*` in the dashboard, which needs no deploy.
