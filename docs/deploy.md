@@ -29,13 +29,16 @@ that visited before a push then mixes old modules with new ones and breaks on th
 import (seen 2026-09-28, the evening the board work shipped). Modules, assets and the stylesheet
 now revalidate on every load (ETags make that a 304), and `/api/*` is never stored.
 
-**The zone overrides that until one setting changes.** `_headers` is honored on
-`liminal-bench.pages.dev`, but the `liminalbench.net` zone has Cloudflare's default Browser Cache
-TTL of four hours, which rewrites any lower `max-age` on cached files (verified 2026-09-28: a
-fresh, never-requested URL on the domain came back `max-age=14400`, the same file on pages.dev
-`max-age=0`). Dashboard, the `liminalbench.net` zone, Caching, Configuration, Browser Cache TTL:
-set it to **Respect Existing Headers**. Until then a phone can hold old modules for up to four
-hours after a push; a private tab or clearing site data gets the new ones at once.
+**The zone used to override that.** `_headers` is honored on `liminal-bench.pages.dev`, but the
+`liminalbench.net` zone had Cloudflare's default Browser Cache TTL of four hours, which rewrites
+any lower `max-age` on files of the default-cached extensions (js, css, png, woff2; HTML and JSON
+are not among them, which is why those alone came back `max-age=0`). Verified 2026-09-28 and
+again 2026-10-30, the day the band shipped and a phone kept showing the old floating boxes under
+the new page. Set that day (dashboard, the `liminalbench.net` zone, Caching, Configuration,
+Browser Cache TTL: **Respect Existing Headers**) and checked from outside: `src/ui.js`,
+`style.css` and `assets/backdrop.png` now come back `max-age=0, must-revalidate`. If the setting
+is ever lost, a phone can hold old modules for up to four hours after a push; a private tab or
+clearing site data gets the new ones at once.
 
 A note on stray paths: Pages serves `index.html` for anything that is not a file or a function
 (`/api/notes/nope` returns the page with a 200), which is harmless here.
