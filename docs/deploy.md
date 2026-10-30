@@ -188,5 +188,12 @@ curl -H "Authorization: Bearer $FLIGHTS_PUSH_KEY" 'https://liminalbench.net/api/
 stored) and thirty an hour in total, 80 characters each, control characters stripped; tearing
 down six an hour per address and sixty in all; moving paper is not limited (nothing is lost by
 a move, and digging through the pile takes many). Nothing ages off the board: it holds forty pieces of paper and refuses
-a pin past that. If the board gets found, tighten the limits there, or put Cloudflare's WAF
-rate-limiting rule on `/api/*` in the dashboard, which needs no deploy.
+a pin past that. In front of all of it sits one Cloudflare WAF rate-limiting rule on the zone
+(Security rules in the dashboard, 2026-10-30; no deploy): requests whose path equals `/api/notes`,
+`/api/posters` or `/api/voicemail` are blocked (429) for ten seconds once an address sends more
+than twenty in ten seconds. The Free plan's rate-limiting rules match on the path alone (no
+request method), so the rule names the write endpoints exactly rather than `/api/*`: a visit
+fetches every poster picture from `/api/posters/ID` and the flights feed every half minute, and
+a rule over the whole prefix blocked the page itself; twenty leaves a person dragging paper
+around one a second alone. The rule took a few minutes to start counting after deploy, so give
+a check that long. If the board gets found, tighten the limits in the Function or the rule.
