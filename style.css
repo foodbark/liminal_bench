@@ -17,56 +17,73 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 #scene.grab { cursor: grabbing; }   /* a piece of paper picked up off the board */
 #scene.board { touch-action: none; }   /* on the board's close-up a finger drags paper, not the page */
 #ui { position: absolute; inset: 0; pointer-events: none; }
-#caption {
-  position: absolute; left: 0; right: 0; bottom: 0; height: calc(26px * var(--u) * var(--cap));
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 calc(10px * var(--u) * var(--cap)); box-sizing: border-box;
+/* The band: the Sierra line under the picture. The status and the caption sit on its bottom row,
+   and when the scene has something to say or ask (the board's questions, the note form, the
+   bench's words) the row above unfolds with the words, the fields and the buttons in it. Nothing
+   floats over the scene (the user, 2026-10-30: the boxes eclipsed the board on a phone), on a
+   desktop too; a close-up's own margin takes the room. */
+#band {
+  position: absolute; left: 0; right: 0; bottom: 0; pointer-events: auto;
   background: rgba(4,5,8,0.92); border-top: calc(2px * var(--u)) solid #23262e;
-  font-size: calc(18px * var(--u) * var(--cap)); letter-spacing: 0.02em; text-transform: lowercase;
+  font-size: calc(18px * var(--u) * var(--cap)); letter-spacing: 0.02em;
+}
+#caption {
+  height: calc(26px * var(--u) * var(--cap));
+  display: flex; align-items: center; justify-content: space-between; gap: calc(12px * var(--u));
+  padding: 0 calc(10px * var(--u) * var(--cap)); box-sizing: border-box; text-transform: lowercase; overflow: hidden;
 }
 #caption-text { color: #e8e2cc; white-space: nowrap; }
 #caption-text .caps { text-transform: uppercase; }   /* a flight's callsign, in capitals like a departures board; the rest of its line stays lowercase */
+#say {
+  display: flex; flex-direction: column; gap: calc(4px * var(--u));
+  padding: calc(6px * var(--u)) calc(10px * var(--u) * var(--cap)); border-bottom: 1px solid #23262e;
+  line-height: 1.25; color: #d0cab6;
+}
+#say[hidden] { display: none; }
+/* the words on the left and the buttons on the right of one row; a field below takes the whole width */
+#say .top { display: flex; flex-wrap: wrap; align-items: center; gap: calc(4px * var(--u)) calc(18px * var(--u)); }
+#say .text { flex: 1 1 calc(300px * var(--u)); min-width: 0; display: flex; flex-direction: column; gap: calc(3px * var(--u)); }
+#say .acts { display: flex; flex-wrap: wrap; gap: calc(8px * var(--u)); margin-left: auto; }
+#say .line { white-space: pre-wrap; }
+#say .line[hidden], #say .row[hidden] { display: none; }
+#say .quote { color: #f0e6c8; }
+#say .dim { color: #7d8595; }
+#say .err { color: #c98a6a; }
+#say .row { display: flex; flex-wrap: wrap; align-items: center; gap: calc(8px * var(--u)); }
+#say input[type=text] {
+  flex: 1 1 calc(220px * var(--u)); max-width: calc(640px * var(--u) * var(--cap)); min-width: 0; box-sizing: border-box;
+  font-family: var(--font); font-size: inherit; letter-spacing: inherit; background: #1a1e28; color: #f0e6c8;
+  border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(2px * var(--u)) calc(8px * var(--u)); outline: none;
+}
+#say input[type=text]:focus { border-color: #7d8595; }
+#say button, #panel-actions button {
+  font-family: var(--font); font-size: inherit; text-transform: lowercase;
+  background: #1a1e28; color: #e8e2cc; border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(2px * var(--u)) calc(10px * var(--u)); cursor: pointer;
+  touch-action: manipulation;
+}
+#say button:hover, #panel-actions button:hover { background: #2a3040; }
+#say button:disabled, #panel-actions button:disabled { color: #7d8595; cursor: default; }
+#say .sizes button.chosen { color: #f0e6c8; border-color: #c98a6a; }
+/* a picture chosen for a poster: its pixel art as a thumbnail, the size it will be on the board beside it */
+#say canvas.thumb { height: calc(36px * var(--u)); width: auto; image-rendering: pixelated; border: calc(2px * var(--u)) solid #c8c0a8; }
 #status { color: #7d8595; font-size: calc(15px * var(--u) * var(--cap)); text-align: left; white-space: pre; text-transform: none; }   /* the tag line's capitals are its own */
 #panel {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
 }
-#panel.dock-left { left: calc(24px * var(--u)); transform: translate(0, -50%); }
 #panel.dock-right { left: auto; right: calc(24px * var(--u)); transform: translate(0, -50%); }
-#panel.dock-top { top: calc(24px * var(--u)); transform: translate(-50%, 0); }
 #panel {
   width: calc(420px * var(--u)); max-width: calc(100% - 32px); max-height: min(calc(380px * var(--u)), 80%); overflow: auto;
   background: #0d0f15; border: calc(2px * var(--u)) solid #3a3f4c; box-shadow: 0 0 0 calc(2px * var(--u)) #0d0f15, 0 0 0 calc(4px * var(--u)) #23262e;
   padding: calc(12px * var(--u)) calc(16px * var(--u)); box-sizing: border-box;
   pointer-events: auto; font-size: calc(19px * var(--u)); line-height: 1.25;
 }
-/* folded to its buttons over a close-up on a phone: a strip on the top rail, nothing over the cork */
-#panel.compact { width: auto; padding: calc(4px * var(--u)) calc(8px * var(--u)); top: calc(6px * var(--u)); }
-#panel.compact #panel-title, #panel.compact #panel-body { display: none; }
-#panel.compact #panel-actions { margin-top: 0; flex-wrap: nowrap; }
 #panel-title { color: #f0e6c8; font-size: calc(24px * var(--u)); margin-bottom: calc(6px * var(--u)); }
 #panel-body { color: #b9b4a4; white-space: pre-wrap; }
 #panel-body .list { margin: calc(8px * var(--u)) 0 0; padding: 0; list-style: none; }
 #panel-body .list li { padding: calc(2px * var(--u)) 0; color: #d0cab6; }
 #panel-body .list li span { color: #7d8595; float: right; }
 #panel-body .dim { color: #7d8595; font-size: calc(16px * var(--u)); }
-#panel-body #note-text {
-  display: block; width: 100%; box-sizing: border-box; margin-top: calc(8px * var(--u));
-  font-family: var(--font); font-size: calc(19px * var(--u)); background: #1a1e28; color: #f0e6c8;
-  border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(3px * var(--u)) calc(8px * var(--u)); outline: none;
-}
-#panel-body #note-text:focus { border-color: #7d8595; }
 #panel-body .note-err { color: #c98a6a; min-height: 1.25em; margin-top: calc(4px * var(--u)); }
-/* a poster for the board: the file picker and the pixelated preview */
-#panel-body .poster-or { margin-top: calc(10px * var(--u)); }
-#panel-body #poster-file { display: block; margin-top: calc(4px * var(--u)); font-family: var(--font); font-size: calc(16px * var(--u)); color: #b9b4a4; max-width: 100%; }
-#panel-body .poster-preview[hidden] { display: none; }
-#panel-body .poster-sizes { display: flex; gap: calc(6px * var(--u)); margin-top: calc(8px * var(--u)); }
-#panel-body .poster-sizes[hidden] { display: none; }
-#panel-body .poster-sizes button { font-family: var(--font); font-size: calc(17px * var(--u)); text-transform: lowercase; background: #1a1e28; color: #b9b4a4; border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(2px * var(--u)) calc(10px * var(--u)); cursor: pointer; }
-#panel-body .poster-sizes button.chosen { color: #f0e6c8; border-color: #c98a6a; }
-#panel-body .poster-preview { display: block; margin-top: calc(8px * var(--u)); image-rendering: pixelated; max-width: 100%; border: calc(2px * var(--u)) solid #3a3f4c; }
-/* the pay phone's panel: the phone itself stands large on the left of the frame, this takes the right;
-   the keypad sits beside the phone book, the line's words above, the message field below, no scrolling */
 #panel.phone { width: calc(50% - 40px * var(--u)); max-width: none; max-height: 94%; overflow: hidden; padding: calc(16px * var(--u)) calc(22px * var(--u)); }
 #panel.phone #panel-title { font-size: calc(28px * var(--u)); }
 #panel.phone .phone-body { display: grid; grid-template-columns: auto 1fr; column-gap: calc(28px * var(--u)); align-items: start; }
@@ -106,14 +123,7 @@ body { display: flex; align-items: center; justify-content: center; font-family:
   font-family: var(--font); font-size: calc(19px * var(--u)); background: #1a1e28; color: #f0e6c8;
   border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(3px * var(--u)) calc(8px * var(--u)); outline: none;
 }
-#panel-actions { margin-top: calc(10px * var(--u)); display: flex; gap: calc(8px * var(--u)); flex-wrap: wrap; }
-#panel-actions button {
-  font-family: var(--font); font-size: calc(18px * var(--u)); text-transform: lowercase;
-  background: #1a1e28; color: #e8e2cc; border: calc(2px * var(--u)) solid #3a3f4c; padding: calc(2px * var(--u)) calc(10px * var(--u)); cursor: pointer;
-  touch-action: manipulation;
-}
-#panel-actions button:hover { background: #2a3040; }
-#panel-actions button:disabled { color: #7d8595; cursor: default; }
+#panel-actions { margin-top: calc(10px * var(--u)); display: flex; gap: calc(8px * var(--u)); flex-wrap: wrap; font-size: calc(18px * var(--u)); }
 /* a phone held upright shows a letterboxed strip; the scene wants the width */
 /* The loading screen: up from the first paint until the weather is in and the scene is lit, so
    the painting never shows unlit and the weather never pops in over it. Fades out, then gone. */

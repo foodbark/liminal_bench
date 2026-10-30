@@ -100,14 +100,16 @@ function drawPosterNote(ctx, n, u = 1, legible = false) {
 
 // One poster held up to look at: the frame dimmed by a dither, the picture centered at a
 // whole-number scale that fills most of the height, its thin border and its pin.
-export function drawPosterView(ctx, n) {
+// `below` is the band's height in canvas pixels: the picture is centered in the room above it.
+export function drawPosterView(ctx, n, below = 0) {
   ctx.fillStyle = ditherPattern(ctx, '#000', 8);
   ctx.fillRect(0, 0, W, H);
   const im = posterImage(n.poster);
   const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
-  const s = Math.max(1, Math.round(SCALE)), b = screenPx(3), k = Math.max(1, Math.floor((H * 0.8 - 2 * b) / ph));
+  const room = H - below;
+  const s = Math.max(1, Math.round(SCALE)), b = screenPx(3), k = Math.max(1, Math.floor((room * 0.8 - 2 * b) / ph));
   const w = pw * k + 2 * b, h = ph * k + 2 * b;
-  drawPosterNote(ctx, { ...n, x: (W - w) >> 1, y: (H - h) >> 1, w, h, border: b, k }, s, true);
+  drawPosterNote(ctx, { ...n, x: (W - w) >> 1, y: (room - h) >> 1, w, h, border: b, k }, s, true);
 }
 
 // Text wrapped to the paper and snapped to hard pixels: the glyphs are set on a scratch canvas

@@ -43,6 +43,7 @@ export function createState() {
     view: 'scene',    // scene | phone | board | bench
     closeup: null,    // which view's close-up painting is up, once its zoom has settled
     poster: null, placing: null,     // a poster on the board held up to look at (one of state.notes)
+    bandH: 0,         // the band at the bottom, in canvas pixels, so a held-up poster stays clear of it
     camera: { cx: W / 2, cy: H / 2, s: 1 },
     hover: null,
     notes: [],

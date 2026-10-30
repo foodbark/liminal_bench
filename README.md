@@ -108,7 +108,7 @@ Materials in use: grass, foliage, dirt, shrub, prop. There is no painted summit 
 ## Layout
 
 ```
-index.html, style.css        shell, the Sierra-style caption bar, the panels, the loading screen
+index.html, style.css        shell, the band (the Sierra line under the picture: status, caption, and the words, fields and buttons of whatever is open), the phone's box, the loading screen
 src/main.js                  the loop; computeEnv builds the environment from time, sun, weather, cams, palette
 src/state.js                 constants (the station, the summit, the season table), the override, time helpers
 src/weather.js               Open-Meteo: the valley station and the hourly week, the summit query; presets
@@ -122,7 +122,7 @@ src/notes.js                 the board's notes and posters: localStorage, or the
 src/pixelate.js              the browser port of tools/pixelate.py, for posters
 src/phone.js                 the pay phone: dialing, tones in Web Audio, intercepts, the time line, machines, items
 src/items.js                 what a visitor carries (the whistle, the blue box); nothing hands them out yet
-src/ui.js                    hotspots, camera zoom, panels, the compose form, the phone panel, debug controls
+src/ui.js                    hotspots, camera zoom, the band (the note form, the tear question, the bench's words), the phone panel, debug controls
 src/assets.js                loads the painted scene and its mask (worker-safe)
 src/render/renderer.js       the compositor and its caches; the worker's client
 src/render/terrain_worker.js the sky gradient, the sheets and the terrain pass off the main thread
