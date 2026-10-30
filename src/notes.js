@@ -268,10 +268,24 @@ export function ghostNote(draft, fx, fy, now = Date.now()) {
   const s = placedItem(n, now, null, 0, 0, cx, cy);
   return Object.assign(makeNote(s.text, s), { mine: true, at: s.at, id: null, seed: null, poster: s.poster, placed: true, k: s.k, ghost: true });
 }
-export function buildNotes(now = Date.now()) {
+// The slots in the order a pin takes them: a bare one first, then the most faded.
+function slotOrder(now) {
   const slots = META.notes.map(([x, y, w, h, paper, age], i) => ({ x, y, w, h, paper, age, text: SEED_TEXTS[i % SEED_TEXTS.length], seed: i }));
   const down = new Set(torn.filter((t) => stillDown(t, now)).map((t) => t.seed));
   const order = slots.map((s, i) => i).sort((a, b) => (down.has(b) - down.has(a)) || (slots[b].age - slots[a].age));
+  return { slots, down, order };
+}
+// Where a fresh pin would land if nobody placed it: the slot the board would give it, as
+// fractions of the cork. The paper in the hand starts there (the user, 2026-10-30: on a phone
+// nothing showed until a tap), so there is something to see and to drag.
+export function firstSpot(now = Date.now()) {
+  const { slots, order } = slotOrder(now);
+  const inSlots = [...posted, ...posters].filter((n) => !hasPlace(n) && paperKey(n) !== lifted).length;
+  const s = slots[order[Math.min(inSlots, slots.length - 1)]];
+  return { fx: clamp((s.x + s.w / 2 - CORK.x) / CORK.w, 0, 1), fy: clamp((s.y + s.h / 2 - CORK.y) / CORK.h, 0, 1) };
+}
+export function buildNotes(now = Date.now()) {
+  const { slots, down, order } = slotOrder(now);
   // notes and posters share the slots, in the order they went up: the latest take the slots,
   // and everything older piles up beneath them, each a little askew, newest on top; nothing
   // blows away, the oldest is only buried

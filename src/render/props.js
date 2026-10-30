@@ -37,7 +37,8 @@ function drawNote(ctx, n, u = 1, legible = false) {
   const hand = handFor(n.text), ink = lerpRGB(hand.ink, [128, 106, 82], fade);
   const x = n.x, y = n.y, w = n.w, h = n.h, s = Math.max(1, Math.round(u));
   const edge = rgb(lerpRGB(paper, [0, 0, 0], 0.18));
-  px(ctx, '#5a4030', x + s, y + s, w, h);            // shadow on the cork
+  const lift = n.ghost ? 3 * s : s;                  // a piece in the hand stands off the cork
+  px(ctx, '#5a4030', x + lift, y + lift, w, h);      // shadow on the cork
   px(ctx, rgb(paper), x, y, w, h);
   px(ctx, edge, x + w - s, y, s, h);
   px(ctx, edge, x, y + h - s, w, s);
@@ -47,8 +48,8 @@ function drawNote(ctx, n, u = 1, legible = false) {
   const c = 3 * s, curl = rgb(lerpRGB(paper, [0, 0, 0], 0.3));
   if (fade > 0.35) { for (let i = 0; i < c; i++) px(ctx, '#8b6a4a', x, y + h - 1 - i, c - i, 1); px(ctx, curl, x + s, y + h - c, 2 * s, s); }
   if (fade > 0.7) { for (let i = 0; i < c; i++) px(ctx, '#8b6a4a', x + w - (c - i), y + i, c - i, 1); }
-  // pin
-  px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
+  // pin (none while it is in the hand)
+  if (!n.ghost) { px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s); }
 }
 
 // A poster: the picture with a thin white border, the paper cut to it, centered in its slot.
@@ -92,10 +93,11 @@ function drawPosterNote(ctx, n, u = 1, legible = false) {
   else { const k = Math.min((n.w - 2 * b) / pw, (n.h - 2 * b) / ph); dw = Math.max(1, Math.round(pw * k)); dh = Math.max(1, Math.round(ph * k)); }
   const w = dw + 2 * b, h = dh + 2 * b, x = n.x + ((n.w - w) >> 1), y = n.y + ((n.h - h) >> 1);
   const paper = lerpRGB([248, 246, 240], [180, 138, 94], clamp(n.age, 0, 1) * 0.75);
-  px(ctx, '#5a4030', x + s, y + s, w, h);            // shadow on the cork
+  const lift = n.ghost ? 3 * s : s;                  // a piece in the hand stands off the cork
+  px(ctx, '#5a4030', x + lift, y + lift, w, h);      // shadow on the cork
   px(ctx, rgb(paper), x, y, w, h);
   if (im) { ctx.imageSmoothingEnabled = !legible; ctx.drawImage(im, x + b, y + b, dw, dh); ctx.imageSmoothingEnabled = false; }
-  px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s);
+  if (!n.ghost) { px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s); }
 }
 
 // One poster held up to look at: the frame dimmed by a dither, the picture centered at a
@@ -231,17 +233,21 @@ export function closeupNotes(state, cu) {
 export function drawCloseupNotes(ctx, state, cu) {
   for (const big of closeupNotes(state, cu)) drawNote(ctx, big, big.u, true);
 }
-// The paper being placed, carried over the cork under the pointer: drawn on its own small
-// canvas and lit by the same ambient as the close-up, so at night it is no brighter than the
-// board it is about to go on.
-export function drawGhostNote(ctx, note, cu, ambient) {
+// The paper in the hand (a fresh pin being placed, or a piece picked up to move), over the
+// cork: drawn on its own small canvas and lit by the same ambient as the close-up, so at night
+// it is no brighter than the board it is about to go on. It reads as held and not pinned (the
+// user, 2026-10-30: on a phone "it kinda looks like nothing happens"): no pin, a deeper shadow
+// since it stands off the cork, and a slow breath, `breath` 0..1 lifting its brightness a step.
+export function drawGhostNote(ctx, note, cu, ambient, breath = 0) {
   const [big] = closeupNotes({ notes: [note] }, cu);
-  const s = Math.max(1, Math.round(big.u)), pad = 2 * s + 2;
+  const s = Math.max(1, Math.round(big.u)), pad = 4 * s + 2;
   const [c, g] = makeCanvas(big.w + 2 * pad + 2 * s, big.h + 2 * pad + 2 * s);
   const [m, mg] = makeCanvas(c.width, c.height);
-  drawNote(g, { ...big, x: pad, y: pad }, big.u, true);
+  drawNote(g, { ...big, x: pad, y: pad, ghost: true }, big.u, true);
   mg.drawImage(c, 0, 0);
   g.globalCompositeOperation = 'multiply'; g.fillStyle = rgb(ambient); g.fillRect(0, 0, c.width, c.height);
+  const k = Math.round(breath * 40);
+  if (k) { g.globalCompositeOperation = 'lighter'; g.fillStyle = rgb([k, k, k]); g.fillRect(0, 0, c.width, c.height); }
   g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0);
   ctx.drawImage(c, big.x - pad, big.y - pad);
 }

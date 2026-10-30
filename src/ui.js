@@ -1,7 +1,7 @@
 import { W, H, SCALE, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, CORK, closeupNotes } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper, firstSpot } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -83,6 +83,14 @@ export function setupUI(state, canvas) {
     if (mx < cu.cork.x - m || mx > cu.cork.x + cu.cork.w + m || my < cu.cork.y - m || my > cu.cork.y + cu.cork.h + m) return null;
     return { fx: Math.min(1, Math.max(0, (mx - cu.cork.x) / cu.cork.w)), fy: Math.min(1, Math.max(0, (my - cu.cork.y) / cu.cork.h)) };
   }
+  // the paper in the hand, when the pointer is on it (the close-up is drawn in canvas pixels)
+  function ghostAt(e) {
+    const pl = state.placing, cu = CLOSEUPS.board; if (!pl || !pl.note || !cu || state.closeup !== 'board') return false;
+    const r = canvas.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width * W, my = (e.clientY - r.top) / r.height * H;
+    const [g] = closeupNotes({ notes: [pl.note] }, cu);
+    return mx >= g.x && mx < g.x + g.w && my >= g.y && my < g.y + g.h;
+  }
   // where the carried paper's center goes for this pointer: a held piece keeps the grip it was
   // picked up by (`held.ox`, `held.oy`: its center's offset from the pointer, in cork fractions),
   // so it neither jumps at the pickup nor lands anywhere but where it is seen; null off the cork
@@ -98,7 +106,7 @@ export function setupUI(state, canvas) {
     canvas.classList.toggle('hot', !!p && !state.placing.held);
   }
   canvas.addEventListener('mousemove', (e) => {
-    if (state.placing) { if (!state.placing.held) carry(e); return; }   // a held piece follows the pointer events
+    if (state.placing) { if (!state.placing.held && !COMPACT.matches) carry(e); return; }   // a held piece follows the pointer events; on a touch screen the paper sits until dragged
     if (state.view !== 'scene') {
       const n = state.view === 'board' && !bandOpen && !state.poster ? noteAt(e) : null;
       state.hover = n ? 'note' : null; state.hoverLabel = n ? (n.poster ? 'a poster' : `a note: “${n.text}”`) + ' · hold to pick it up' : '';
@@ -118,26 +126,38 @@ export function setupUI(state, canvas) {
   const HOLD_MS = 220, DRAG_PX = 5;
   let press = null, swallowClick = 0;
   const pressed = (e) => press && e.pointerId === press.id;
+  // the grip: the piece's center against the pointer, in cork fractions, kept while it is carried
+  function grip(e, note, id) {
+    try { canvas.setPointerCapture(id); } catch (err) { /* a pointer already gone */ }
+    const p = corkAt(e), g = p || { fx: 0, fy: 0 };
+    const ox = (note.x + note.w / 2 - CORK.x) / CORK.w - g.fx, oy = (note.y + note.h / 2 - CORK.y) / CORK.h - g.fy;
+    return { held: true, id, x: e.clientX, y: e.clientY, ox: p ? ox : 0, oy: p ? oy : 0 };
+  }
   function lift(e) {
     if (!press) return;
     const { note, id } = press; clearTimeout(press.timer); press = null;
-    try { canvas.setPointerCapture(id); } catch (err) { /* a pointer already gone */ }
-    // the grip: the piece's center against the pointer, in cork fractions, kept while it is carried
-    const p = corkAt(e), g = p || { fx: 0, fy: 0 };
-    const ox = (note.x + note.w / 2 - CORK.x) / CORK.w - g.fx, oy = (note.y + note.h / 2 - CORK.y) / CORK.h - g.fy;
-    startMoving(note, { held: true, id, x: e.clientX, y: e.clientY, ox: p ? ox : 0, oy: p ? oy : 0 });
+    startMoving(note, grip(e, note, id));
     carry(e);
   }
   function dropHeld(e) {
     const held = state.placing.held;
     swallowClick = Date.now();   // the click that follows the release is not a click on the board
     canvas.classList.remove('grab');
-    // let go where it was picked up: nothing moved, it goes back without a word
-    if (Math.hypot(e.clientX - held.x, e.clientY - held.y) < DRAG_PX * 2) { backToForm(); return; }
-    placeAt(e);
+    if (Math.hypot(e.clientX - held.x, e.clientY - held.y) < DRAG_PX * 2) {
+      // let go where it was picked up: a piece off the board goes back without a word; a fresh
+      // pin tapped where it sits is pinned there
+      if (state.placing.moving) backToForm(); else placeAt({ fx: state.placing.fx, fy: state.placing.fy });
+      return;
+    }
+    placeAt(carriedTo(e));
   }
   canvas.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || !e.isPrimary || state.placing || state.poster || bandOpen || state.view !== 'board') return;
+    if (e.button !== 0 || !e.isPrimary || state.poster || state.view !== 'board') return;
+    if (state.placing) {   // the paper in the hand, taken by the pointer: a drag moves it, letting go pins it
+      if (!state.placing.held && ghostAt(e)) { state.placing.held = grip(e, state.placing.note, e.pointerId); canvas.classList.add('grab'); }
+      return;
+    }
+    if (bandOpen) return;
     const n = noteAt(e);
     if (!n) return;
     press = { note: n, id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(() => lift(e), HOLD_MS) };
@@ -152,7 +172,7 @@ export function setupUI(state, canvas) {
   });
   canvas.addEventListener('pointercancel', (e) => {
     if (pressed(e)) { clearTimeout(press.timer); press = null; }
-    if (state.placing && state.placing.held) { canvas.classList.remove('grab'); backToForm(); }
+    if (state.placing && state.placing.held) { canvas.classList.remove('grab'); if (state.placing.moving) backToForm(); else state.placing.held = null; }
   });
   canvas.addEventListener('contextmenu', (e) => { if (press || state.placing) e.preventDefault(); });   // a long press on a touch screen
   canvas.addEventListener('click', (e) => {
@@ -160,7 +180,7 @@ export function setupUI(state, canvas) {
     if (state.view === 'scene') { const h = hitTest(toWorld(e)); if (h && VIEWS[h.id]) enter(h.id); return; }
     if (!twoStep(state.view)) { leave(); return; }         // a view without a close-up: any click steps back
     if (state.poster) { putBack(); return; }               // holding a poster: any click puts it back
-    if (state.placing) { placeAt(e); return; }             // carrying the paper: this is where it goes
+    if (state.placing) { placeAt(carriedTo(e)); return; }  // carrying the paper: this is where it goes
     const n = state.view === 'board' ? noteAt(e) : null;   // a note on the cork: offer to tear it down; a poster: hold it up
     if (bandOpen) { shut(); if (!n) return; }              // a click off the form puts it away
     if (settled) n ? (n.poster ? holdUp(n) : tearPanel(n)) : (state.view === 'board' ? compose : showPanel)(state.view);
@@ -185,7 +205,18 @@ export function setupUI(state, canvas) {
   // Escape, carries it back to the form with the words kept.
   function startPlacing(draft) {
     state.placing = { ...draft, ghostId: -Date.now(), fx: null, fy: null, note: null };
-    shut(); state.hover = null;
+    const { fx, fy } = firstSpot();   // it lands at once where the board would have put it, there to see and to drag
+    state.placing.fx = fx; state.placing.fy = fy; state.placing.note = ghostNote(state.placing, fx, fy);
+    inHand(); state.hover = null;
+  }
+  // The band while the paper is in the hand: a fresh pin, or a piece picked up to move. "pin it
+  // here" pins it where it sits, so nobody has to aim; the other button is the way back.
+  function inHand() {
+    const moving = state.placing.moving;
+    const { text, acts } = open();
+    line(text, moving ? 'It is off the cork, in your hand.' : 'It is in your hand.', 'line dim');
+    button(acts, 'pin it here', () => placeAt({ fx: state.placing.fx, fy: state.placing.fy }));
+    button(acts, moving ? 'put it back' : 'never mind', () => backToForm());
   }
   function backToForm(err = '') {
     const draft = state.placing; state.placing = null; canvas.classList.remove('hot');
@@ -197,10 +228,12 @@ export function setupUI(state, canvas) {
     }
     compose({ ...draft, error: err });
   }
-  async function placeAt(e) {
-    const draft = state.placing, p = carriedTo(e);
-    if (!p) { backToForm(); return; }
-    state.placing = null; canvas.classList.remove('hot');
+  // `p` is where it goes, cork fractions; null (off the cork) sends it back
+  async function placeAt(p) {
+    const draft = state.placing;
+    if (!draft) return;
+    if (!p || p.fx == null) { backToForm(); return; }
+    state.placing = null; canvas.classList.remove('hot', 'grab'); shut();
     try {
       const place = { x: p.fx, y: p.fy };
       if (draft.moving) { await movePaper(draft.moving, place); dropPaper(); }
@@ -218,7 +251,7 @@ export function setupUI(state, canvas) {
     if (state.poster) putBack();
     liftPaper(n); refresh();
     state.placing = { moving: n, held, text: n.text || '', poster: null, ghostId: null, fx: null, fy: null, note: null };
-    shut(); state.hover = null; canvas.classList.remove('hot'); canvas.classList.toggle('grab', !!held);
+    inHand(); state.hover = null; canvas.classList.remove('hot'); canvas.classList.toggle('grab', !!held);
   }
 
   // The band: the Sierra line under the picture, grown to say something or ask (the user,
@@ -456,7 +489,7 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !bandOpen ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (COMPACT.matches ? (state.placing.moving ? 'let go where it goes' : 'tap where it goes') : state.placing.moving ? 'carry it where you like · let go to pin it there · esc to put it back' : 'put it where you like · click to pin it there · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
+      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (state.placing.held ? 'let go to pin it there' : COMPACT.matches ? 'drag it where you like, or tap the cork' : 'click where it goes · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
       if (state.view === 'scene' && state.hover === 'flight' && line.includes(' · ')) {
         // a flight's callsign in capitals, the rest of its line in the caption's lowercase (the user, 2026-10-22)
         const cut = line.indexOf(' · ');

@@ -226,9 +226,12 @@ export class Renderer {
     const fb = this.fx.flights.bands(), flights = fb.any;
     const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}|${state.bandH | 0}` : '';
     if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
-    // the paper being placed follows the pointer: a frame whenever it moves
+    // the paper in the hand follows the pointer and breathes: a frame whenever it moves, and
+    // a few a second for the breath (a 2.4 s cycle in eight steps)
     const pl = state.placing && state.placing.note;
-    const placingKey = pl ? `${pl.x}|${pl.y}|${pl.w}|${pl.h}|${pl.text}` : '';
+    const breath = pl ? Math.round((1 - Math.cos(t * Math.PI * 2 / 2.4)) * 4) / 8 : 0;
+    this.breath = breath;
+    const placingKey = pl ? `${pl.x}|${pl.y}|${pl.w}|${pl.h}|${pl.text}|${breath}` : '';
     if (placingKey !== this.placingKey) { this.placingKey = placingKey; this.dirty = true; }
     const animated = clouds || env.cond.precip.intensity > 0 || night || this.fx.flash > 0 || gliders || flights;
     if (!this.dirty && !animated && camKey === this.camKey) return;
@@ -311,7 +314,7 @@ export class Renderer {
     drawLampGlow(c, env); lap('lamp');
     if (cuId) {
       c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(this.closeup, 0, 0);
-      if (pl && cuId === 'board') drawGhostNote(c, pl, CLOSEUPS.board, env.pal.ambient.map((v) => (v + (1 - v) * 0.45) * 255));
+      if (pl && cuId === 'board') drawGhostNote(c, pl, CLOSEUPS.board, env.pal.ambient.map((v) => (v + (1 - v) * 0.45) * 255), this.breath);
       c.setTransform(cam.s, 0, 0, cam.s, Math.round(W / 2 - cam.cx * cam.s), Math.round(H / 2 - cam.cy * cam.s)); lap('closeup');
     }
     this.fx.drawPrecip(c, env); lap('precip');
