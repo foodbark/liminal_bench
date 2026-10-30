@@ -227,9 +227,9 @@ export class Renderer {
     const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}|${state.bandH | 0}` : '';
     if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
     // the paper in the hand follows the pointer and breathes: a frame whenever it moves, and
-    // a few a second for the breath (a 2.4 s cycle in eight steps)
+    // a few a second for the breath (a 1.4 s cycle in eight steps; 2.4 was too slow to catch on a phone, the user, 2026-10-30)
     const pl = state.placing && state.placing.note;
-    const breath = pl ? Math.round((1 - Math.cos(t * Math.PI * 2 / 2.4)) * 4) / 8 : 0;
+    const breath = pl ? Math.round((1 - Math.cos(t * Math.PI * 2 / 1.4)) * 4) / 8 : 0;
     this.breath = breath;
     const placingKey = pl ? `${pl.x}|${pl.y}|${pl.w}|${pl.h}|${pl.text}|${breath}` : '';
     if (placingKey !== this.placingKey) { this.placingKey = placingKey; this.dirty = true; }

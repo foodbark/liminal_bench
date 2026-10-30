@@ -1,5 +1,5 @@
 import { W, H, HORIZON, SCALE, META } from '../state.js';
-import { ditherPattern, fillCircle, clamp, rgb, lerpRGB, hex, makeCanvas } from '../util/pixel.js';
+import { ditherPattern, grainPattern, fillCircle, clamp, rgb, lerpRGB, hex, makeCanvas } from '../util/pixel.js';
 import { posterImage } from '../notes.js';
 
 // The bench, bulletin board, pay phone and pole are part of the painting (art/concept_art_03.png,
@@ -237,16 +237,24 @@ export function drawCloseupNotes(ctx, state, cu) {
 // cork: drawn on its own small canvas and lit by the same ambient as the close-up, so at night
 // it is no brighter than the board it is about to go on. It reads as held and not pinned (the
 // user, 2026-10-30: on a phone "it kinda looks like nothing happens"): no pin, a deeper shadow
-// since it stands off the cork, and a slow breath, `breath` 0..1 lifting its brightness a step.
+// since it stands off the cork, and a slow breath, `breath` 0..1: a pale halo stippled on the
+// cork around it, denser as it breathes in (on a phone a small scrap's own brightening was too
+// little to see, the user, the same day), and its brightness lifted a step.
+const HALO = 6;   // the halo's reach around the paper, in close-up pixels per scene pixel
 export function drawGhostNote(ctx, note, cu, ambient, breath = 0) {
   const [big] = closeupNotes({ notes: [note] }, cu);
-  const s = Math.max(1, Math.round(big.u)), pad = 4 * s + 2;
+  const s = Math.max(1, Math.round(big.u)), pad = (HALO + 2) * s + 2;
   const [c, g] = makeCanvas(big.w + 2 * pad + 2 * s, big.h + 2 * pad + 2 * s);
   const [m, mg] = makeCanvas(c.width, c.height);
+  const r = HALO * s, d = 0.1 + 0.55 * breath;   // two bands, the outer half as dense, so the edge is soft
+  g.fillStyle = grainPattern(g, '#fff0c8', d / 2);
+  g.fillRect(pad - r, pad - r, big.w + 2 * r, big.h + 2 * r);
+  g.fillStyle = grainPattern(g, '#fff0c8', d);
+  g.fillRect(pad - r / 2, pad - r / 2, big.w + r, big.h + r);
   drawNote(g, { ...big, x: pad, y: pad, ghost: true }, big.u, true);
   mg.drawImage(c, 0, 0);
   g.globalCompositeOperation = 'multiply'; g.fillStyle = rgb(ambient); g.fillRect(0, 0, c.width, c.height);
-  const k = Math.round(breath * 40);
+  const k = Math.round(breath * 48);
   if (k) { g.globalCompositeOperation = 'lighter'; g.fillStyle = rgb([k, k, k]); g.fillRect(0, 0, c.width, c.height); }
   g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0);
   ctx.drawImage(c, big.x - pad, big.y - pad);
