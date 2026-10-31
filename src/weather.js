@@ -1,9 +1,9 @@
-import { LAT, LON, RIDGE, localHourKey } from './state.js';
+import { LAT, LON, ELEV, RIDGE, localHourKey } from './state.js';
 
 const URL = 'https://api.open-meteo.com/v1/forecast'
   + `?latitude=${LAT}&longitude=${LON}`
-  + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day'
-  + '&hourly=snow_depth,snowfall,temperature_2m,precipitation,relative_humidity_250hPa,temperature_250hPa,wind_speed_250hPa,wind_direction_250hPa&past_days=7&forecast_days=1&timezone=America%2FDenver'
+  + '&current=temperature_2m,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_direction_10m,precipitation,snowfall,is_day,dew_point_2m'
+  + '&hourly=snow_depth,snowfall,temperature_2m,precipitation,relative_humidity_250hPa,temperature_250hPa,wind_speed_250hPa,wind_direction_250hPa,cloud_cover_925hPa,cloud_cover_850hPa,cloud_cover_800hPa&past_days=7&forecast_days=1&timezone=America%2FDenver'
   + '&temperature_unit=fahrenheit&wind_speed_unit=mph';
 // A week back: the grass greens up again after a few days of rain in warm weather, and that is
 // read off the week's hourly rain and temperature, not the current hour.
@@ -57,10 +57,27 @@ export async function fetchWeather() {
   // seconds or hangs for an hour is the humidity up there, and the wind up there is what drifts
   // it (src/flights.js). Taken at the current hour; null when the feed lacks it.
   let upper = null;
+  // The cloud base: the feed's cover bands are area, not height, and on a day with the deck
+  // sitting on the summits the model can thin its low band through the afternoon while the
+  // tops stay in cloud (2026-10-31: low 42%, the user and the Mountain Press cam both with
+  // the tops gone). So the base is estimated from the valley's dew-point spread, the lifted
+  // condensation level at 125 m per °C, and `cloudAt` is how much cloud the model has at
+  // 925, 850 and 800 hPa (about 750, 1450 and 1950 m: Sentinel's foot, its summit and Dean
+  // Stone's shoulder), which says whether there is a deck at that height at all. main.js
+  // turns them into the ceiling the terrain pass draws.
+  let cloudBase = null, cloudAt = null;
+  if (c.dew_point_2m != null && c.temperature_2m != null) cloudBase = Math.round(ELEV + 125 * Math.max(0, c.temperature_2m - c.dew_point_2m) * 5 / 9);
   if (j.hourly && j.hourly.time) {
     const idx = j.hourly.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13));
     if (idx >= 0 && j.hourly.relative_humidity_250hPa && j.hourly.relative_humidity_250hPa[idx] != null) {
       upper = { rh: j.hourly.relative_humidity_250hPa[idx], temp: j.hourly.temperature_250hPa[idx], wind: j.hourly.wind_speed_250hPa[idx] ?? 0, windDir: j.hourly.wind_direction_250hPa[idx] ?? 270 };
+    }
+    // the most over this hour and the two before: a deck on the summits lingers after the
+    // model's hour clears it (2026-10-31: 79% at 850 hPa at 13:00, 31% by 15:00, the tops
+    // still in it at 15:00)
+    if (idx >= 0 && j.hourly.cloud_cover_850hPa && j.hourly.cloud_cover_850hPa[idx] != null) {
+      const most = (arr) => { let m = 0; for (let k = Math.max(0, idx - 2); k <= idx; k++) m = Math.max(m, arr?.[k] ?? 0); return m / 100; };
+      cloudAt = { p925: most(j.hourly.cloud_cover_925hPa), p850: most(j.hourly.cloud_cover_850hPa), p800: most(j.hourly.cloud_cover_800hPa) };
     }
     if (idx >= 0 && j.hourly.snow_depth[idx] != null) snowDepth = j.hourly.snow_depth[idx];
     // Loose snow for the wind: snowfall (cm) in the 18 hours before now. The dusting itself is
@@ -95,7 +112,7 @@ export async function fetchWeather() {
     temp: c.temperature_2m, code: c.weather_code, cover: c.cloud_cover / 100, coverLow: (c.cloud_cover_low ?? 0) / 100, coverMid: (c.cloud_cover_mid ?? 0) / 100, coverHigh: (c.cloud_cover_high ?? 0) / 100,
     wind: c.wind_speed_10m, windDir: c.wind_direction_10m,
     precip: c.precipitation, snowfall: c.snowfall, snowDepth, freshSnow, hours: feedHours,
-    rainWeek, warmWeek, greenup, upper,
+    rainWeek, warmWeek, greenup, upper, cloudBase, cloudAt, dew: c.dew_point_2m,
     ridge,
   };
 }
@@ -133,6 +150,7 @@ export const WEATHER_PRESETS = {
   fogsea:    { code: 45, cover: 0.05, coverLow: 0, coverMid: 0, coverHigh: 0.1, temp: 33, wind: 1, snowDepth: 0, inversion: 1, fogTop: 1 },   // a deep morning fog, up the slopes: the cams' reading on a true inversion
   dusting:   { code: 1,  cover: 0.2, coverLow: 0.1, coverMid: 0.1, coverHigh: 0.3, temp: 38, wind: 3, snowDepth: 0, freshSnow: 1 },     // last night's skiff, melting off through the day
   mountainfog: { code: 3, cover: 0.8, coverLow: 0.9, coverMid: 0.4, coverHigh: 0.2, temp: 41, wind: 3, snowDepth: 0, lowcloud: 1 },
+  ceiling:  { code: 3, cover: 1.0, coverLow: 0.4, coverMid: 1.0, coverHigh: 0.4, temp: 45, wind: 3, snowDepth: 0, cloudBase: 1200 },   // 2026-10-31: a deck on the summits under a thinned low band, the base from the dew point
   storm:    { code: 95, cover: 1.0,  coverLow: 0.9, coverMid: 0.9, coverHigh: 0.7, temp: 66, wind: 22, snowDepth: 0 },
   blowing:  { code: 71, cover: 0.9,  coverLow: 0.8, coverMid: 0.5, coverHigh: 0.3, temp: 22, wind: 24, snowDepth: 0.25 },   // light snow in a hard wind
   blizzard: { code: 75, cover: 1.0,  coverLow: 1.0, coverMid: 0.9, coverHigh: 0.8, temp: 18, wind: 34, snowDepth: 0.3 },
