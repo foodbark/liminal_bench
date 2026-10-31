@@ -52,7 +52,7 @@ if (/[?&]diag\b/.test(location.search)) {
     box.textContent = `liminal bench diag  ${W}x${H}  worker=${renderer.useWorker} ready=${renderer.workerReady}  frames=${frameCount}\n`
       + `weather: ${d.weather || 'pending'}  cover=${state.env.cond.cover}  ${state.env.cond.label}  cams: ${d.cams || 'pending'}\n`
       + `flights: ${d.flights || 'pending'}  in frame: ${renderer.fx.flights.list.filter((f) => f.xy).length}  contrail life ${state.env.upper ? Math.round(contrailLifeS(state.env.upper)) + ' s' : 'n/a'}\n`
-      + `cloud base ${state.weather.cloudBase != null ? state.weather.cloudBase + ' m' : 'n/a'}  at 925/850/800: ${state.weather.cloudAt ? [state.weather.cloudAt.p925, state.weather.cloudAt.p850, state.weather.cloudAt.p800].map((v) => Math.round(v * 100) + '%').join(' ') : 'n/a'}  ceiling ${state.env.ceilK.toFixed(2)} at ${state.env.ceilBase == null ? 'the old heights' : Math.round(state.env.ceilBase) + ' m'}  mountain fog ${state.env.mountainFog.toFixed(2)}\n`
+      + `cloud base ${state.weather.cloudBase != null ? state.weather.cloudBase + ' m' : 'n/a'}  at 925/850/800: ${state.weather.cloudAt ? [state.weather.cloudAt.p925, state.weather.cloudAt.p850, state.weather.cloudAt.p800].map((v) => Math.round(v * 100) + '%').join(' ') : 'n/a'}  mountain fog ${state.env.mountainFog.toFixed(2)}\n`
       + d.stages.map(([n, t]) => `${String(t).padStart(6)}ms  ${n}`).join('\n')
       + (d.errors.length ? '\nERRORS:\n' + d.errors.join('\n') : '\nno errors')
       + `\n${navigator.userAgent}`;
@@ -60,8 +60,8 @@ if (/[?&]diag\b/.test(location.search)) {
 }
 const ui = setupUI(state, canvas);
 
-// Dean Stone's span (m), which the ceiling's base is measured against
-const [CEIL_FOOT, CEIL_CREST] = DUST_PLANES[LAYER.RANGE].elev;
+// Dean Stone's crest (m), which the cloud base is measured against
+const CEIL_CREST = DUST_PLANES[LAYER.RANGE].elev[1];
 
 function computeEnv() {
   const o = state.override;
@@ -110,29 +110,23 @@ function computeEnv() {
   const fogTop = inversion ? (preset ? (preset.fogTop || 0) : (w.fogTop || 0)) : 0;
   let mountainFog = preset ? (preset.lowcloud || 0) : Math.max(0, Math.min(1, ((w.coverLow ?? 0) - 0.5) / 0.35));
   if (!preset && cond.precip.intensity > 0) mountainFog = Math.max(mountainFog, cond.precip.intensity * 0.6);
-  // The ceiling: the cloud base against the summits, in metres, and how solid the cloud up
-  // there is. Solid low cover alone puts the base on the mountains as before (Dean Stone's
-  // crest in the cloud from 40% of its height at full cover). The feed's base (weather.js:
-  // the dew-point spread) lowers it when the model has cloud at the summits' height at all
-  // (its low band, or its cloud at 925, 850 or 800 hPa, counted from a fifth), since the low
-  // band is area, not height: on 2026-10-31 the model thinned it to 42% through the afternoon
-  // while the tops stayed in the deck (the user; the Mountain Press cam agreed). The banks on
-  // the slopes come up with it, most of the way, since a deck on the tops hazes the slopes under it.
-  let ceilK = preset ? (preset.lowcloud ? 1 : 0) : mountainFog * mountainFog;
-  let ceilBase = null;   // null: the low-cover ceiling at its old heights (the approved look); metres: the feed's base
-  const base = preset ? preset.cloudBase : w.cloudBase;
-  if (base != null && !inversion) {
+  // The deck on the summits. The feed's low cover is area, not height: on 2026-10-31 the
+  // model thinned its low band to 42% through the afternoon while the tops stayed in the deck
+  // (the user; the Mountain Press cam agreed), and the fog switched off. So the mountain fog
+  // also comes up when the valley's cloud base (weather.js: the dew-point spread) is under
+  // Dean Stone's crest and the model has cloud at the summits' height at all (its cloud at
+  // 925, 850 or 800 hPa, held for three hours, or the low band, counted from a fifth; or a
+  // valley within a couple of degrees of its dew point under an overcast, since the model
+  // thinned its layers with the valley at 88%). The look is the old banks and ceiling; a
+  // version that drew the base at its true height on each hill, the hill gone into the sky's
+  // tone above it, was "terrible" (the user, 2026-10-31) and is not to come back.
+  if (!preset && w.cloudBase != null && !inversion) {
     const at = Math.max(w.coverLow ?? 0, w.cloudAt?.p925 ?? 0, w.cloudAt?.p850 ?? 0, w.cloudAt?.p800 ?? 0);
-    // and a valley within a couple of degrees of its dew point under an overcast has its deck
-    // low whatever the model's layers say (the model thinned its low band through the
-    // afternoon of 2026-10-31 while the valley sat at 88% and the deck stayed on the tops)
     const spreadC = w.temp != null && w.dew != null ? Math.max(0, w.temp - w.dew) * 5 / 9 : 9;
     const sat = Math.max(0, Math.min(1, (2.5 - spreadC) / 1.5)) * Math.max(0, Math.min(1, ((w.cover ?? 0) - 0.7) / 0.25));
-    const gate = preset ? 1 : Math.max(Math.max(0, Math.min(1, (at - 0.2) / 0.4)), sat);
-    const under = Math.max(0, Math.min(1, (CEIL_CREST - base) / 150));   // the base under Dean Stone's crest, fading in over the last 150 m
-    const k = gate * under;
-    const oldBase = CEIL_FOOT + (1.1 - 0.7 * ceilK) * (CEIL_CREST - CEIL_FOOT);   // where the low-cover ceiling sits on Dean Stone
-    if (k > 0 && base < oldBase) { ceilBase = base; ceilK = Math.max(ceilK, k); mountainFog = Math.max(mountainFog, 0.75 * k); }
+    const gate = Math.max(Math.max(0, Math.min(1, (at - 0.2) / 0.4)), sat);
+    const under = Math.max(0, Math.min(1, (CEIL_CREST - w.cloudBase) / 150));   // the base under Dean Stone's crest, fading in over the last 150 m
+    mountainFog = Math.max(mountainFog, gate * under);
   }
   if (inversion) { cond.fog = false; cond.label = 'inversion'; }
   else if (mountainFog > 0.5 && !cond.fog && cond.precip.intensity === 0) cond.label = 'low clouds';
@@ -197,11 +191,11 @@ function computeEnv() {
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
-    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, fogTop, mountainFog, ceilK, ceilBase, dusting, greenup, sky,
+    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, fogTop, mountainFog, dusting, greenup, sky,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     upper: w.upper || null,   // the air at contrail height (weather.js): humidity, temperature, wind
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.haze.toFixed(1)}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${mountainFog.toFixed(1)}|${ceilK.toFixed(1)}|${ceilBase == null ? '' : Math.round(ceilBase / 50)}|${dusting.key}|${greenup.toFixed(2)}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
     sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${cond.haze.toFixed(1)}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}|${photoField() ? 'pf' : ''}${photoCirrus() ? 'pc' : ''}${photoDecks() ? 'pd' : ''}`,
     ambientKey,
   };

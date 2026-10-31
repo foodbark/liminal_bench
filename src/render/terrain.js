@@ -2,7 +2,7 @@ import { W, H, SEASON_SNOW, SCALE, META } from '../state.js';
 import { blue, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum, smooth } from '../util/pixel.js';
 import { valueNoise1D, valueNoise2D, hash2 } from '../util/noise.js';
 import { LAYER, MAT } from '../assets.js';
-import { DUST_STEPS, DUST_PLANES } from '../dusting.js';
+import { DUST_STEPS } from '../dusting.js';
 
 // The scene is a painting (assets/backdrop.png) with a per-pixel layer/material/height mask.
 // This pass re-lights it for the moment: seasonal grass, snow creeping down each range, haze and
@@ -123,66 +123,6 @@ export function renderTerrain(img, env, assets) {
   // Fog colors: pale and bright by day, taking the glow at dawn and dusk, dim at night.
   const inversion = env.inversion || 0, mountainFog = env.mountainFog || 0;
   const fogTop = env.fogTop || 0;
-  // the ceiling (main.js): how solid the cloud on the summits is, and its base in metres,
-  // which each plane turns into the height fraction where the cloud starts on it
-  // The ceiling (main.js): how solid the cloud on the summits is, and where its base sits on
-  // each plane as a height fraction. With no base from the feed it is the low-cover ceiling at
-  // its old heights (Dean Stone from 0.4 at full cover, Sentinel from 0.55, the approved look of
-  // 2026-10-11); with one, each plane's elevation span puts the base where it really is.
-  const ceilK = env.ceilK ?? mountainFog * mountainFog, ceilBase = env.ceilBase ?? null, deck = ceilBase != null;
-  const ceilFrom = {}, ceilBand = {};   // where the base sits on each plane, and how tall the ragged edge is, as height fractions
-  for (const id in DUST_PLANES) {
-    const [lo, hi] = DUST_PLANES[id].elev, flank = id === String(LAYER.FLANK);
-    ceilFrom[id] = deck ? clamp(hi > lo ? (ceilBase - lo) / (hi - lo) : 2, -0.5, 2) : (flank ? 1.25 : 1.1) - 0.7 * ceilK;
-    // the deck's edge is some 140 m of cloud whatever the hill: as a fraction of the hill it
-    // was 360 m deep on Sentinel, and the trees showed through most of the face
-    ceilBand[id] = deck ? clamp(140 / Math.max(1, hi - lo), 0.1, 0.4) : 0.3;
-  }
-  const ceilStrength = smooth(clamp(ceilK / 0.6, 0, 1));   // a broken deck at the summits' height is patches, a solid one a ceiling
-  // how far inside the cloud each crest is, by the layer that owns the skyline at that column
-  // (smoothed along the crest, since the pine tips along it belong to one layer and the gaps
-  // between them to another, and column by column it was a comb of streaks in the sky), for
-  // the cloud drawn in the sky above the ridge: once a crest is deep in the deck the hill has
-  // gone into the sky's own tone and the spill above it must go the same way
-  const crestDeep = new Float32Array(W);
-  // Sentinel's pines are the mask's trees layer (the build classes them with the valley trees),
-  // which the fog leaves alone, and under a deck down the face they stood as dark specks through
-  // the cloud: so, by column, where the flank runs from (its crest) to (its foot), and a trees
-  // pixel inside that span is taken as the flank at the height the column gives it
-  // (a column span of the flank was not enough: a valley tree standing in front of Sentinel's
-  // foot was fogged as if it stood on the face, and the crest pines were fogged only below the
-  // crest and stood as dark column stubs above it). So a trees pixel is a pine on the face when
-  // the column below it runs through the tree down onto a flank pixel within a tree's height,
-  // and it takes that pixel's height: the pine stands on the hill
-  const pineE = deck && ceilK > 0.2 ? new Uint8Array(W * H) : null;
-  if (pineE) {
-    const RUN = Math.round(60 * SCALE);
-    for (let x = 0; x < W; x++) {
-      let stand = -1, run = 0;   // the height code of the flank pixel the run stands on
-      for (let y = H - 1; y >= 0; y--) {
-        const i = (y * W + x) * 4, layer = mask[i];
-        if (layer === LAYER.FLANK) { stand = mask[i + 2]; run = 0; }
-        else if (layer === LAYER.TREES && stand >= 0 && run < RUN) { pineE[y * W + x] = Math.max(1, stand); run++; }
-        else stand = -1;
-      }
-    }
-  }
-  const baseN = valueNoise1D(53);   // the deck's base wanders along the hills
-  if (ceilK > 0.2) {
-    const raw = new Float32Array(W);
-    for (let x = 0; x < W; x++) {
-      let y = Math.max(0, Math.floor(ridgeS[x])), layer = LAYER.SKY;
-      for (; y < H; y++) { layer = mask[(y * W + x) * 4]; if (layer !== LAYER.SKY) break; }
-      if (pineE && layer === LAYER.TREES && pineE[y * W + x] > 0) layer = LAYER.FLANK;
-      const from = ceilFrom[layer] ?? 2;
-      raw[x] = smooth(clamp((1 - from - 0.35) / 0.25, 0, 1)) * ceilK * (layer === LAYER.FLANK ? 0.75 + 0.25 * clamp(x / BANK_X0, 0, 1) : 1);
-    }
-    for (let x = 0, acc = 0, cnt = 0; x < W; x++) {
-      if (x === 0) { for (let k = 0; k <= RS && k < W; k++) { acc += raw[k]; cnt++; } }
-      else { if (x + RS < W) { acc += raw[x + RS]; cnt++; } if (x - RS - 1 >= 0) { acc -= raw[x - RS - 1]; cnt--; } }
-      crestDeep[x] = acc / cnt;
-    }
-  }
   const invTop = INVERSION_TOP - Math.round(fogTop * INVERSION_LIFT);
   const invDens = 0.985, invLit = 0.85;   // solid at any depth, as a true inversion is (the user, 2026-10-15)
   // Sentinel's own bank: it is the near mountain, so the same sheet of fog meets it higher on the
@@ -199,14 +139,6 @@ export function renderTerrain(img, env, assets) {
   const fogCol = mulRGB(fogBase, lerpRGB(ambient, [1, 1, 1], 0.25));
   const fogLit = mulRGB(lerpRGB([246, 248, 252], glowRGB, glow * 0.5), lerpRGB(ambient, [1, 1, 1], 0.4));
   const bankCol = mulRGB(lerpRGB(lerpRGB([204, 212, 224], horizon, 0.4), scaleRGB(glowRGB, 0.9), glow * 0.4), lerpRGB(ambient, [1, 1, 1], 0.2));
-  // deep inside the ceiling a hill is gone into the sky's own tone at the horizon, a trace of
-  // the bank's body left: the first version held the bank's pale tone all the way up, and a
-  // deck down to Sentinel's foot was a white slab that read as snow (2026-10-31)
-  const deckCol = lerpRGB(horizon, bankCol, 0.25);
-  // and the deck's underside at its base is shaded, a step darker than the bank and the sky
-  // (the cam's deck sits on the ridges as a mid gray under a brighter overcast): a pale base
-  // across Sentinel's whole face was a snowfield
-  const baseCol = scaleRGB(lerpRGB(bankCol, horizon, 0.3), 0.86);
   const per = {};
   for (const id in LAYERS) {
     const L = LAYERS[id];
@@ -237,12 +169,9 @@ export function renderTerrain(img, env, assets) {
             const w = smooth(clamp(1 - above / (44 * SCALE), 0, 1));
             const n = fogN(x * 0.005 / SCALE, y * 0.06 / SCALE) * 0.75 + fogN2(x * 0.02 / SCALE, y * 0.12 / SCALE) * 0.25;
             let dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
-            let col = bankCol;
-            if (ceilK > 0.2) {   // the cloud the crest goes up into, in the deck's tone once the crest is deep in it
-              dens = Math.max(dens, w * w * (0.4 + 0.6 * ceilK) * (0.75 + 0.25 * n) * ceilStrength);
-              col = lerpRGB(bankCol, deckCol, crestDeep[x]);
-            }
-            if (d < dens) putPx(data, i, quantRGB(col, 9, d));
+            const ceilK = mountainFog * mountainFog;
+            if (ceilK > 0.2) dens = Math.max(dens, w * w * (0.4 + 0.6 * ceilK) * (0.75 + 0.25 * n));   // the cloud the crest goes up into
+            if (d < dens) putPx(data, i, quantRGB(bankCol, 9, d));
           }
         }
         continue;
@@ -371,10 +300,7 @@ export function renderTerrain(img, env, assets) {
       }
       // --- mountain fog: ragged banks hanging mid-slope on the ranges
       let fogged = 0;   // how far this pixel has gone into the cloud, for the rim light after
-      let fLayer = layer, fe = e;   // the layer and height the fog reads: a pine on Sentinel is the flank
-      if (pineE && layer === LAYER.TREES && pineE[y * W + x] > 0) { fLayer = LAYER.FLANK; fe = pineE[y * W + x] / 255; }
-      if (mountainFog > 0 && fLayer !== LAYER.NEAR && fLayer !== LAYER.TREES && !isProp) {
-        const layer = fLayer, e = fe;
+      if (mountainFog > 0 && layer !== LAYER.NEAR && layer !== LAYER.TREES && !isProp) {
         // banks hang from the crest down to mid-slope, stretched along the slope, stippled
         const lo = layer === LAYER.PEAK ? 0.17 : layer === LAYER.RANGE ? 0.27 : 0.32;
         let w = smooth(clamp((e - lo) / 0.2, 0, 1));
@@ -385,42 +311,25 @@ export function renderTerrain(img, env, assets) {
           // a soft blend by density, not an either/or: an either/or at a steady density was a
           // rectangle of checkerboard laid over the forest
           let dens = smooth(clamp((n - (0.87 - mountainFog * 0.45)) / 0.42, 0, 1)) * w;
-          // the ceiling: when the low cloud is solid, or the feed's cloud base is under the
-          // summits, the base is on the mountains and the crests go up into it, a ragged edge;
-          // the real thing on a drizzly day swallows the tops of Dean Stone and Sentinel both
-          // (the user, 2026-10-11). The base's height fraction on each plane comes from its
-          // elevation span; the fraction keeps the old look at full low cover (Dean Stone from
-          // 0.4), and Sentinel's is set a little lower since the near hill's cloud sits lower on
-          // the screen (it was 0.55 at full cover against Dean Stone's 0.4, the approved look)
-          let col = bankCol;
+          // the ceiling: when the low cloud is solid (mountainFog near 1) its base is on the
+          // mountains, and the crests go up into it, a ragged edge; the real thing on a drizzly
+          // day swallows the tops of Dean Stone and Sentinel both (the user, 2026-10-11)
+          const ceilK = mountainFog * mountainFog;
           if (ceilK > 0.2) {
-            // Sentinel is lower and nearer: its edge more ragged and the cloud thinner, so the
-            // hill still shows through (a flat wash read as snow)
+            // Sentinel is lower and nearer: the base sits higher on it, its edge more ragged and
+            // the cloud thinner, so the hill still shows through (a flat wash read as snow)
             const flank = layer === LAYER.FLANK;
-            // height fraction where the cloud base sits; under the feed's deck it wanders
-            // along the hill, since a level base drawn to the height fraction was a ruled
-            // diagonal down the foothills' slope
-            const band = ceilBand[layer] ?? 0.3;
-            const from = (ceilFrom[layer] ?? 2) + (deck ? (baseN(x * 0.0035 / SCALE + layer * 97) - 0.5) * band * 1.2 : 0);
-            const rag = flank ? smooth(clamp((n - 0.25) / 0.5, 0, 1)) : deck ? smooth(clamp((n - 0.1) / 0.5, 0, 1)) : 0.75 + 0.25 * n;
-            const nearEnd = flank ? clamp(x / BANK_X0, 0, 1) : 1;
-            const cf = smooth(clamp((e - from) / band, 0, 1)) * rag * ceilStrength * (flank ? (deck ? 1 : 0.8) * (0.55 + 0.45 * nearEnd) : 1);
+            const from = (flank ? 1.25 : 1.1) - 0.7 * ceilK;   // height fraction where the cloud base sits
+            const rag = flank ? smooth(clamp((n - 0.25) / 0.5, 0, 1)) : 0.75 + 0.25 * n;
+            const cf = smooth(clamp((e - from) / 0.3, 0, 1)) * rag * (flank ? 0.8 * (0.55 + 0.45 * clamp(x / BANK_X0, 0, 1)) : 1);
             dens = Math.max(dens, cf);
             // the top of the layer is inside the cloud: the blend goes all the way, so the
             // crest and the masts on Dean Stone's summit vanish into the same fog the sky
-            // above the ridge carries (the user's photos of 2026-10-11 show no masts at all).
-            // Under the feed's deck it goes all the way on Sentinel too, its near end included:
-            // the same cloud at the same height; a hill three quarters gone kept its trees as
-            // dark specks through a pale wash, which is snow with trees (2026-10-31)
-            fogged = deck ? smooth(clamp((e - from - band * (0.4 + 0.5 * n)) / band, 0, 1)) * ceilStrength   // the edge torn by the noise
-              : smooth(clamp((e - from - 0.35) / 0.25, 0, 1)) * ceilK * (flank ? 0.75 + 0.25 * nearEnd : 1);
-            // from the bank's tone at the base to the sky's own deeper in; the near hill's cloud
-            // a shade darker than the sky, there being more cloud between us and it
-            const deepCol = deck && flank ? lerpRGB(deckCol, baseCol, 0.35) : deckCol;
-            col = lerpRGB(deck ? lerpRGB(bankCol, baseCol, ceilStrength) : bankCol, deepCol, smooth(clamp((e - from - band) / (band * 1.5), 0, 1)) * ceilStrength);
+            // above the ridge carries (the user's photos of 2026-10-11 show no masts at all)
+            fogged = smooth(clamp((e - from - 0.35) / 0.25, 0, 1)) * ceilK * (flank ? 0.55 + 0.45 * clamp(x / BANK_X0, 0, 1) : 1);
           }
           fogged = Math.max(fogged, 0.92 * dens);
-          if (fogged > 0) c = lerpRGB(c, col, fogged);
+          if (fogged > 0) c = lerpRGB(c, bankCol, fogged);
         }
       }
 

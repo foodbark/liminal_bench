@@ -150,7 +150,6 @@ export const WEATHER_PRESETS = {
   fogsea:    { code: 45, cover: 0.05, coverLow: 0, coverMid: 0, coverHigh: 0.1, temp: 33, wind: 1, snowDepth: 0, inversion: 1, fogTop: 1 },   // a deep morning fog, up the slopes: the cams' reading on a true inversion
   dusting:   { code: 1,  cover: 0.2, coverLow: 0.1, coverMid: 0.1, coverHigh: 0.3, temp: 38, wind: 3, snowDepth: 0, freshSnow: 1 },     // last night's skiff, melting off through the day
   mountainfog: { code: 3, cover: 0.8, coverLow: 0.9, coverMid: 0.4, coverHigh: 0.2, temp: 41, wind: 3, snowDepth: 0, lowcloud: 1 },
-  ceiling:  { code: 3, cover: 1.0, coverLow: 0.4, coverMid: 1.0, coverHigh: 0.4, temp: 45, wind: 3, snowDepth: 0, cloudBase: 1200 },   // 2026-10-31: a deck on the summits under a thinned low band, the base from the dew point
   storm:    { code: 95, cover: 1.0,  coverLow: 0.9, coverMid: 0.9, coverHigh: 0.7, temp: 66, wind: 22, snowDepth: 0 },
   blowing:  { code: 71, cover: 0.9,  coverLow: 0.8, coverMid: 0.5, coverHigh: 0.3, temp: 22, wind: 24, snowDepth: 0.25 },   // light snow in a hard wind
   blizzard: { code: 75, cover: 1.0,  coverLow: 1.0, coverMid: 0.9, coverHigh: 0.8, temp: 18, wind: 34, snowDepth: 0.3 },
