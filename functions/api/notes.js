@@ -22,6 +22,7 @@
 // stuff without taking things down) is not limited at all: nothing is lost by a move, a moved
 // piece only goes on top of the pile the way a re-pinned sheet does, and digging takes many.
 import { board, json, wantsV2, whoHash, paperCount, placeOf, FULL, NO_PIN, LIFE_DAYS, DAY, HOUR } from './_board.js';
+import { forgetPicture } from './_alert.js';
 const MAX_LEN = 80;
 const PER_ADDRESS_HOUR = 3, ALL_HOUR = 30;
 const TEAR_HOUR = 6, ALL_TEAR_HOUR = 60;
@@ -51,7 +52,8 @@ export async function onRequestPost({ request, env }) {
   return json(await board(env.DB, wantsV2(request)), 201);
 }
 
-export async function onRequestDelete({ request, env }) {
+export async function onRequestDelete(context) {
+  const { request, env } = context;
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad request' }, 400); }
   const id = body && Number.isInteger(body.id) ? body.id : null;
@@ -72,6 +74,7 @@ export async function onRequestDelete({ request, env }) {
   if (seed != null) ops.unshift(env.DB.prepare('DELETE FROM placed WHERE key = ?1').bind(key));   // it comes back at its slot
   ops.push(env.DB.prepare('DELETE FROM torn WHERE at < ?1').bind(now - 2 * LIFE_DAYS * DAY));
   await env.DB.batch(ops);
+  if (poster != null) context.waitUntil(forgetPicture(env, new URL(request.url).origin, poster));   // out of the edge cache too
   return json(await board(env.DB, wantsV2(request)));
 }
 

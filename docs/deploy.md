@@ -185,12 +185,61 @@ curl -H "Authorization: Bearer $FLIGHTS_PUSH_KEY" 'https://liminalbench.net/api/
 
 `?diag` on the page names the source of what it is showing.
 
+## 7. The board's watch (2026-10-30)
+
+A poster is the one thing on the board that can be worse than rude, and the board's defenses are
+after the fact: anyone can tear anything down, pins are limited, Cloudflare's CSAM Scanning Tool
+is on for the zone (Caching, Configuration; it hashes images as they enter Cloudflare's cache and
+checks them against the known databases, blocking the URL and mailing the account on a match).
+What those cannot shorten is the time until someone looks. So `functions/api/_alert.js` mails the
+board's keeper the moment a poster goes up, through the Email Sending REST API (Pages Functions
+have no `send_email` binding): a plain text mail, subject `_THEBOARD_` so a mailbox filter can
+file it, saying a poster went up, its number and size, the hour in Missoula, the pinner's hash
+for the day and the count on the board, with the picture's URL and the board's to open when
+ready. **No picture and nothing from it is in the mail**, by the user's call: it may be the kind
+of thing nobody wants arriving on a phone in public or unprepared. It is sent after the answer
+to the pinner (`waitUntil`), and a failure is logged and never felt on the page.
+
+The same module keeps the poster pictures in Cloudflare's cache. A Function's response never
+enters it on its own (every picture came back `cf-cache-status: DYNAMIC`, 2026-10-30), so the
+scanner never saw a poster; `posters/[id].js` now puts each picture in through the Cache API as
+it serves it, and a tear-down takes it out, from the answering data center at once and from all
+of them by purging its URL. Honesty about the tool: it only knows images already in the
+databases, and what reaches the server is a 160-pixel palette-snapped pixel-art version of a
+photo, which fuzzy hashing was not made to see through. The mail is the real watch.
+
+Setting it up, all in the dashboard and three secrets; without them the watch is silent and the
+board works as before:
+
+1. Compute & AI, Email Service, Email Sending: onboard `liminalbench.net` (it adds the SPF and
+   DKIM records; a few minutes to propagate). The mail comes from `board@liminalbench.net`
+   (`ALERT_FROM` overrides it).
+2. My Profile, API Tokens, Create Custom Token: **Email Sending: Edit** on the account, and for the
+   purge **Cache Purge: Purge** on the `liminalbench.net` zone. Nothing else. Anyone holding this
+   token can send mail from the domain, so it lives only as a Pages secret.
+3. The zone id is on the zone's Overview page. Then:
+
+```
+npx wrangler pages secret put WATCH_TOKEN     # the token
+npx wrangler pages secret put ALERT_TO        # where the mail goes (a plus-address makes filtering easy)
+npx wrangler pages secret put CF_ZONE_ID      # for the purge; leave it out and tear-downs clear only the local cache
+```
+
+`CF_ACCOUNT_ID` is in `wrangler.toml` (`[vars]`; it is not a secret). The secrets take effect on
+the next deploy. Check it by pinning a poster of your own and tearing it down: the mail arrives
+within seconds, and a second fetch of a picture's URL from outside answers `cf-cache-status: HIT`.
+A local run reads the same names from `.dev.vars`, with `CF_API` pointing at a stand-in for
+`api.cloudflare.com` to see the requests without sending anything.
+
+Only posters are watched. A note is eighty characters of text that anyone can read on the board;
+if the watch should cover them too, `notes.js` can call the same module.
+
 ## Rate limits and abuse
 
 `functions/api/notes.js` allows three notes an hour per address (salted daily hash, no addresses
 stored) and thirty an hour in total, 80 characters each, control characters stripped; tearing
 down six an hour per address and sixty in all; moving paper is not limited (nothing is lost by
-a move, and digging through the pile takes many). Nothing ages off the board: it holds forty pieces of paper and refuses
+a move, and digging through the pile takes many); every poster pinned is mailed to the board's keeper (section 7). Nothing ages off the board: it holds forty pieces of paper and refuses
 a pin past that. In front of all of it sits one Cloudflare WAF rate-limiting rule on the zone
 (Security rules in the dashboard, 2026-10-30; no deploy): requests whose path equals `/api/notes`,
 `/api/posters` or `/api/voicemail` are blocked (429) for ten seconds once an address sends more

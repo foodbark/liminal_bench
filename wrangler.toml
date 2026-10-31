@@ -10,3 +10,8 @@ binding = "DB"
 database_name = "liminal-bench"
 # the id printed by `npx wrangler d1 create liminal-bench` (2026-09-28)
 database_id = "ee6c8c44-a5af-4bcc-b20e-998d37aa745c"
+
+# The board's watch (functions/api/_alert.js, docs/deploy.md section 7). The account id is not a
+# secret; the token, the address and the zone id are Pages secrets: WATCH_TOKEN, ALERT_TO, CF_ZONE_ID.
+[vars]
+CF_ACCOUNT_ID = "cbbf6755af3e2a87ee7bb9084c3cb083"
