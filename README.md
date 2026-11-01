@@ -2,21 +2,25 @@
 
 ## Punch list: the deck and the layer map (2026-10-31)
 
-**Your part: make six mask pictures.** That is all. Everything after that is code and is mine.
+**The job, for whatever tool does it: six masks of one painting.** This section is written so it can be handed to any masking tool or AI as the whole brief.
 
-1. Install **X-AnyLabeling** on Windows: the file `X-AnyLabeling-v4.3.0-Windows-CPU-Setup.exe` from https://github.com/CVHub520/X-AnyLabeling/releases. No GPU needed.
-2. Open the painting in it: `assets/backdrop.png` from this repo (2752 by 1536). It must be this file, at this size, so the masks line up.
-3. In its model list choose a Segment Anything model (SAM 2 or SAM 3; the first use downloads it). Then click inside a region to get a mask, right-click on anything it grabbed that does not belong, or draw a box around a whole hill. Give each mask one of these six labels:
-   - `sky`
-   - `range` (Dean Stone, with its masts)
-   - `farhill` (the foothills between Dean Stone and the trees)
-   - `flank` (Mount Sentinel, with its pines; the pines count as Sentinel)
-   - `trees` (the band of valley trees)
-   - `near` (the ground, the bench, the board, the phone, the pole)
-4. The places to be deliberate: the slope band right of the trees where the photo Sentinel stops and the painted foothill begins (it is foothill), the clearing on Dean Stone's foot (it is Dean Stone), the slivers of hill between and inside the valley crowns (they are the hill's foot, never trees), and Sentinel's pine-dotted face (all Sentinel).
-5. Export as MASK, which writes one PNG per label, white where the region is. Put the six files in `art/masks/` and tell me.
+*Input.* One image, `assets/backdrop.png` in this repo: a pixel-art landscape, 2752 pixels wide by 1536 high, RGB. (Its sky is transparent; if the tool needs a sky, fill the transparent pixels with flat blue first. Do not resize, crop or pad it.)
 
-If X-AnyLabeling will not install, the alternative is Krita with the krita-vision-tools plugin (https://github.com/Acly/krita-vision-tools, built for Krita 5.2.13), which adds a click-to-select tool; select a region, fix it with the brush, fill it white on a layer over black, export that layer as the PNG. A no-install first look is Meta's demo at https://segment-anything.com, though its downloads are cut-outs and not masks that line up.
+*Output.* Six PNG files, each exactly 2752 by 1536, grayscale or RGB, where white (255) marks the region and black (0) everything else, with no anti-aliased gray in between. Saved as `art/masks/sky.png`, `range.png`, `farhill.png`, `flank.png`, `trees.png`, `near.png`. Every pixel of the painting belongs to exactly one region; where two masks overlap, the nearer region in the list below wins, and anything in no mask is an error.
+
+*The regions, far to near.*
+- `sky`: the sky, everything above the ridgelines, including the sky seen between the summit masts.
+- `range`: Mount Dean Stone, the big forested dome in the middle distance with the radio masts on its summit, all of it from the summit down to where the foreground trees hide it, including the bare clearing on its lower slope and the slivers of it visible between and inside the foreground tree crowns.
+- `farhill`: the low bare foothills in the distance between Dean Stone's foot and the foreground trees, right of the big grassy mountain, including the pale slope band that runs rightward behind the trees.
+- `flank`: Mount Sentinel, the open grassy mountain on the left with scattered pines on its face and along its crest; the pines are part of Sentinel, not of the trees. It ends on the right where its slope runs behind the foreground trees; the pale band continuing rightward beyond that is `farhill`, not Sentinel.
+- `trees`: the band of dark conifer trees in the foreground, in front of all the mountains, their crowns only; a gap inside a crown that shows hill belongs to that hill.
+- `near`: the grass meadow and ground in front of the trees, and everything standing on it: the park bench, the bulletin board, the pay phone, the utility pole with the lantern.
+
+*Where to be careful.* These four places are where colour-based masking went wrong before: the slope band right of the trees, which is `farhill` and not Sentinel; the bare clearing at Dean Stone's foot, which is `range`; the slivers of hill between and inside the valley tree crowns, which are `range` or `farhill` and never `trees`; and Sentinel's pine-dotted face and crest, which is all `flank`.
+
+*How it is checked.* The masks are laid over the painting as tints and looked at, Dean Stone first; the build then prints how many pixels changed layer against the old mask. A mask that is off by a few pixels at an edge is fine; a region assigned to the wrong hill is not.
+
+*Programs that do this by hand, if it comes to that:* X-AnyLabeling (Windows, Segment Anything built in, click a region, right-click to carve, export as MASK; the CPU installer at https://github.com/CVHub520/X-AnyLabeling/releases), Krita with the krita-vision-tools plugin (https://github.com/Acly/krita-vision-tools, click-to-select, built for Krita 5.2.13), or Meta's online demo at https://segment-anything.com for a first look (its downloads are cut-outs, not registered masks).
 
 **My part, once the masks are in** (not started): a `layer_masks` entry in the config and the build taking the layer channel from the six files in place of the colour guesses and traces; rebuild, compare against the old mask, check master's own looks on it (Dean Stone first) and that the seam on the foothill clearing is gone; then the deck on the branch: remove the 1000 m foot patch if the masks make it unneeded, a `deck` debug preset so it can be judged on any day, re-render against the two Sentinel photos, and the leftovers (banding in the stratus below the vanishing line, stray tree pixels above Sentinel's crest, the underside shade and the band width). After that, the webcams keeping the deck on when the weather model drops it (on the day this started the model said the cloud had lifted off the summits hours before it really did, and the Mountain Press cam could see it had not), the CLAUDE.md paragraph rewritten for the deck state, the Gemini script kept or dropped, and the key pasted on 2026-10-31 rotated. Merging is your call.
 
