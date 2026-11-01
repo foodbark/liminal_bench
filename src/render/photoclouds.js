@@ -1,4 +1,4 @@
-import { ASSET_DIR, SCALE, W, HORIZON } from '../state.js';
+import { ASSET_DIR, SCALE, W, HORIZON, H } from '../state.js';
 import { makeCanvas, clamp, blue, quant } from '../util/pixel.js';
 import { cloudTones } from './clouds.js';
 import { skyXY, setMistCover } from './sky.js';
@@ -749,9 +749,13 @@ export function drawCirrusMist(g, env, off = 0, skyPix = null) {
 // gaps. The tile repeats across the sky, every other copy mirrored; the stipple stays fixed to
 // the screen and the deck drifts under it like the mist. The drawn decks in sheets.js stand
 // in until the sheet is loaded (env.photoDecks); the flat stratus stays drawn.
+// under the deck on the hills (env.deck) the sheet runs on below the vanishing line to the
+// horizon: the hills in the deck are see-through, and the sheet's bottom edge, which they
+// always hid, showed as a line across the frame; the tile's rows mirror back up past its end
+export const DECK_H = Math.min(H, HORIZON + 24);
 let deckImg = null;
 export function drawDeckMist(g, env, off = 0) {
-  if (!deckImg) deckImg = g.createImageData(W, VANISH);
+  if (!deckImg) deckImg = g.createImageData(W, DECK_H);
   const out = deckImg.data; out.fill(0);
   const { horizon } = env.pal;
   // the flat stratus takes the rain sky's texture in lighter tones (the stratus photo was set aside; the drawn sheet was "cartoony blobs of grey", the user, 2026-10-22)
@@ -796,12 +800,14 @@ export function drawDeckMist(g, env, off = 0) {
     // the copies crossfade over an overlap instead of mirroring: a mirrored join paired the
     // lumps into a butterfly, and a vertical drop to break that left rectangular seams
     const OV = Math.min(160, tw >> 2), P = tw - OV;
-    for (let y = 0; y < VANISH; y++) {
-      const d = VANISH / Math.max(1, VANISH - y);
+    const yEnd = env.deck ? DECK_H : VANISH;
+    for (let y = 0; y < yEnd; y++) {
+      const yc = Math.min(y, VANISH - 1);
+      const d = VANISH / Math.max(1, VANISH - yc);
       const band = Math.min(7, Math.floor((1 - 1 / d) * 8));
       for (let x = 0; x < W; x++) {
         const u = ((x - shift) % P + P) % P;
-        const ty = Math.min(th - 1, y);
+        const ty = y < th ? y : Math.max(0, th - 1 - ((y - th) % th));
         // the sun-side step dithered through the noise, or a flat deck showed it as vertical bands
         const ek = glowK > 0 ? Math.min(5, Math.max(0, Math.round(clamp(1 - Math.abs(x - sunX) / (W * 0.55), 0, 1) * 5 + (blue(x + 3, y + 11) - 0.5) * 0.9))) : 0;
         // inside the overlap the tile's tail fades into the next copy's head
@@ -813,7 +819,7 @@ export function drawDeckMist(g, env, off = 0) {
         // own structure (the slow noise bunches around its middle, so it is stretched to use its
         // whole range before the cover is set against it, or a half-covered sky was nearly empty)
         let m = 1;
-        if (!solid) {
+        if (!solid && y < VANISH) {
           const n = clamp((mistSlow[y * W + x] - 0.5) * 2.4 + 0.5, 0, 1) * 0.6 + (1 - dark) * 0.4;
           m = clamp((amount - n) / 0.2 + 0.5, 0, 1);
         }

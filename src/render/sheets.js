@@ -138,12 +138,17 @@ export function renderSheets(img, env) {
   if (lumpy > 0 || flat > 0) {
     const dark = !env.photoDecks && sky.nimbo > 0;
     const top0 = dark ? tones[2] : tones[0], top1 = dark ? tones[3] : tones[1], shade = dark ? tones[4] : tones[2], under = dark ? tones[4] : tones[3];
-    for (let y = 0; y < VANISH; y++) {
-      const d = depthAt(y);
-      const v = Math.log(d) * 4.2;
+    // under the deck on the hills (env.deck) the flat stratus runs on below the vanishing line
+    // to the horizon, unfrayed, at the depth of its last perspective row: the hills in the deck
+    // are see-through, and the sheet's bottom edge, which they always hid, showed as a line
+    const yEnd = env.deck && flat > 0 ? Math.min(H, HORIZON + 24) : VANISH, yCap = Math.floor(VANISH * 0.82);
+    for (let y = 0; y < yEnd; y++) {
+      const yc = Math.min(y, yCap);
+      const d = depthAt(yc);
+      const v = Math.log(d) * 4.2 + (y - yc) * 0.012;
       for (let x = 0; x < W; x++) {
         let done = false;
-        if (lumpy > 0) {
+        if (lumpy > 0 && y < VANISH) {
           const n = 0.6 * wrapNoise(nB, x, v * 60, 0.0035 / SCALE, 0.02, d) + 0.4 * wrapNoise(nC, x, v * 60, 0.011 / SCALE, 0.06, d);
           const thr = 1 - lumpy * 0.92;
           const q = n + (blue(x, y) - 0.5) * 0.05;
@@ -158,7 +163,7 @@ export function renderSheets(img, env) {
           // gaps come as clumps where a second noise runs high, a grain only at their edges; at
           // full cover the sheet is solid but for a few of them
           const m = wrapNoise(nC, x, v * 40, 0.007 / SCALE, 0.06, d) + (blue(x, y) - 0.5) * 0.06;
-          const ragged = y > VANISH * 0.82 && m > flat * (0.2 + n) * 3;   // frayed lower edge
+          const ragged = !env.deck && y > VANISH * 0.82 && m > flat * (0.2 + n) * 3;   // frayed lower edge
           if (!ragged && m < flat * (0.85 + 0.15 * n)) {
             const c = n > 0.62 ? top1 : n > 0.35 ? shade : under;
             put(data, x, y, haze(c, d));

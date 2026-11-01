@@ -8,7 +8,7 @@ import { renderSheets } from './sheets.js';
 function envForWorker(env) {
   return {
     pal: env.pal, sun: env.sun, moon: env.moon, lst: env.lst, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
-    groundSnow: env.groundSnow, inversion: env.inversion, fogTop: env.fogTop, mountainFog: env.mountainFog, dusting: env.dusting, greenup: env.greenup,
+    groundSnow: env.groundSnow, inversion: env.inversion, fogTop: env.fogTop, mountainFog: env.mountainFog, deck: env.deck, dusting: env.dusting, greenup: env.greenup,
     photoAlto: !!photoField(), photoCirrus: !!photoCirrus(), photoDecks: !!photoDecks(),
   };
 }
@@ -16,7 +16,7 @@ import { drawProps, drawShadows, drawLampGlow, drawCloseupNotes, drawGhostNote, 
 import { drawBeacons, beaconsOn } from './beacons.js';
 import { LAYER, MAT } from '../assets.js';
 import { WeatherFX } from './weatherfx.js';
-import { photoField, photoCirrus, photoDecks, drawField, drawCirrusMist, drawDeckMist, clearMistCover, mistCoverAt, VANISH as MIST_H } from './photoclouds.js';
+import { photoField, photoCirrus, photoDecks, drawField, drawCirrusMist, drawDeckMist, clearMistCover, mistCoverAt, VANISH as MIST_H, DECK_H } from './photoclouds.js';
 
 const MIST_STEP = 5;   // pixels of drift between re-renders of the cirrus mist (a render costs most of a frame at full size; every five pixels is a hitch every few seconds instead of every other)
 
@@ -90,7 +90,7 @@ export class Renderer {
     [this.sheets, this.sheetsCtx] = makeCanvas(W, H);
     this.sheetKey = ''; this.pendingSheetKey = ''; this.sheetX = 0;
     [this.field, this.fieldCtx] = makeCanvas(W, H); this.fieldKey = '';   // the photographed altocumulus field, scrolled with the sheets
-    [this.deck, this.deckCtx] = makeCanvas(W, MIST_H); this.deckKey = '';   // the overcast decks from the photos, stippled near solid, drifting like the mist
+    [this.deck, this.deckCtx] = makeCanvas(W, DECK_H); this.deckKey = '';   // the overcast decks from the photos, stippled near solid, drifting like the mist
     [this.mist, this.mistCtx] = makeCanvas(W, MIST_H); this.mistKey = '';   // the cirrus as mist: a fixed stipple, the density drifting under it, re-rendered every few pixels of drift
     [this.propsLit, this.propsLitCtx] = makeCanvas(W, H);
     // Show the painting at once, in its own daylight colors, so the scene is never empty while

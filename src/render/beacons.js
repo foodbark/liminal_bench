@@ -19,7 +19,7 @@ export const beaconsOn = (env) => BEACONS.length > 0 && env.sun.altitude < -3;
 
 export function drawBeacons(ctx, env, t) {
   if (!beaconsOn(env)) return;
-  const ceilK = env.mountainFog * env.mountainFog;
+  const ceilK = Math.max(env.mountainFog * env.mountainFog, env.deck ? env.deck.k : 0);   // the masts in the deck on the hills too
   const c = lerpRGB(RED, CLOUD, ceilK * 0.6);
   ctx.fillStyle = `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
   for (let i = 0; i < BEACONS.length; i++) {

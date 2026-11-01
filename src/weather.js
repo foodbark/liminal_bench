@@ -61,12 +61,13 @@ export async function fetchWeather() {
   // sitting on the summits the model can thin its low band through the afternoon while the
   // tops stay in cloud (2026-10-31: low 42%, the user and the Mountain Press cam both with
   // the tops gone). So the base is estimated from the valley's dew-point spread, the lifted
-  // condensation level at 125 m per °C, and `cloudAt` is how much cloud the model has at
+  // condensation level at 100 m per °C (the textbook 125 sat 150 m above the deck the user
+  // saw on Sentinel's fire road, 2026-10-31; a saturated valley's deck is lower), and `cloudAt` is how much cloud the model has at
   // 925, 850 and 800 hPa (about 750, 1450 and 1950 m: Sentinel's foot, its summit and Dean
   // Stone's shoulder), which says whether there is a deck at that height at all. main.js
   // turns them into the ceiling the terrain pass draws.
   let cloudBase = null, cloudAt = null;
-  if (c.dew_point_2m != null && c.temperature_2m != null) cloudBase = Math.round(ELEV + 125 * Math.max(0, c.temperature_2m - c.dew_point_2m) * 5 / 9);
+  if (c.dew_point_2m != null && c.temperature_2m != null) cloudBase = Math.round(ELEV + 100 * Math.max(0, c.temperature_2m - c.dew_point_2m) * 5 / 9);
   if (j.hourly && j.hourly.time) {
     const idx = j.hourly.time.findIndex((t) => t.slice(0, 13) === c.time.slice(0, 13));
     if (idx >= 0 && j.hourly.relative_humidity_250hPa && j.hourly.relative_humidity_250hPa[idx] != null) {

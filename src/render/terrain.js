@@ -2,7 +2,7 @@ import { W, H, SEASON_SNOW, SCALE, META } from '../state.js';
 import { blue, lerpRGB, mulRGB, scaleRGB, quantRGB, clamp, hex, lum, smooth } from '../util/pixel.js';
 import { valueNoise1D, valueNoise2D, hash2 } from '../util/noise.js';
 import { LAYER, MAT } from '../assets.js';
-import { DUST_STEPS } from '../dusting.js';
+import { DUST_STEPS, DUST_PLANES } from '../dusting.js';
 
 // The scene is a painting (assets/backdrop.png) with a per-pixel layer/material/height mask.
 // This pass re-lights it for the moment: seasonal grass, snow creeping down each range, haze and
@@ -59,6 +59,7 @@ const ROCK_LIT = [110, 150, 214], ROCK_MID = [79, 122, 187];
 const snowN = valueNoise1D(7);
 const invN = valueNoise1D(31), invN2 = valueNoise1D(37);   // the top of the far bank and of Sentinel's
 const fogN = valueNoise2D(43), fogN2 = valueNoise2D(47);
+const deckN = valueNoise1D(61);   // the slow undulation of the deck's base along the hills
 // The inversion's flat top (screen y) and how far below it the fog is solid. The top is the
 // painting's tree line, a sea in the far valley; a deep fog (env.fogTop, 0..1, from the cams)
 // lifts it up the lower slopes, by INVERSION_LIFT at most: over the foothills onto the foot of
@@ -123,6 +124,68 @@ export function renderTerrain(img, env, assets) {
   // Fog colors: pale and bright by day, taking the glow at dawn and dusk, dim at night.
   const inversion = env.inversion || 0, mountainFog = env.mountainFog || 0;
   const fogTop = env.fogTop || 0;
+  // The deck on the hills (main.js; the user's photos of Sentinel, 2026-10-31): above its base
+  // each hill fades into the sky over DECK_BAND metres, smoothly, no holes, the base undulating
+  // slowly along the hill, with a shade of darkness just above the fade for the deck's
+  // underside, so a hill deep in it is simply not there. The fade is transparency, not a
+  // colour: the sky behind the terrain carries its sheets and its glow, which the terrain pass
+  // cannot see (painted in the sky's gradient tone the hills were a bluish ghost against the
+  // warm gray of the stratus), so the pixel is left see-through by its fade and whatever is
+  // behind shows through exactly. Sentinel's pines are the mask's trees layer: a trees pixel
+  // whose column runs down through the tree onto a flank pixel is the flank at that height,
+  // so the pines fade with the grass.
+  const deck = env.deck && env.deck.k > 0.02 ? env.deck : null;
+  const DECK_BAND = 120, DECK_WOBBLE = 60, DECK_UNDER = 0.08;
+  // A pixel's elevation comes from its row, per layer: the layer's highest visible row is its
+  // crest and its lowest its visible foot (DUST_PLANES' spans are defined that way), linear
+  // between, so a level base is a level line on each hill, lower on the screen on the far
+  // hills than on Sentinel as it should be. The mask's height fraction would not do: it is
+  // measured from a baseline well under the visible foot (Sentinel's face above the trees
+  // sits at 0.6 to 1.0 of it) and starts at zero wherever a hill shows over a nearer crest.
+  // pineOn: for a trees pixel, whether it is one of Sentinel's pines (the mask's trees layer
+  // holds the valley trees and Sentinel's pines alike): the run down through the tree lands
+  // on a flank pixel within a tree's height. Only the flank: a valley crown over a sliver of
+  // Dean Stone was taken for a pine on it and its top faded white. The holes in the valley
+  // crowns are handled by the crown line (a test that found the holes by their trees above
+  // and below took the grass between Sentinel's pines for holes; one that followed the trees
+  // down to the meadow climbed Sentinel's pine-dotted face the same way).
+  // What the painting shows between and inside the valley crowns is the hill right behind
+  // them, its foot at the valley's edge; coded as Dean Stone those slivers took the dome's
+  // 1250 m foot, went into the cloud and read as white blobs between dark trees (the user,
+  // 2026-10-31), so Dean Stone's deck foot is the valley's height: DUST_PLANES' 1250 is the
+  // forested dome's dusting plane, not where the hill meets the trees. (A crown line per
+  // column under which nothing faded stood the hill up in blocks with vertical edges.)
+  const pineOn = deck ? new Uint8Array(W * H) : null;
+  const deckRows = {};   // layer -> [yTop, yFoot]
+  const DECK_FOOT = { [LAYER.RANGE]: 1000 };
+  if (deck) {
+    const RUN = Math.round(60 * SCALE);
+    const hist = {};
+    for (const id in DUST_PLANES) hist[id] = new Uint32Array(H);
+    for (let x = 0; x < W; x++) {
+      for (let y = H - 1, stand = 0, run = 0; y >= 0; y--) {
+        const l = mask[(y * W + x) * 4];
+        if (hist[l]) hist[l][y]++;
+        if (l === LAYER.FLANK) { stand = 1; run = 0; }
+        else if (l === LAYER.TREES && stand && run < RUN) { pineOn[y * W + x] = 1; run++; }
+        else stand = 0;
+      }
+    }
+    // a layer's visible span: from the first row where it is at least a twentieth as wide as
+    // its widest row (the crest's tip) down to where it stops being a quarter as wide for
+    // good (the build classes the slivers of hill between the tree trunks and the meadow as
+    // Dean Stone too, and a percentile foot sat on them, 150 rows under the real one)
+    for (const id in hist) {
+      const h = hist[id];
+      let max = 0; for (let y = 0; y < H; y++) max = Math.max(max, h[y]);
+      if (max < 50) continue;
+      let top = -1, foot = -1;
+      for (let y = 0; y < H; y++) if (h[y] >= max * 0.05) { top = y; break; }
+      for (let y = top, gapRows = 0; y < H; y++) { if (h[y] >= max * 0.25) { foot = y; gapRows = 0; } else if (foot >= 0 && ++gapRows > 10) break; }
+      if (top >= 0 && foot > top) deckRows[id] = [top, foot];
+    }
+  }
+  const deckZ = (layer, y) => { const r = deckRows[layer]; if (!r) return -Infinity; const hi = DUST_PLANES[layer].elev[1], lo = DECK_FOOT[layer] ?? DUST_PLANES[layer].elev[0]; return lo + (r[1] - y) / (r[1] - r[0]) * (hi - lo); };
   const invTop = INVERSION_TOP - Math.round(fogTop * INVERSION_LIFT);
   const invDens = 0.985, invLit = 0.85;   // solid at any depth, as a true inversion is (the user, 2026-10-15)
   // Sentinel's own bank: it is the near mountain, so the same sheet of fog meets it higher on the
@@ -179,6 +242,7 @@ export function renderTerrain(img, env, assets) {
       const L = LAYERS[layer] || LAYERS[LAYER.NEAR], P = per[layer] || per[LAYER.NEAR];
       const mat = mask[i + 1], e = mask[i + 2] / 255;
       let c = [rgb[i], rgb[i + 1], rgb[i + 2]];
+      let alpha = 255;   // the deck on the hills leaves a pixel see-through by its fade
       let snowy = mat === MAT.SNOW && !bare;
       const isProp = mat === MAT.PROP;
 
@@ -332,6 +396,25 @@ export function renderTerrain(img, env, assets) {
           if (fogged > 0) c = lerpRGB(c, bankCol, fogged);
         }
       }
+      // --- the deck on the hills: the grass fades into the sky above the base
+      if (deck && !isProp) {
+        let dl = layer;
+        if (layer === LAYER.TREES && pineOn[y * W + x]) dl = LAYER.FLANK;
+        if (dl !== LAYER.NEAR && dl !== LAYER.TREES) {
+          const z = deckZ(dl, y);   // this pixel's elevation
+          const tt = (z - deck.base - (deckN(x * 0.0015 / SCALE) - 0.5) * DECK_WOBBLE) / DECK_BAND;
+          if (tt > 0) {
+            const t = smooth(clamp(tt, 0, 1)) * deck.k;
+            const bump = smooth(clamp(tt / 0.6, 0, 1)) * (1 - smooth(clamp((tt - 0.8) / 1.0, 0, 1)));   // the underside, a shade darker
+            // straight alpha A and colour R such that A*R + (1-A)*sky = (1-t)*hill + t*(1-under)*sky:
+            // the hill fades out and the sky behind is darkened by the underside where t is high
+            const A = 1 - t * (1 - DECK_UNDER * bump);
+            c = scaleRGB(c, A > 0.002 ? (1 - t) / A : 0);
+            alpha = Math.round(255 * A);
+            fogged = Math.max(fogged, t);
+          }
+        }
+      }
 
       // --- rim light where a silhouette meets the sky, on top and on the sun's side: a short
       // band that thins out through the dither instead of a hard outline. Foliage takes a far
@@ -351,6 +434,7 @@ export function renderTerrain(img, env, assets) {
         else if (moonK > 0.05) c = lerpRGB(c, [200, 215, 245], moonK * 0.5 * fall * rimMat);
       }
       putPx(data, i, [clamp(c[0], 0, 255), clamp(c[1], 0, 255), clamp(c[2], 0, 255)]);
+      if (alpha < 255) data[i + 3] = alpha;
     }
   }
 }

@@ -59,7 +59,7 @@ function people(env) {
 export function gliderChance(env) {
   if (env.sun.altitude < 0) return 0;
   const c = env.cond;
-  if (c.precip.intensity > 0 || c.fog || c.storm || env.inversion || env.mountainFog > 0.3) return 0;
+  if (c.precip.intensity > 0 || c.fog || c.storm || env.inversion || env.mountainFog > 0.3 || (env.deck && env.deck.k > 0.3)) return 0;
   const { hour, minute } = localParts(env.now);
   const h = hour + minute / 60;
   const day = clamp((h - 10) / 2, 0, 1);
