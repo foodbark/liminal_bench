@@ -81,7 +81,16 @@ export const whenPosterLoads = (fn) => { onPosterLoad = fn; };
 export const notesMode = () => mode;
 export const noteAge = (at, now = Date.now()) => clamp((now - at) / (FADE_DAYS * DAY), 0, 1);
 const stillDown = (t, now) => now - t.at < TORN_DAYS * DAY;
-export const cleanText = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+// A note's words as they are counted, stored and drawn. Accents that make a letter stay (they
+// compose into it); the stacking marks left over go: a note of five letters under seventy-five
+// of them ("Zalgo" text, pinned 2026-11-04) counted as eighty characters, so it took a full
+// sheet over its neighbours, and the hands have no glyphs for the marks, which drew as boxes
+// where a system font did not step in. Only the combining-diacritic blocks, so the scripts
+// whose marks are their vowels are left alone. The server's `clean` is the same.
+const STACKED = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g;
+export const cleanText = (s) => String(s ?? '').normalize('NFC').replace(STACKED, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+// what is already on the board is read the same way (the stored words are left as they are)
+const plain = (list) => list.map((n) => (n && typeof n.text === 'string' ? { ...n, text: cleanText(n.text) } : n));
 
 function readJSON(key) { try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
 function readLocal() { return readJSON(KEY).filter((n) => n && typeof n.text === 'string' && typeof n.at === 'number').map((n) => ({ id: n.id ?? n.at, ...n })); }
@@ -99,9 +108,9 @@ const sortByAt = (list) => [...list].sort((a, b) => rankOf(a) - rankOf(b));
 export const paperKey = (n) => n.poster ? `poster:${n.poster.id}` : n.id != null ? `note:${n.id}` : Number.isInteger(n.seed) ? `seed:${n.seed}` : null;
 // what the API answers: the board as { notes, torn, posters, placed }, or the plain array from the older function
 function takeBoard(body) {
-  if (Array.isArray(body)) { posted = sortByAt(body); torn = []; posters = []; placedSeeds = []; return true; }
+  if (Array.isArray(body)) { posted = sortByAt(plain(body)); torn = []; posters = []; placedSeeds = []; return true; }
   if (body && Array.isArray(body.notes)) {
-    posted = sortByAt(body.notes); torn = Array.isArray(body.torn) ? body.torn : [];
+    posted = sortByAt(plain(body.notes)); torn = Array.isArray(body.torn) ? body.torn : [];
     posters = sortByAt(Array.isArray(body.posters) ? body.posters : []).map((p) => ({ ...p, src: `${POSTER_API}/${p.id}` }));
     placedSeeds = Array.isArray(body.placed) ? body.placed.filter((t) => Number.isInteger(t.seed) && hasPlace(t)) : [];
     return true;
@@ -117,7 +126,7 @@ export async function loadPosted() {
   } catch (e) { /* no API here */ }
   mode = 'local';
   const now = Date.now();
-  posted = sortByAt(readLocal()).slice(-FULL);
+  posted = sortByAt(plain(readLocal())).slice(-FULL);
   torn = readTorn().filter((t) => stillDown(t, now));
   posters = sortByAt(readPosters()).slice(-FULL);
   placedSeeds = readPlaced();

@@ -27,7 +27,10 @@ const MAX_LEN = 80;
 const PER_ADDRESS_HOUR = 3, ALL_HOUR = 30;
 const TEAR_HOUR = 6, ALL_TEAR_HOUR = 60;
 
-const clean = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_LEN);
+// as `cleanText` in src/notes.js: the stacking marks that do not compose into a letter are dropped
+// before the length is counted, so the limit is on what can be read
+const STACKED = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g;
+const clean = (s) => String(s ?? '').normalize('NFC').replace(STACKED, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_LEN);
 
 export async function onRequestGet({ request, env }) {
   return json(await board(env.DB, wantsV2(request)));
