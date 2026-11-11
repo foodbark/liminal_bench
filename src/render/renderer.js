@@ -1,14 +1,14 @@
 import { W, H, SMALL, SCALE, ASSET_DIR } from '../state.js';
 import { makeCanvas, rgb, clamp } from '../util/pixel.js';
 import { drawStars, drawMoon, drawSun, sunOverSheets, setStarMask, renderSkyGradient } from './sky.js';
-import { renderTerrain } from './terrain.js';
+import { renderTerrain, propHaze } from './terrain.js';
 import { renderSheets } from './sheets.js';
 
 // The worker gets a plain copy of what renderTerrain reads from env.
 function envForWorker(env) {
   return {
     pal: env.pal, sun: env.sun, moon: env.moon, lst: env.lst, cond: env.cond, month: env.month, snowAmount: env.snowAmount, sky: env.sky, wind: env.wind,
-    groundSnow: env.groundSnow, inversion: env.inversion, fogTop: env.fogTop, mountainFog: env.mountainFog, dusting: env.dusting, greenup: env.greenup,
+    groundSnow: env.groundSnow, inversion: env.inversion, fogTop: env.fogTop, fogNear: env.fogNear, mountainFog: env.mountainFog, dusting: env.dusting, greenup: env.greenup,
     photoAlto: !!photoField(), photoCirrus: !!photoCirrus(), photoDecks: !!photoDecks(),
   };
 }
@@ -138,7 +138,8 @@ export class Renderer {
     }
     const propsKey = env.sunSide + '|' + env.groundSnow + '|' + state.notesVersion + '|' + handsKey();
     if (propsKey !== this.propsKey) { drawProps(this.propsCtx, state, env.sunSide, env.groundSnow); this.propsKey = propsKey; this.tintKey = ''; this.dirty = true; }
-    const tintKey = env.ambientKey;
+    const haze = propHaze(env);
+    const tintKey = env.ambientKey + (haze ? '|' + haze.k.toFixed(2) + '|' + haze.col.map((v) => Math.round(v / 4)).join(',') : '');
     if (tintKey !== this.tintKey) {
       const g = this.propsLitCtx;
       g.globalCompositeOperation = 'source-over';
@@ -147,6 +148,9 @@ export class Renderer {
       g.globalCompositeOperation = 'multiply';
       g.fillStyle = rgb(env.pal.ambient.map((v) => v * 255));
       g.fillRect(0, 0, W, H);
+      // the fog's haze over the paper and the caps: one flat wash over the whole layer, cut
+      // back to the layer's own pixels below, so no edge is softened
+      if (haze) { g.globalCompositeOperation = 'source-over'; g.fillStyle = `rgba(${haze.col.map((v) => Math.round(v)).join(',')},${haze.k.toFixed(3)})`; g.fillRect(0, 0, W, H); }
       g.globalCompositeOperation = 'destination-in';
       g.drawImage(this.props, 0, 0);
       g.globalCompositeOperation = 'source-over';

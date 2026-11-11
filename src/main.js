@@ -111,6 +111,13 @@ function computeEnv() {
   // frame milky, deeper the deeper the fog is (the user, 2026-10-22: "'inversion' should have a
   // deep haze over the whole top half of the screen"); the palette takes it
   cond.haze = inversion ? 0.85 + 0.15 * fogTop : 0;
+  // How much haze stands between the bench and everything it sees. The bench is on the valley
+  // floor, so this follows the downtown cam, which is in the fog, and not how high the fog
+  // reaches: the cam up the South Hills came out of the top of it by mid-morning and the haze
+  // fell to a third while the valley was as fogged as ever (the user, 2026-11-11: "still very
+  // foggy and hazy out my window"). A deep fog still counts for more; the feed's own fog code
+  // with no cam behind it keeps the foreground clear, as the plain inversion always has.
+  const fogNear = inversion ? Math.max(Math.min(1, Math.max(0, (fogTop - 0.15) / 0.7)), preset ? 0 : 0.75 * (w.camFog || 0)) : 0;
   // Blowing snow, as they call it: wind over loose snow, on the ground or in the air, from about
   // 15 mph, a full blizzard by 30. The feed never names it; wind and snow together do. It fills
   // the air with streaks and takes the mountains into a whiteout (mountainFog); the sky keeps
@@ -168,11 +175,11 @@ function computeEnv() {
   const ambientKey = pal.ambient.map((v) => v.toFixed(2)).join(',');
   const moonKey = `${Math.round(moon.altitude / 4)}|${moon.phase.toFixed(1)}`;
   state.env = {
-    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, fogTop, mountainFog, dusting, greenup, sky,
+    now, month, sun, moon, lst, pal, cond, snowAmount, groundSnow, sunSide, inversion, fogTop, fogNear, mountainFog, dusting, greenup, sky,
     wind: { speed: w.wind ?? 0, dir: w.windDir ?? 270 },
     upper: w.upper || null,   // the air at contrail height (weather.js): humidity, temperature, wind
     skyKey: `${a2}|${Math.round(sun.azimuth / 2)}|${c1}|${cond.fog}|${cond.haze.toFixed(1)}|${cond.storm}|${cond.precip.intensity}|${sun.altitude < -6 ? Math.round(lst / 1.5) + '|' + moon.phase.toFixed(1) + '|' + Math.round(moon.altitude / 10) : ''}`,
-    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
+    terrainKey: `${a2}|${sunSide}|${c1}|${cond.fog}|${snowAmount.toFixed(2)}|${groundSnow}|${month}|${cond.precip.type}|${ambientKey}|${moonKey}|${inversion}|${fogTop.toFixed(2)}|${fogNear.toFixed(2)}|${mountainFog.toFixed(1)}|${dusting.key}|${greenup.toFixed(2)}`,
     sheetKey: `${a2}|${Math.round(sun.azimuth / 4)}|${c1}|${cond.haze.toFixed(1)}|${['cirrus','veilHigh','alto','veilMid','strato','stratus','nimbo'].map((k) => sky[k].toFixed(1)).join(',')}|${moonKey}|${cond.storm}|${Math.sin(w.windDir * Math.PI / 180) >= 0 ? 1 : -1}|${photoField() ? 'pf' : ''}${photoCirrus() ? 'pc' : ''}${photoDecks() ? 'pd' : ''}`,
     ambientKey,
   };

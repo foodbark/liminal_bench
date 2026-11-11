@@ -73,6 +73,19 @@ function putPx(data, i, c) {
   data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
 }
 
+// The haze the page lays over what it draws on the props (the notes on the cork, the snow caps):
+// the same strength and fog tone the props' own pixels take below, so the paper sits in the
+// same air as the board it is pinned to (the user, 2026-11-11: "haze the notes on the board too").
+export function propHaze(env) {
+  const nearFog = env.inversion ? (env.fogNear || 0) : 0;
+  if (nearFog <= 0) return null;
+  const { horizon, ambient } = env.pal, alt = env.sun.altitude;
+  const glow = clamp(1 - (Math.abs(alt + 0.5) - 2) / 7, 0, 1) * (1 - (env.cond.shade ?? env.cond.cover) * 0.7);
+  const glowRGB = lerpRGB([255, 118, 88], [255, 205, 150], clamp((alt + 3) / 6, 0, 1));
+  const fogBase = lerpRGB(lerpRGB([208, 216, 228], horizon, 0.22), scaleRGB(glowRGB, 0.9), glow * 0.55);
+  return { k: clamp(0.7 * nearFog * 0.85, 0, 0.9) * 0.6, col: mulRGB(fogBase, lerpRGB(ambient, [1, 1, 1], 0.25)) };
+}
+
 export function renderTerrain(img, env, assets) {
   const data = img.data; data.fill(0);
   const { horizon, ambient, sunColor } = env.pal;
@@ -95,7 +108,32 @@ export function renderTerrain(img, env, assets) {
   // trees, the meadow and the props go into it, the trees most, the props least, since they
   // are nearest. The plain inversion keeps the bench above the sea and the foreground clear
   // (the user, 2026-10-15); the deep one wants "a ton" of foreground fog (the user, 2026-10-22).
-  const nearFog = env.inversion ? clamp((env.fogTop - 0.3) / 0.7, 0, 1) : 0;
+  // A fog the cams see at all is one the bench is standing in (the user, 2026-11-11: both
+  // mountains gone, the building across the street hazy, and the bench showed a clear
+  // foreground over a low sea); env.fogNear (main.js) says how much.
+  const nearFog = env.inversion ? (env.fogNear || 0) : 0;
+  // How much of the trees, the meadow and the props surrounds each pixel (a box sum over the mask). Fog on
+  // a far layer where that is high is seen through a gap in the near trees: left as the sea's
+  // bright white it read as holes punched in the painting (the user, 2026-11-11), so it takes
+  // the tone of the fog among the trees. A rule by column (anything under a column's first
+  // tree) painted Sentinel's whole bank that way in a deep fog, in vertical streaks under
+  // every tall crown; a rule by row smeared.
+  const SW = W + 1, nearSum = new Int32Array(SW * (H + 1)), GR = Math.round(13 * SCALE);
+  for (let y = 0; y < H; y++) {
+    let row = 0;
+    for (let x = 0; x < W; x++) {
+      const j = (y * W + x) * 4, l = mask[j];
+      if (l === LAYER.TREES || l === LAYER.NEAR || mask[j + 1] === MAT.PROP) row++;
+      nearSum[(y + 1) * SW + x + 1] = nearSum[y * SW + x + 1] + row;
+    }
+  }
+  const nearCover = (x, y) => {
+    const x0 = Math.max(0, x - GR), x1 = Math.min(W, x + GR + 1), y0 = Math.max(0, y - GR), y1 = Math.min(H, y + GR + 1);
+    return (nearSum[y1 * SW + x1] - nearSum[y0 * SW + x1] - nearSum[y1 * SW + x0] + nearSum[y0 * SW + x0]) / ((x1 - x0) * (y1 - y0));
+  };
+  // the trees' own tone, from the painting, for the fog seen between them
+  const treeTone = [0, 0, 0];
+  { let n = 0; for (let j = 0; j < W * H * 4; j += 4 * 7) if (mask[j] === LAYER.TREES && mask[j + 1] !== MAT.PROP) { treeTone[0] += rgb[j]; treeTone[1] += rgb[j + 1]; treeTone[2] += rgb[j + 2]; n++; } if (n) { treeTone[0] /= n; treeTone[1] /= n; treeTone[2] /= n; } }
   const wet = env.cond.precip.type === 'rain';
   const tintMeadow = grassTint(env.month, false, env.greenup), tintHill = grassTint(env.month, true, env.greenup);
   const groundSnow = env.groundSnow;
@@ -139,6 +177,15 @@ export function renderTerrain(img, env, assets) {
   const fogCol = mulRGB(fogBase, lerpRGB(ambient, [1, 1, 1], 0.25));
   const fogLit = mulRGB(lerpRGB([246, 248, 252], glowRGB, glow * 0.5), lerpRGB(ambient, [1, 1, 1], 0.4));
   const bankCol = mulRGB(lerpRGB(lerpRGB([204, 212, 224], horizon, 0.4), scaleRGB(glowRGB, 0.9), glow * 0.4), lerpRGB(ambient, [1, 1, 1], 0.2));
+  const farHaze = lerpRGB(fogCol, horizon, 0.5);
+  // The haze on what is near keeps some of the thing's own colour: straight toward the fog's
+  // gray the trees lost their green and the sage went gray-tan (the user, 2026-11-11), so the
+  // tone a pixel goes toward is the fog with a share of its own hue at the fog's brightness.
+  const fogLum = lum(fogCol);
+  const hazeNear = (c, k) => {
+    const s = Math.min(fogLum / Math.max(lum(c), 20), 3.2);
+    return lerpRGB(c, lerpRGB(fogCol, [Math.min(255, c[0] * s), Math.min(255, c[1] * s), Math.min(255, c[2] * s)], 0.42), k);
+  };
   const per = {};
   for (const id in LAYERS) {
     const L = LAYERS[id];
@@ -224,10 +271,35 @@ export function renderTerrain(img, env, assets) {
       const persp = layer === LAYER.NEAR ? nearHaze : P.persp;
       const fog = layer === LAYER.NEAR ? fogK * 0.78 : fogK;
       c = lerpRGB(c, horizon, persp + fog * (1 - persp));
+      // We are standing in it, so the haze is between the bench and everything (the user,
+      // 2026-11-11): the mountains take more than the trees, the farther the more, toward the
+      // sky's own milk so they sink into it, thinner toward the crests since the look up there
+      // passes through less of the layer; never all the way, since a scene with the mountains
+      // gone is a boring one (the user, the same day).
+      if (nearFog > 0 && !isProp && (layer === LAYER.PEAK || layer === LAYER.RANGE || layer === LAYER.FARHILL || layer === LAYER.FLANK)) {
+        const far = layer === LAYER.FLANK ? 1 : layer === LAYER.FARHILL ? 1.15 : 1.3;
+        c = lerpRGB(c, farHaze, clamp(0.85 * nearFog * far * (1 - 0.35 * e), 0, 0.8));
+      }
+      // the trees most, the props nearly as much (the board stood out bare against hazed trees:
+      // the user, 2026-11-11), the meadow from its far edge down to the grass at our feet
       if (nearFog > 0 && (layer === LAYER.TREES || layer === LAYER.NEAR || isProp)) {
         const drift = 0.85 + 0.3 * (fogN(x * 0.004 / SCALE, y * 0.01 / SCALE) - 0.5);
-        const k = (isProp ? 0.4 : layer === LAYER.TREES ? 0.85 : 0.65) * nearFog * drift;
-        c = lerpRGB(c, fogCol, clamp(k, 0, 0.95));
+        const kind = isProp ? 0.7 : layer === LAYER.TREES ? 0.8 : 0.7 - 0.35 * clamp((y - META.nearHazeY) / (H - META.nearHazeY), 0, 1);
+        c = hazeNear(c, clamp(kind * nearFog * drift, 0, 0.95));
+      }
+      // Fog on a far layer seen through a gap in the near trees is fog among the trees: it
+      // takes the trees' own tone, hazed as they are, here before the light so it is lit as
+      // they are (coloured after the light it came out bluer than the trees around it).
+      let gap = 0;
+      if (inversion > 0 && !isProp && (layer === LAYER.PEAK || layer === LAYER.RANGE || layer === LAYER.FARHILL || layer === LAYER.FLANK)) {
+        const inSea = y > invTop + (invN(x * 0.02 / SCALE) - 0.5) * 8 * SCALE
+          || (layer === LAYER.FLANK && fogTop > 0 && e < BANK_E0 + BANK_E_LIFT * fogTop + (invN2(x * 0.012 / SCALE) - 0.5) * 0.05);
+        // (and anything far that shows down at the meadow's far edge is under the trees' feet)
+        if (inSea) gap = Math.max(smooth(clamp((nearCover(x, y) - 0.5) / 0.3, 0, 1)), smooth(clamp((y - META.nearHazeY + 24 * SCALE) / (10 * SCALE), 0, 1)));
+        if (gap > 0) {
+          const drift = 0.85 + 0.3 * (fogN(x * 0.004 / SCALE, y * 0.01 / SCALE) - 0.5);
+          c = lerpRGB(c, hazeNear(treeTone, clamp(0.8 * nearFog * drift, 0, 0.95)), gap);
+        }
       }
 
       // --- sun: lit layers warm up toward the glow color, unlit ones cool into shadow
@@ -277,9 +349,9 @@ export function renderTerrain(img, env, assets) {
         const yTop = invTop + (invN(x * 0.02 / SCALE) - 0.5) * 8 * SCALE;
         const below = y - yTop;
         if (below > -1 && reach > 0) {
-          const dens = clamp(below / INVERSION_BAND, 0, 1) * invDens * inversion * reach;
+          const dens = clamp(below / (INVERSION_BAND / 3), 0, 1) * invDens * inversion * reach * (1 - gap);
           c = lerpRGB(c, fogCol, dens);
-          if (!nearBank && below < 6 * SCALE && d < 1.1 - below / (5 * SCALE)) c = lerpRGB(c, fogLit, invLit * inversion * reach);
+          if ((!nearBank || gap < 0.05) && below < 6 * SCALE && d < 1.1 - below / (5 * SCALE)) c = lerpRGB(c, fogLit, invLit * inversion * reach * (1 - gap));
           c = quantRGB(c, 9, d);
         }
         if (nearBank) {
@@ -291,9 +363,9 @@ export function renderTerrain(img, env, assets) {
           const eTop = BANK_E0 + BANK_E_LIFT * fogTop + (invN2(x * 0.012 / SCALE) - 0.5) * 0.05;
           const belowE = eTop - e;   // how far under the bank's top, in height fraction
           if (belowE > 0) {
-            const dens = clamp(belowE / BANK_E_BAND, 0, 1) * invDens * inversion;
+            const dens = clamp(belowE / BANK_E_BAND, 0, 1) * invDens * inversion * (1 - gap);
             c = lerpRGB(c, fogCol, dens);
-            if (belowE < BANK_E_LIP && d < 1.1 - belowE / BANK_E_LIP * 1.2) c = lerpRGB(c, fogLit, invLit * inversion);
+            if (below <= 0 && belowE < BANK_E_LIP && d < 1.1 - belowE / BANK_E_LIP * 1.2) c = lerpRGB(c, fogLit, invLit * inversion * (1 - gap));
             c = quantRGB(c, 9, d);
           }
         }
