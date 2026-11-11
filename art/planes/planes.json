@@ -1,0 +1,9 @@
+{
+  "note": "The low traffic's planes (tools/build_planes.py). Each frame is a crop with one aircraft against open sky. aspect: how it is turned to the camera, 0 coming straight at us, 90 side-on, 180 going away. The United 737-800's four are frames of the user's video of 2026-11-02 (art/in_progress_art/20261102_130300.mp4, at 1.25, 18.75, 23.25 and 30.25 s); their aspects are estimates from how the fuselage's length in the frame fell away through the pass, not measured.",
+  "frames": [
+    { "file": "united_738_1.png", "kind": "jet", "faces": "right", "aspect": 68, "width": 103 },
+    { "file": "united_738_2.png", "kind": "jet", "faces": "right", "aspect": 110, "width": 102 },
+    { "file": "united_738_3.png", "kind": "jet", "faces": "right", "aspect": 125, "width": 83 },
+    { "file": "united_738_4.png", "kind": "jet", "faces": "right", "aspect": 140, "width": 61 }
+  ]
+}

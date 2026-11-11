@@ -39,7 +39,10 @@ if (typeof Image !== 'undefined') {
       const im = new Image();
       im.src = new URL('../../' + ASSET_DIR + '/planes.png', import.meta.url);
       await im.decode();
-      planes = { img: im, sprites: meta.sprites || [] };
+      const sprites = meta.sprites || [];
+      // `wide`: the widest frame of a sprite's kind, the side-on view its size is set against
+      for (const s of sprites) s.wide = Math.max(...sprites.filter((o) => o.kind === s.kind).map((o) => o.w));
+      planes = { img: im, sprites };
     } catch (e) { /* no sheet yet: the stand-in */ }
   })();
 }
@@ -288,12 +291,25 @@ export class Flights {
       if (nightK < 1) {
         const k = (1 - nightK) * vis * fade;
         const tone = rgb(lerpRGB(sky, lit, k));
-        const sprite = planes && px >= sp * 2 ? pickSprite(wingspan(f.src)) : null;
+        // how it is turned to the bench: 0 coming straight at us, 90 side-on, 180 going away
+        const aspect = Math.acos(clamp(toward, -1, 1)) * 180 / Math.PI;
+        const sprite = planes && px >= sp * 2 ? pickSprite(wingspan(f.src), aspect) : null;
         if (sprite) {
-          // the photographed plane, scaled to its size, turned to its heading, foreshortened
-          const w = Math.max(2, Math.round(px * Math.max(0.3, side))), h = Math.max(1, Math.round(px * sprite.h / sprite.w));
+          // the photographed plane, scaled to its size, turned to its heading
+          let w, h, box = sprite;
+          if (sprite.aspect != null) {
+            // a frame photographed at a turn keeps the photo's own foreshortening: it is sized
+            // against the widest frame of its kind, and squeezed only when the plane is turned
+            // further toward us or away than any frame there is (no head-on photo yet)
+            const turn = clamp(Math.sin(aspect * Math.PI / 180) / Math.sin(sprite.aspect * Math.PI / 180), 0.45, 1);
+            w = Math.max(2, Math.round(px * sprite.w / sprite.wide * turn)); h = Math.max(1, Math.round(px * sprite.h / sprite.wide));
+            // the smallest of the frame's sizes that is still at least as wide as it is drawn:
+            // each was averaged from the photo at its own size, so a small plane is not a big
+            // one with three pixels in four thrown away
+            for (const l of sprite.levels || []) if (l.w >= w) box = l;
+          } else { w = Math.max(2, Math.round(px * Math.max(0.3, side))); h = Math.max(1, Math.round(px * sprite.h / sprite.w)); }
           c.save(); c.translate(x, y); if ((sprite.faces === 'right') !== facingRight) c.scale(-1, 1);
-          c.drawImage(planes.img, sprite.x, sprite.y, sprite.w, sprite.h, -(w >> 1), -(h >> 1), w, h);
+          c.drawImage(planes.img, box.x, box.y, box.w, box.h, -(w >> 1), -(h >> 1), w, h);
           c.restore();
         } else {
           // the speck, a little bigger for a plane close in, never a bar: the flat bar that
@@ -339,9 +355,14 @@ export class Flights {
 }
 
 // the photographed plane for a wingspan: a jet for the big ones, a prop for the small
-function pickSprite(span) {
+// and of that kind's frames the one photographed nearest the plane's turn to the bench
+// (`aspect`, degrees); a small plane takes a jet's frame until there is a prop's
+function pickSprite(span, aspect) {
   const kind = span >= 20 ? 'jet' : 'prop';
-  return planes.sprites.find((p) => p.kind === kind) || planes.sprites[0] || null;
+  const own = planes.sprites.filter((p) => p.kind === kind), list = own.length ? own : planes.sprites;
+  let best = null;
+  for (const p of list) if (!best || Math.abs((p.aspect ?? 90) - aspect) < Math.abs((best.aspect ?? 90) - aspect)) best = p;
+  return best;
 }
 
 // The plane's direction of travel on the screen (a unit vector), from its grid positions a
