@@ -1,7 +1,7 @@
 import { createState, W, H, META, LAT, LON, SEASON_SNOW, localParts, overrideDate } from './state.js';
 import { fetchWeather, conditionsFromCode, WEATHER_PRESETS } from './weather.js';
 import { fetchCams, camCover, camFog } from './cams.js';
-import { fetchFlights, contrailLife as contrailLifeS, REFRESH_MS as FLIGHTS_MS } from './flights.js';
+import { fetchFlights, testFlights, contrailLife as contrailLifeS, REFRESH_MS as FLIGHTS_MS } from './flights.js';
 import { sunPosition, moonPhase, siderealDeg } from './util/solar.js';
 import { dustingTables, presetHours } from './dusting.js';
 import { skyPalette } from './palette.js';
@@ -214,9 +214,12 @@ setInterval(refreshCams, 10 * 60 * 1000);
 
 // The aircraft overhead (src/flights.js), every half minute, in the background like the cams:
 // nothing waits on it, and without the proxy (GitHub Pages, the feed down) the sky has no planes.
+// `?planes` (or `?planes=N`) fills the sky with test aircraft in place of the feed, to watch the
+// photographed planes move (flights.js, testFlights)
+const TEST_PLANES = (() => { const q = new URLSearchParams(location.search); return q.has('planes') ? Math.max(1, Math.min(60, +q.get('planes') || 16)) : null; })();
 async function refreshFlights() {
   try {
-    state.flights = await fetchFlights();
+    state.flights = TEST_PLANES != null ? testFlights(TEST_PLANES) : await fetchFlights();
     renderer.diag.flights = `${state.flights.list.length} aircraft within 120 nm (${state.flights.src || 'feed'}${state.flights.stale ? ', stale' : ''})`;
   }
   catch (err) { console.warn('flights failed', err); renderer.diag.flights = 'failed: ' + (err && err.message || err); }

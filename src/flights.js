@@ -36,6 +36,40 @@ export async function fetchFlights() {
 }
 
 const M_PER_DEG = 111195;
+
+// A sky full of planes, for looking at the photographed ones move (`?planes` or `?planes=N` in
+// the URL; main.js reads it in place of the feed): N low aircraft on straight passes by the
+// bench, a quarter each crossing westbound, crossing eastbound, coming in from the south
+// almost overhead, and on a diagonal, most within two and a half kilometres and 1,800 to 4,300 ft up, at
+// approach speeds, of the airlines and types the sheet has frames for and a few it has not,
+// with a light plane now and then. Each flies a 150 s pass and comes round again as a new
+// aircraft, so the old one flies on out of the frame and nothing jumps back.
+const TEST_FLEET = [['UAL', 'B738'], ['ASA', 'E75L'], ['DAL', 'B739'], ['QXE', 'E75L'], ['AAL', 'A320'], ['SKW', 'E170'], ['UAL', 'B39M'], ['N', 'C172']];
+export function testFlights(n = 16, nowMs = Date.now()) {
+  const T = 150, list = [];
+  const rnd = (i, k) => { const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return x - Math.floor(x); };
+  for (let i = 0; i < n; i++) {
+    const t = nowMs / 1000 + (i / n) * T + rnd(i, 9) * 20, lap = Math.floor(t / T), u = (t % T) - T / 2;
+    const j = i * 31 + lap, kind = i % 4;
+    const [air, type] = TEST_FLEET[Math.floor(rnd(j, 1) * TEST_FLEET.length)];
+    const light = type === 'C172';
+    let track, bear, dist;
+    if (kind === 0) { track = 270 + (rnd(j, 2) - 0.5) * 30; bear = 180; dist = 600 + rnd(j, 3) * 1800; }
+    else if (kind === 1) { track = 90 + (rnd(j, 2) - 0.5) * 30; bear = 180; dist = 600 + rnd(j, 3) * 1800; }
+    else if (kind === 2) { track = (350 + rnd(j, 2) * 20) % 360; bear = rnd(j, 3) < 0.5 ? 90 : 270; dist = 200 + rnd(j, 4) * 700; }
+    else { track = [225, 315, 45, 135][Math.floor(rnd(j, 2) * 4)]; bear = 150 + rnd(j, 3) * 60; dist = 800 + rnd(j, 4) * 1200; }
+    const gs = light ? 95 : 135 + rnd(j, 5) * 25, v = gs * 0.514444;
+    const th = track * Math.PI / 180, b = bear * Math.PI / 180;
+    const north = dist * Math.cos(b) + v * u * Math.cos(th), east = dist * Math.sin(b) + v * u * Math.sin(th);
+    list.push({
+      hex: `test${i}_${lap}`, flight: air === 'N' ? `N${100 + (j % 800)}TB` : `${air}${100 + (j * 7) % 2400}`, type, reg: '',
+      lat: LAT + north / M_PER_DEG, lon: LON + east / (M_PER_DEG * Math.cos(LAT * Math.PI / 180)),
+      alt: Math.round(ELEV / 0.3048 + 1800 + rnd(j, 6) * 2500), gs, track, vr: 0, at: nowMs,
+    });
+  }
+  return { ok: true, at: nowMs, list, src: 'test planes', stale: false, ttl: 30 };
+}
+
 const KT = 0.514444;   // m/s per knot
 const FT = 0.3048;
 
