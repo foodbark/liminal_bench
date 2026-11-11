@@ -38,11 +38,12 @@ export const CAM_FRESH_MS = 30 * 60 * 1000;   // a reading older than this is no
 // A cam can stop: the address keeps answering with the last still it wrote, and the page, which
 // only knew when it had fetched, would hold that morning's fog (or its clear sky) for as long as
 // the cam stayed down. So a still the cam wrote longer ago than this says nothing, cloud or fog.
-// The KPAX still was 24 minutes old when checked (its interval is not measured) and the edge
-// holds one for ten, so an hour should be clear of a working cam; the ?diag line shows the ages. (The Mountain Press still's burned-in clock is no guide:
+// The KPAX cam wrote stills 30 to 40 minutes apart on 2026-11-11 (1:03, 1:43, 2:15 pm) and the
+// edge holds one for ten, so a working cam's still can be 50 minutes old: an hour was too close,
+// two is clear of it. The ?diag line shows the ages. (The Mountain Press still's burned-in clock is no guide:
 // it runs about 98 minutes behind, the same at 9 and at 1:30 on 2026-11-11, on a frame the cam
 // had written that minute.)
-export const CAM_STALE_MS = 60 * 60 * 1000;
+export const CAM_STALE_MS = 2 * 60 * 60 * 1000;
 const DEV = 18;      // luminance steps from the row's median that make a pixel cloud
 const TEX = 6;       // luminance spread within an 8 px block that makes it cloud
 const DARK = 50;     // mean luminance below which the cam is looking at night
