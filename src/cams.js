@@ -35,19 +35,38 @@ export const CAMS = [
   { id: 'kpax', label: 'KPAX cam', sky: [[0.18, 0.02, 0.60, 0.18], [0.60, 0.02, 0.98, 0.24]], scene: [[0.20, 0.30, 0.98, 0.95]], fogTex: [1.5, 5] },
 ];
 export const CAM_FRESH_MS = 30 * 60 * 1000;   // a reading older than this is not used
+// A cam can stop: the address keeps answering with the last still it wrote, and the page, which
+// only knew when it had fetched, would hold that morning's fog (or its clear sky) for as long as
+// the cam stayed down. So a still the cam wrote longer ago than this says nothing, cloud or fog.
+// The KPAX still was 24 minutes old when checked (its interval is not measured) and the edge
+// holds one for ten, so an hour should be clear of a working cam; the ?diag line shows the ages. (The Mountain Press still's burned-in clock is no guide:
+// it runs about 98 minutes behind, the same at 9 and at 1:30 on 2026-11-11, on a frame the cam
+// had written that minute.)
+export const CAM_STALE_MS = 60 * 60 * 1000;
 const DEV = 18;      // luminance steps from the row's median that make a pixel cloud
 const TEX = 6;       // luminance spread within an 8 px block that makes it cloud
 const DARK = 50;     // mean luminance below which the cam is looking at night
 const SUN_MIN = 8;   // degrees; below this the sky's own gradients fool the test
 const BLOCK = 8;
 
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('cam image failed: ' + url));
-    img.src = url;
-  });
+// The still and when the cam last wrote it. The proxy passes the cam's own Last-Modified along
+// as `x-cam-modified`, and only a fetch can read a header, so the still comes as a blob and is
+// handed to an image from there (blob: is in the policy's img-src). `modified` is null when the
+// cam or the proxy sends no time.
+async function loadImage(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('cam image failed: ' + res.status);
+  const stamp = Date.parse(res.headers.get('x-cam-modified') || '');
+  const src = URL.createObjectURL(await res.blob());
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('cam image failed: ' + url));
+      im.src = src;
+    });
+    return { img, modified: Number.isFinite(stamp) ? stamp : null };
+  } finally { URL.revokeObjectURL(src); }
 }
 
 // Fraction of the sky rectangles that is cloud, and the mean luminance (null fraction at night).
@@ -154,7 +173,7 @@ function onView(data, W, H, cam) {
 }
 
 async function readCam(cam, canvas) {
-  const img = await loadImage('api/cam/' + cam.id + '?t=' + Math.floor(Date.now() / CAM_FRESH_MS));
+  const { img, modified } = await loadImage('api/cam/' + cam.id + '?t=' + Math.floor(Date.now() / CAM_FRESH_MS));
   const W = img.naturalWidth, H = img.naturalHeight;
   if (!W || !H) throw new Error('cam image empty');
   canvas.width = W; canvas.height = H;
@@ -170,6 +189,10 @@ async function readCam(cam, canvas) {
   const v = onView(data, W, H, cam);
   r.sky = v.sky; r.hills = v.hills; r.off = false;
   if (!v.on && r.lum >= DARK) { r.off = true; r.cloud = null; r.fog = null; }
+  // a still the cam wrote long ago says nothing either (age in ms, null when the cam gives no time)
+  r.age = modified == null ? null : Math.max(0, Date.now() - modified);
+  r.stale = r.age != null && r.age > CAM_STALE_MS;
+  if (r.stale) { r.cloud = null; r.fog = null; }
   return r;
 }
 

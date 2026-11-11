@@ -22,15 +22,19 @@ _cam_lock = threading.Lock()
 
 
 def cam_still(name):
-    """The cam's latest still (bytes), fetched at most once per CAM_TTL; None when it fails."""
+    """The cam's latest still and when the cam wrote it (bytes, its Last-Modified), fetched at most
+    once per CAM_TTL; None when it fails. CAM_MODIFIED=NAME=HTTP-DATE in the environment overrides a
+    cam's time, to check the page drops a still the cam stopped writing."""
     with _cam_lock:
         hit = _cam_cache.get(name)
         if hit and time.time() - hit[0] < CAM_TTL: return hit[1]
         try:
             req = urllib.request.Request(CAMS[name], headers={'User-Agent': 'liminalbench.net sky check (dev)'})
-            with urllib.request.urlopen(req, timeout=20) as r: data = r.read()
+            with urllib.request.urlopen(req, timeout=20) as r: data = (r.read(), r.headers.get('Last-Modified') or '')
         except Exception as e:
             print('cam fetch failed', name, e); return hit[1] if hit else None
+        fake = os.environ.get('CAM_MODIFIED', '')
+        if fake.startswith(name + '='): data = (data[0], fake[len(name) + 1:])
         _cam_cache[name] = (time.time(), data)
         return data
 
@@ -84,11 +88,13 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/api/cam/'):
             name = self.path[len('/api/cam/'):].split('?')[0]
-            data = cam_still(name) if name in CAMS else None
-            if data is None:
+            hit = cam_still(name) if name in CAMS else None
+            if hit is None:
                 self.send_response(404 if name not in CAMS else 502); self.end_headers(); return
+            data, modified = hit
             self.send_response(200)
             self.send_header('Content-Type', 'image/jpeg'); self.send_header('Content-Length', str(len(data)))
+            self.send_header('X-Cam-Modified', modified)
             self.end_headers(); self.wfile.write(data); return
         if self.path.split('?')[0] == '/api/flights':
             data = flights()
