@@ -308,7 +308,17 @@ export class Flights {
             // one with three pixels in four thrown away
             for (const l of sprite.levels || []) if (l.w >= w) box = l;
           } else { w = Math.max(2, Math.round(px * Math.max(0.3, side))); h = Math.max(1, Math.round(px * sprite.h / sprite.w)); }
-          c.save(); c.translate(x, y); if ((sprite.faces === 'right') !== facingRight) c.scale(-1, 1);
+          // its nose points the way it moves on the screen: a plane climbing the frame as it
+          // comes over, or crossing on a slant, drawn level flew sideways (the user, 2026-11-11).
+          // Mirrored for a plane moving left, so its belly stays down, then turned to its path,
+          // in steps of five degrees and not at all under four, since a sprite turned a degree
+          // or two only shears a row
+          const hd = tangent(f, clamp(slant * 0.15, 60, 5000));
+          const right = hd ? hd.dx >= 0 : facingRight;
+          let turnTo = hd ? Math.atan2(hd.dy, Math.abs(hd.dx)) * 180 / Math.PI : 0;
+          turnTo = Math.abs(turnTo) < 4 ? 0 : Math.round(turnTo / 5) * 5;
+          c.save(); c.translate(x, y); if ((sprite.faces === 'right') !== right) c.scale(-1, 1);
+          if (turnTo) c.rotate((sprite.faces === 'right' ? turnTo : -turnTo) * Math.PI / 180);
           c.drawImage(planes.img, box.x, box.y, box.w, box.h, -(w >> 1), -(h >> 1), w, h);
           c.restore();
         } else {
@@ -377,8 +387,9 @@ function pickSprite(f, aspect) {
 
 // The plane's direction of travel on the screen (a unit vector), from its grid positions a
 // little ahead and behind along its track, and the screen offset of a metre sideways to the
-// track, by a numerical step; null when the step leaves the frame.
-function tangent(f) {
+// track, by a numerical step (`step` metres either way: long for a contrail's line, short for
+// which way a near plane's nose points); null when the step leaves the frame.
+function tangent(f, step = 5000) {
   const th = f.src.track * Math.PI / 180, ux = Math.sin(th), uy = Math.cos(th);
   const cosL = Math.cos(f.pos.lat * Math.PI / 180), alt = f.pos.altFt;
   const at = (d, side) => {
@@ -389,11 +400,12 @@ function tangent(f) {
     // and the trail blanked for a frame, the user, 2026-10-22)
     return lk.az > 20 && lk.az < 340 ? skyXYf(lk.az, lk.el) : null;
   };
-  const a = at(-5000, 0), b = at(5000, 0), o = at(0, 0), q = at(0, 2000);
+  const side = step * 0.4;
+  const a = at(-step, 0), b = at(step, 0), o = at(0, 0), q = at(0, side);
   if (!a || !b || !o || !q) return null;
   const dx = b.x - a.x, dy = b.y - a.y, n = Math.hypot(dx, dy);
   if (n < 0.5) return null;
-  return { ux, uy, dx: dx / n, dy: dy / n, sx: (q.x - o.x) / 2000, sy: (q.y - o.y) / 2000 };
+  return { ux, uy, dx: dx / n, dy: dy / n, sx: (q.x - o.x) / side, sy: (q.y - o.y) / side };
 }
 
 // a line `w` pixels thick, plotted pixel by pixel (no canvas strokes: they anti-alias)
