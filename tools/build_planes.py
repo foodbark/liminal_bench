@@ -7,7 +7,8 @@ Reads art/planes/planes.json: a list of frames, each a crop of a photograph or a
 with one aircraft against open sky and a margin of sky all round, with what it is (`kind`: jet
 or prop), which way its nose points in the frame (`faces`), how it is turned to the camera
 (`aspect`, degrees: 0 coming straight at us, 90 side-on, 180 going straight away) and how wide
-its sprite is at full size (`width`, pixels). For each frame:
+its sprite is at full size (`width`, pixels), with the airframe it belongs to (`model`) and the
+traffic it stands for (`airlines`: callsign prefixes; `types`: ICAO type codes). For each frame:
 
   - the sky is keyed out: a plane fitted through the margin's pixels is the sky's color across
     the crop, anything far from it is aircraft, the biggest piece and its near neighbours are
@@ -21,8 +22,8 @@ its sprite is at full size (`width`, pixels). For each frame:
     a half and a quarter of it, each from the photograph and not from the bigger sprite, so a
     plane drawn small on the page is an average of the photo and not every fourth pixel.
 
-Writes assets/planes.png and planes.json ({ sprites: [{ kind, faces, aspect, x, y, w, h,
-levels: [{ x, y, w, h }, ...] }] }, x/y/w/h the full-size level) and the same at half size in
+Writes assets/planes.png and planes.json ({ sprites: [{ kind, faces, aspect, model, airlines,
+types, x, y, w, h, levels: [{ x, y, w, h }, ...] }] }, x/y/w/h the full-size level) and the same at half size in
 assets/small/. src/render/flights.js picks the frame nearest a plane's turn to the bench.
 """
 import argparse, json, os, subprocess, sys, tempfile
@@ -48,7 +49,7 @@ def pieces(mask):
     return lab, sizes
 
 
-def cut(path):
+def cut(path, shave=1):
     """The aircraft out of its sky, graded: RGBA, cropped to the aircraft."""
     c = np.asarray(Image.open(path).convert('RGB')).astype(np.float32)
     h, w, _ = c.shape
@@ -67,7 +68,9 @@ def cut(path):
         if i and (i == big or (sz > 40 and (near & (lab == i)).any())): keep |= lab == i
     lab2, _ = pieces(~keep); outside = set(lab2[0]) | set(lab2[-1]) | set(lab2[:, 0]) | set(lab2[:, -1])
     keep |= ~keep & ~np.isin(lab2, list(outside))
-    e = keep.copy(); e[1:] &= keep[:-1]; e[:-1] &= keep[1:]; e[:, 1:] &= keep[:, :-1]; e[:, :-1] &= keep[:, 1:]
+    e = keep
+    for _ in range(shave):   # a still's halo is wider than a video frame's: the config's `shave`, in pixels
+        k = e; e = k.copy(); e[1:] &= k[:-1]; e[:-1] &= k[1:]; e[:, 1:] &= k[:, :-1]; e[:, :-1] &= k[:, 1:]
     p = c[e]; lum = p @ [.299, .587, .114]
     hi = p[lum >= np.percentile(lum, 96)].mean(0); lo = np.percentile(lum, 1.5)
     g = ((c - lo) / (hi - lo) * 235 + 12).clip(0, 255)
@@ -89,7 +92,7 @@ def sheet(frames, scale, tmp, debug=None):
     """All the frames' levels packed in rows: the image and the sprites' boxes."""
     rows = []
     for i, f in enumerate(frames):
-        cutout = cut(os.path.join(SRC, f['file']))
+        cutout = cut(os.path.join(SRC, f['file']), f.get('shave', 1))
         if debug and scale == 1: Image.fromarray(cutout, 'RGBA').save(os.path.join(debug, f'plane_{i}_cut.png'))
         w0 = max(8, round(f['width'] * scale))
         rows.append((f, [pixelate(cutout, max(6, round(w0 / k)), tmp) for k in (1, 2, 4)]))
@@ -100,7 +103,8 @@ def sheet(frames, scale, tmp, debug=None):
         x = 1; levels = []
         for im in ims:
             out.paste(im, (x, y)); levels.append({'x': x, 'y': y, 'w': im.width, 'h': im.height}); x += im.width + 1
-        sprites.append({'kind': f['kind'], 'faces': f.get('faces', 'right'), 'aspect': f['aspect'], **levels[0], 'levels': levels})
+        sprites.append({'kind': f['kind'], 'faces': f.get('faces', 'right'), 'aspect': f['aspect'], 'model': f.get('model', f['file']),
+                        'airlines': f.get('airlines', []), 'types': f.get('types', []), **levels[0], 'levels': levels})
         y += ims[0].height + 1
     return out, sprites
 
@@ -116,7 +120,7 @@ def main():
             im, sprites = sheet(frames, scale, tmp, a.debug)
             im.save(os.path.join(ROOT, folder, 'planes.png'), optimize=True)
             with open(os.path.join(ROOT, folder, 'planes.json'), 'w') as f: json.dump({'sprites': sprites}, f)
-            print(folder, im.size, [(s['kind'], s['aspect'], s['w'], s['h']) for s in sprites])
+            print(folder, im.size, [(s['model'], s['aspect'], s['w'], s['h']) for s in sprites])
 
 
 if __name__ == '__main__':

@@ -40,8 +40,8 @@ if (typeof Image !== 'undefined') {
       im.src = new URL('../../' + ASSET_DIR + '/planes.png', import.meta.url);
       await im.decode();
       const sprites = meta.sprites || [];
-      // `wide`: the widest frame of a sprite's kind, the side-on view its size is set against
-      for (const s of sprites) s.wide = Math.max(...sprites.filter((o) => o.kind === s.kind).map((o) => o.w));
+      // `wide`: the widest frame of a sprite's airframe, the side-on view its size is set against
+      for (const s of sprites) s.wide = Math.max(...sprites.filter((o) => o.model === s.model).map((o) => o.w));
       planes = { img: im, sprites };
     } catch (e) { /* no sheet yet: the stand-in */ }
   })();
@@ -293,7 +293,7 @@ export class Flights {
         const tone = rgb(lerpRGB(sky, lit, k));
         // how it is turned to the bench: 0 coming straight at us, 90 side-on, 180 going away
         const aspect = Math.acos(clamp(toward, -1, 1)) * 180 / Math.PI;
-        const sprite = planes && px >= sp * 2 ? pickSprite(wingspan(f.src), aspect) : null;
+        const sprite = planes && px >= sp * 2 ? pickSprite(f, aspect) : null;
         if (sprite) {
           // the photographed plane, scaled to its size, turned to its heading
           let w, h, box = sprite;
@@ -354,14 +354,24 @@ export class Flights {
   }
 }
 
-// the photographed plane for a wingspan: a jet for the big ones, a prop for the small
-// and of that kind's frames the one photographed nearest the plane's turn to the bench
-// (`aspect`, degrees); a small plane takes a jet's frame until there is a prop's
-function pickSprite(span, aspect) {
-  const kind = span >= 20 ? 'jet' : 'prop';
-  const own = planes.sprites.filter((p) => p.kind === kind), list = own.length ? own : planes.sprites;
+// The photographed plane for an aircraft. First its airframe, kept for its whole pass (`f.model`):
+// of its kind's (a jet for the big ones, a prop for the small; with no frame of its kind it stays
+// the speck: a Cessna is not a small 737), the one that flies for its airline (the callsign's first three letters),
+// or is its type, or failing both one picked by its hex, so the same aircraft is the same plane
+// every time. Then of that airframe's frames the one photographed nearest the plane's turn to
+// the bench (`aspect`, degrees).
+function pickSprite(f, aspect) {
+  if (f.model == null || !planes.sprites.some((p) => p.model === f.model)) {
+    const kind = wingspan(f.src) >= 20 ? 'jet' : 'prop';
+    const list = planes.sprites.filter((p) => p.kind === kind);
+    if (!list.length) return null;
+    const air = (f.src.flight || '').trim().slice(0, 3).toUpperCase();
+    const hit = list.find((p) => (p.airlines || []).includes(air)) || list.find((p) => (p.types || []).includes(f.src.type));
+    const models = [...new Set(list.map((p) => p.model))];
+    f.model = hit ? hit.model : models[Math.floor(f.clock * models.length) % models.length];
+  }
   let best = null;
-  for (const p of list) if (!best || Math.abs((p.aspect ?? 90) - aspect) < Math.abs((best.aspect ?? 90) - aspect)) best = p;
+  for (const p of planes.sprites) if (p.model === f.model && (!best || Math.abs((p.aspect ?? 90) - aspect) < Math.abs((best.aspect ?? 90) - aspect))) best = p;
   return best;
 }
 

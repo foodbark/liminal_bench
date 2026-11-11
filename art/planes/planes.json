@@ -1,9 +1,97 @@
 {
-  "note": "The low traffic's planes (tools/build_planes.py). Each frame is a crop with one aircraft against open sky. aspect: how it is turned to the camera, 0 coming straight at us, 90 side-on, 180 going away. The United 737-800's four are frames of the user's video of 2026-11-02 (art/in_progress_art/20261102_130300.mp4, at 1.25, 18.75, 23.25 and 30.25 s); their aspects are estimates from how the fuselage's length in the frame fell away through the pass, not measured.",
+  "note": "The low traffic's planes (tools/build_planes.py). Each frame is a crop with one aircraft against open sky. aspect: how it is turned to the camera, 0 coming straight at us, 90 side-on, 180 going away. The United 737-800's four are frames of the user's video of 2026-11-02 (art/in_progress_art/20261102_130300.mp4, at 1.25, 18.75, 23.25 and 30.25 s); their aspects are estimates from how the fuselage's length in the frame fell away through the pass, not measured. model: the airframe a frame belongs to, so one aircraft keeps one plane through its pass; airlines (callsign prefixes) and types (ICAO type codes) say which traffic it stands for. The Alaska E175 is the user's still of 2026-11-02 (art/in_progress_art/20261102_130014.jpg), about side-on.",
   "frames": [
-    { "file": "united_738_1.png", "kind": "jet", "faces": "right", "aspect": 68, "width": 103 },
-    { "file": "united_738_2.png", "kind": "jet", "faces": "right", "aspect": 110, "width": 102 },
-    { "file": "united_738_3.png", "kind": "jet", "faces": "right", "aspect": 125, "width": 83 },
-    { "file": "united_738_4.png", "kind": "jet", "faces": "right", "aspect": 140, "width": 61 }
+    {
+      "file": "united_738_1.png",
+      "kind": "jet",
+      "faces": "right",
+      "aspect": 68,
+      "width": 103,
+      "model": "united_738",
+      "airlines": [
+        "UAL"
+      ],
+      "types": [
+        "B737",
+        "B738",
+        "B739",
+        "B38M",
+        "B39M"
+      ]
+    },
+    {
+      "file": "united_738_2.png",
+      "kind": "jet",
+      "faces": "right",
+      "aspect": 110,
+      "width": 102,
+      "model": "united_738",
+      "airlines": [
+        "UAL"
+      ],
+      "types": [
+        "B737",
+        "B738",
+        "B739",
+        "B38M",
+        "B39M"
+      ]
+    },
+    {
+      "file": "united_738_3.png",
+      "kind": "jet",
+      "faces": "right",
+      "aspect": 125,
+      "width": 83,
+      "model": "united_738",
+      "airlines": [
+        "UAL"
+      ],
+      "types": [
+        "B737",
+        "B738",
+        "B739",
+        "B38M",
+        "B39M"
+      ]
+    },
+    {
+      "file": "united_738_4.png",
+      "kind": "jet",
+      "faces": "right",
+      "aspect": 140,
+      "width": 61,
+      "model": "united_738",
+      "airlines": [
+        "UAL"
+      ],
+      "types": [
+        "B737",
+        "B738",
+        "B739",
+        "B38M",
+        "B39M"
+      ]
+    },
+    {
+      "file": "alaska_e175_1.png",
+      "kind": "jet",
+      "faces": "right",
+      "aspect": 90,
+      "width": 62,
+      "model": "alaska_e175",
+      "airlines": [
+        "ASA",
+        "QXE"
+      ],
+      "types": [
+        "E170",
+        "E175",
+        "E75L",
+        "E75S",
+        "E190"
+      ],
+      "shave": 3
+    }
   ]
 }
