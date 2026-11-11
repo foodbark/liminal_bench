@@ -234,6 +234,31 @@ A local run reads the same names from `.dev.vars`, with `CF_API` pointing at a s
 Only posters are watched. A note is eighty characters of text that anyone can read on the board;
 if the watch should cover them too, `notes.js` can call the same module.
 
+## 8. Backups of the board (2026-11-11)
+
+Nothing ages off the board, so everything ever pinned is in the one D1 database. Two things stand
+behind it:
+
+- **Time Travel**, D1's own: any minute of the last thirty days can be restored
+  (`npx wrangler d1 time-travel info liminal-bench`, then `... time-travel restore liminal-bench
+  --timestamp=...`). It is always on and is the first thing to reach for after a bad migration.
+- **`npm run backup`** (`tools/backup_board.py`), for a copy that outlives the thirty days and
+  sits outside Cloudflare: it exports the notes, posters, voicemail, torn and placed tables (not
+  `kv`, the aircraft feed's copy) to `~/liminal-bench-backups/board-DATE-TIME.sql`, readable by
+  the user only, keeps the newest sixty and prints the row counts. It needs wrangler signed in on
+  the machine (`npx wrangler login`) and runs only when someone runs it; a line in cron
+  (`17 9 * * 1 cd /path/to/liminal-bench && npm run backup`) makes it weekly where cron is up.
+  The database does not answer while it exports, a moment at this size.
+
+A backup holds the voicemail and the salted address hashes: never commit one (the repository is
+public) or put one anywhere public.
+
+To put one back, into an empty database (a fresh `d1 create`, or the old one with the five tables
+dropped): `npx wrangler d1 execute liminal-bench --remote --file=FILE.sql`. The file carries the
+tables' own CREATE statements as they were on the day; run any ALTER from `db/schema.sql` that
+is newer than the backup afterwards. The first backup (2026-11-11, 162 KB) was loaded into a
+scratch SQLite database as a check and gave back every row.
+
 ## Rate limits and abuse
 
 `functions/api/notes.js` allows three notes an hour per address (salted daily hash, no addresses
