@@ -297,7 +297,7 @@ export class Flights {
       // jet a kilometre off at night was two pixels)
       const nearK = clamp((6 - slant / 1000) / 3, 0, 1);
       const sprite = planes && px >= sp * 2 && (nightK < 1 || nearK > 0) ? pickSprite(f, aspect) : null;
-      let on = null;   // where a point of the drawn sprite is on the screen (lx along the nose, ly down), for its lights
+      let on = null;   // where a point of the drawn sprite's box is on the screen (fractions from its left and top), for its lights
       if (sprite) {
         let w, h, box = sprite;
         if (sprite.aspect != null) {
@@ -330,8 +330,8 @@ export class Flights {
         if (img) c.drawImage(img, -(w >> 1), -(h >> 1));
         else c.drawImage(planes.img, box.x, box.y, box.w, box.h, -(w >> 1), -(h >> 1), w, h);
         c.restore();
-        const ca = Math.cos(ang), sa = Math.sin(ang), nose = sprite.faces === 'right' ? 1 : -1;
-        on = (lx, ly) => { const ux = lx * nose * w / 2, uy = ly * h / 2, rx = ux * ca - uy * sa, ry = ux * sa + uy * ca; return { x: Math.round(x + (flip ? -rx : rx)), y: Math.round(y + ry) }; };
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        on = (p) => { const ux = (p[0] - 0.5) * w, uy = (p[1] - 0.5) * h, rx = ux * ca - uy * sa, ry = ux * sa + uy * ca; return { x: Math.round(x + (flip ? -rx : rx)), y: Math.round(y + ry) }; };
       } else if (nightK < 1) {
         // the speck, a little bigger for a plane close in, never a bar: the flat bar that
         // stood in for the photos read as a white rectangle on a full-size screen (the user,
@@ -341,18 +341,28 @@ export class Flights {
         c.fillStyle = rgb(lerpRGB(sky, lit, k));
         c.fillRect(x - (w >> 1), y, w, Math.max(1, Math.round(w * 0.6)));
       }
-      // the lights sit on the airframe when there is one: the landing light at the nose, the
-      // beacon under the belly, the strobes on the tail and the near wingtip
-      const at = (lx, ly) => (on ? on(lx, ly) : { x, y });
+      // the lights sit on the airframe when there is one, where the frame's own are (`lights`
+      // in the sheet, read off each sprite: the wingtips, the tail cone, the belly, the landing
+      // light by the nose gear), and are sized to it: a strobe three pixels square on a plane
+      // sixteen long, or a landing light wider than the fuselage, were blobs (the user, 2026-11-11)
+      const LT = (sprite && sprite.lights) || {};
+      const at = (p) => (on && p ? on(p) : { x, y });
+      const lightPx = on ? clamp(Math.round(px / 20), 1, sp) : null;
       // the landing light: a plane low and heading our way carries a steady white light
       // pointed at the bench, growing as it comes, by day a glint, by night the brightest
       // thing in the sky, with a dim ring of glow round it
       if (toward > 0.88 && f.look.km < 25 && f.pos.altFt * 0.3048 - ELEV < 3500) {
         const k = vis * (0.3 + 0.7 * nightK);
-        const r = Math.max(1, Math.round(SCALE * (0.35 + 1.5 / Math.max(1, f.look.km)) * (0.6 + 0.4 * nightK)));
-        const p = at(0.85, 0.15);
-        if (nightK > 0.3) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], 0.3 * k)); fillCircle(c, p.x, p.y, r + 1); }
-        c.fillStyle = rgb(lerpRGB(sky, [255, 252, 240], k)); fillCircle(c, p.x, p.y, r);
+        const p = at(LT.land);
+        // on an airframe a point that grows to a small disc as it comes close; on a speck a
+        // point (the disc that grew with nearness alone was a blob five pixels across on a
+        // plane ten kilometres out)
+        const r = on ? clamp(Math.round(px / 20) - 1, 0, 2) : 0, n = on ? 1 : Math.max(1, sp - 1);
+        c.fillStyle = rgb(lerpRGB(sky, [255, 252, 240], k));
+        if (r > 0) {
+          if (nightK > 0.3) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], 0.3 * k)); fillCircle(c, p.x, p.y, r + 1); c.fillStyle = rgb(lerpRGB(sky, [255, 252, 240], k)); }
+          fillCircle(c, p.x, p.y, r);
+        } else c.fillRect(p.x, p.y, n, n);
       }
       if (nightK > 0) {
         const ph = (t + f.clock * 7) % 1;                // the strobe's second, on this aircraft's clock
@@ -360,16 +370,16 @@ export class Flights {
         // the lights dim and shrink with distance: full inside 20 km, a third of that at 70
         const dist = clamp(20 / Math.max(1, f.slantKm || 1), 0.3, 1);
         const k = nightK * vis * fade * dist;
-        const ls = dist > 0.6 ? sp : Math.max(1, sp - 1);
+        const ls = lightPx || (dist > 0.6 ? sp : Math.max(1, sp - 1));
         // a faint steady pixel so the eye can follow it between flashes
         c.fillStyle = rgb(lerpRGB(sky, [200, 204, 214], 0.45 * k));
-        const mid = at(0, 0); c.fillRect(mid.x, mid.y, 1, 1);
+        const mid = at(LT.tail); c.fillRect(mid.x, mid.y, 1, 1);
         // the red anti-collision beacon, a slow blink
-        if (bph < 0.28) { const p = at(0, 0.7); c.fillStyle = rgb(lerpRGB(sky, [255, 48, 40], k)); c.fillRect(p.x - (ls >> 2), p.y, Math.max(1, ls >> 1), Math.max(1, ls >> 1)); }
+        if (bph < 0.28) { const p = at(LT.belly); c.fillStyle = rgb(lerpRGB(sky, [255, 48, 40], k)); c.fillRect(p.x - (ls >> 2), p.y, Math.max(1, ls >> 1), Math.max(1, ls >> 1)); }
         // the white strobe: a double flash about once a second
         if (ph < 0.06 || (ph > 0.13 && ph < 0.19)) {
           c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], k));
-          for (const p of on ? [at(-0.9, -0.55), at(0.1, -0.75)] : [{ x, y }]) c.fillRect(p.x - (ls >> 1), p.y - (ls >> 2), ls, Math.max(1, ls - 1));
+          for (const p of on && LT.wings ? LT.wings.map(at) : [{ x, y }]) c.fillRect(p.x - (ls >> 1), p.y - (ls >> 2), ls, Math.max(1, ls - 1));
         }
       }
     }

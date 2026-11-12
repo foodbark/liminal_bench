@@ -8,7 +8,8 @@ with one aircraft against open sky and a margin of sky all round, with what it i
 or prop), which way its nose points in the frame (`faces`), how it is turned to the camera
 (`aspect`, degrees: 0 coming straight at us, 90 side-on, 180 going straight away) and how wide
 its sprite is at full size (`width`, pixels), with the airframe it belongs to (`model`) and the
-traffic it stands for (`airlines`: callsign prefixes; `types`: ICAO type codes). For each frame:
+traffic it stands for (`airlines`: callsign prefixes; `types`: ICAO type codes), and where its
+lights are (`lights`: wings, tail, belly, land, as fractions of the sprite's box). For each frame:
 
   - the sky is keyed out: a plane fitted through the margin's pixels is the sky's color across
     the crop, anything far from it is aircraft, the biggest piece and its near neighbours are
@@ -104,7 +105,7 @@ def sheet(frames, scale, tmp, debug=None):
         for im in ims:
             out.paste(im, (x, y)); levels.append({'x': x, 'y': y, 'w': im.width, 'h': im.height}); x += im.width + 1
         sprites.append({'kind': f['kind'], 'faces': f.get('faces', 'right'), 'aspect': f['aspect'], 'model': f.get('model', f['file']),
-                        'airlines': f.get('airlines', []), 'types': f.get('types', []), **levels[0], 'levels': levels})
+                        'airlines': f.get('airlines', []), 'types': f.get('types', []), 'lights': f.get('lights'), **levels[0], 'levels': levels})
         y += ims[0].height + 1
     return out, sprites
 

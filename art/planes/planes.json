@@ -1,5 +1,5 @@
 {
-  "note": "The low traffic's planes (tools/build_planes.py). Each frame is a crop with one aircraft against open sky. aspect: how it is turned to the camera, 0 coming straight at us, 90 side-on, 180 going away. The United 737-800's four are frames of the user's video of 2026-11-02 (art/in_progress_art/20261102_130300.mp4, at 1.25, 18.75, 23.25 and 30.25 s); their aspects are estimates from how the fuselage's length in the frame fell away through the pass, not measured. model: the airframe a frame belongs to, so one aircraft keeps one plane through its pass; airlines (callsign prefixes) and types (ICAO type codes) say which traffic it stands for. The Alaska E175 is the user's still of 2026-11-02 (art/in_progress_art/20261102_130014.jpg), about side-on.",
+  "note": "The low traffic's planes (tools/build_planes.py). Each frame is a crop with one aircraft against open sky. aspect: how it is turned to the camera, 0 coming straight at us, 90 side-on, 180 going away. The United 737-800's four are frames of the user's video of 2026-11-02 (art/in_progress_art/20261102_130300.mp4, at 1.25, 18.75, 23.25 and 30.25 s); their aspects are estimates from how the fuselage's length in the frame fell away through the pass, not measured. model: the airframe a frame belongs to, so one aircraft keeps one plane through its pass; airlines (callsign prefixes) and types (ICAO type codes) say which traffic it stands for. The Alaska E175 is the user's still of 2026-11-02 (art/in_progress_art/20261102_130014.jpg), about side-on. lights: where the frame's lights sit, as fractions of the sprite's box from its left and top, read off the built sprite under a grid: the two wingtips (white strobes), the tail cone (the steady light), the belly (the red beacon) and the landing light by the nose gear.",
   "frames": [
     {
       "file": "united_738_1.png",
@@ -17,7 +17,31 @@
         "B739",
         "B38M",
         "B39M"
-      ]
+      ],
+      "lights": {
+        "wings": [
+          [
+            0.22,
+            0.03
+          ],
+          [
+            0.6,
+            0.97
+          ]
+        ],
+        "tail": [
+          0.02,
+          0.5
+        ],
+        "belly": [
+          0.45,
+          0.76
+        ],
+        "land": [
+          0.89,
+          0.68
+        ]
+      }
     },
     {
       "file": "united_738_2.png",
@@ -35,7 +59,31 @@
         "B739",
         "B38M",
         "B39M"
-      ]
+      ],
+      "lights": {
+        "wings": [
+          [
+            0.62,
+            0.06
+          ],
+          [
+            0.21,
+            0.85
+          ]
+        ],
+        "tail": [
+          0.02,
+          0.63
+        ],
+        "belly": [
+          0.6,
+          0.88
+        ],
+        "land": [
+          0.9,
+          0.86
+        ]
+      }
     },
     {
       "file": "united_738_3.png",
@@ -53,7 +101,31 @@
         "B739",
         "B38M",
         "B39M"
-      ]
+      ],
+      "lights": {
+        "wings": [
+          [
+            0.78,
+            0.15
+          ],
+          [
+            0.12,
+            0.8
+          ]
+        ],
+        "tail": [
+          0.04,
+          0.57
+        ],
+        "belly": [
+          0.55,
+          0.92
+        ],
+        "land": [
+          0.9,
+          0.88
+        ]
+      }
     },
     {
       "file": "united_738_4.png",
@@ -71,7 +143,31 @@
         "B739",
         "B38M",
         "B39M"
-      ]
+      ],
+      "lights": {
+        "wings": [
+          [
+            0.96,
+            0.1
+          ],
+          [
+            0.04,
+            0.8
+          ]
+        ],
+        "tail": [
+          0.1,
+          0.58
+        ],
+        "belly": [
+          0.55,
+          0.94
+        ],
+        "land": [
+          0.9,
+          0.86
+        ]
+      }
     },
     {
       "file": "alaska_e175_1.png",
@@ -91,7 +187,31 @@
         "E75S",
         "E190"
       ],
-      "shave": 3
+      "shave": 3,
+      "lights": {
+        "wings": [
+          [
+            0.41,
+            0.08
+          ],
+          [
+            0.5,
+            0.97
+          ]
+        ],
+        "tail": [
+          0.02,
+          0.55
+        ],
+        "belly": [
+          0.62,
+          0.7
+        ],
+        "land": [
+          0.88,
+          0.66
+        ]
+      }
     }
   ]
 }
