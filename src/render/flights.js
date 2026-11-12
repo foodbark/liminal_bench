@@ -287,57 +287,72 @@ export class Flights {
       const rel = (f.src.track - f.look.az) * Math.PI / 180;        // the track against the bearing from the bench
       const side = Math.abs(Math.sin(rel)), toward = -Math.cos(rel);   // toward > 0: coming our way
       const facingRight = Math.sin(f.src.track * Math.PI / 180) < 0;   // westbound moves right across a south-facing frame
-      // by day the plane, through dusk fading as the lights come up
-      if (nightK < 1) {
+      // how it is turned to the bench: 0 coming straight at us, 90 side-on, 180 going away
+      const aspect = Math.acos(clamp(toward, -1, 1)) * 180 / Math.PI;
+      // the photographed plane: by day as it was photographed; through dusk it darkens to a
+      // shape in the sky's own tone, keeping a little of the photo's shading, and by night a
+      // near one stays as that faint shape with its lights on it while a far one melts into
+      // the sky and is its lights alone (2026-11-11: the photo stayed at noon's brightness
+      // against a dark sky, then vanished at once when the sun reached 8 degrees down, and a
+      // jet a kilometre off at night was two pixels)
+      const nearK = clamp((6 - slant / 1000) / 3, 0, 1);
+      const sprite = planes && px >= sp * 2 && (nightK < 1 || nearK > 0) ? pickSprite(f, aspect) : null;
+      let on = null;   // where a point of the drawn sprite is on the screen (lx along the nose, ly down), for its lights
+      if (sprite) {
+        let w, h, box = sprite;
+        if (sprite.aspect != null) {
+          // a frame photographed at a turn keeps the photo's own foreshortening: it is sized
+          // against the widest frame of its kind, and squeezed only when the plane is turned
+          // further toward us or away than any frame there is (no head-on photo yet)
+          const turn = clamp(Math.sin(aspect * Math.PI / 180) / Math.sin(sprite.aspect * Math.PI / 180), 0.45, 1);
+          w = Math.max(2, Math.round(px * sprite.w / sprite.wide * turn)); h = Math.max(1, Math.round(px * sprite.h / sprite.wide));
+          // the smallest of the frame's sizes that is still at least as wide as it is drawn:
+          // each was averaged from the photo at its own size, so a small plane is not a big
+          // one with three pixels in four thrown away
+          for (const l of sprite.levels || []) if (l.w >= w) box = l;
+        } else { w = Math.max(2, Math.round(px * Math.max(0.3, side))); h = Math.max(1, Math.round(px * sprite.h / sprite.w)); }
+        // its nose points the way it moves on the screen: a plane climbing the frame as it
+        // comes over, or crossing on a slant, drawn level flew sideways (the user, 2026-11-11).
+        // Mirrored for a plane moving left, so its belly stays down, then turned to its path,
+        // in steps of five degrees and not at all under four, since a sprite turned a degree
+        // or two only shears a row
+        const hd = tangent(f, clamp(slant * 0.15, 60, 5000));
+        const right = hd ? hd.dx >= 0 : facingRight;
+        let turnTo = hd ? Math.atan2(hd.dy, Math.abs(hd.dx)) * 180 / Math.PI : 0;
+        turnTo = Math.abs(turnTo) < 4 ? 0 : Math.round(turnTo / 5) * 5;
+        const flip = (sprite.faces === 'right') !== right, ang = (sprite.faces === 'right' ? turnTo : -turnTo) * Math.PI / 180;
+        // the shape it darkens to: under the sky's tone while there is light behind it, a
+        // touch over it once the sky is black (the valley's glow on its belly)
+        const shape = lerpRGB(lerpRGB(sky, [0, 0, 0], 0.5), lerpRGB(sky, [150, 158, 190], 0.2), nightK);
+        const img = nightK > 0 ? tinted(box, w, h, shape, sky, nightK ** 0.7, nightK * (1 - nearK)) : null;
+        c.save(); c.translate(x, y); if (flip) c.scale(-1, 1);
+        if (ang) c.rotate(ang);
+        if (img) c.drawImage(img, -(w >> 1), -(h >> 1));
+        else c.drawImage(planes.img, box.x, box.y, box.w, box.h, -(w >> 1), -(h >> 1), w, h);
+        c.restore();
+        const ca = Math.cos(ang), sa = Math.sin(ang), nose = sprite.faces === 'right' ? 1 : -1;
+        on = (lx, ly) => { const ux = lx * nose * w / 2, uy = ly * h / 2, rx = ux * ca - uy * sa, ry = ux * sa + uy * ca; return { x: Math.round(x + (flip ? -rx : rx)), y: Math.round(y + ry) }; };
+      } else if (nightK < 1) {
+        // the speck, a little bigger for a plane close in, never a bar: the flat bar that
+        // stood in for the photos read as a white rectangle on a full-size screen (the user,
+        // 2026-10-22); the photographed planes take over when assets/planes.png exists
         const k = (1 - nightK) * vis * fade;
-        const tone = rgb(lerpRGB(sky, lit, k));
-        // how it is turned to the bench: 0 coming straight at us, 90 side-on, 180 going away
-        const aspect = Math.acos(clamp(toward, -1, 1)) * 180 / Math.PI;
-        const sprite = planes && px >= sp * 2 ? pickSprite(f, aspect) : null;
-        if (sprite) {
-          // the photographed plane, scaled to its size, turned to its heading
-          let w, h, box = sprite;
-          if (sprite.aspect != null) {
-            // a frame photographed at a turn keeps the photo's own foreshortening: it is sized
-            // against the widest frame of its kind, and squeezed only when the plane is turned
-            // further toward us or away than any frame there is (no head-on photo yet)
-            const turn = clamp(Math.sin(aspect * Math.PI / 180) / Math.sin(sprite.aspect * Math.PI / 180), 0.45, 1);
-            w = Math.max(2, Math.round(px * sprite.w / sprite.wide * turn)); h = Math.max(1, Math.round(px * sprite.h / sprite.wide));
-            // the smallest of the frame's sizes that is still at least as wide as it is drawn:
-            // each was averaged from the photo at its own size, so a small plane is not a big
-            // one with three pixels in four thrown away
-            for (const l of sprite.levels || []) if (l.w >= w) box = l;
-          } else { w = Math.max(2, Math.round(px * Math.max(0.3, side))); h = Math.max(1, Math.round(px * sprite.h / sprite.w)); }
-          // its nose points the way it moves on the screen: a plane climbing the frame as it
-          // comes over, or crossing on a slant, drawn level flew sideways (the user, 2026-11-11).
-          // Mirrored for a plane moving left, so its belly stays down, then turned to its path,
-          // in steps of five degrees and not at all under four, since a sprite turned a degree
-          // or two only shears a row
-          const hd = tangent(f, clamp(slant * 0.15, 60, 5000));
-          const right = hd ? hd.dx >= 0 : facingRight;
-          let turnTo = hd ? Math.atan2(hd.dy, Math.abs(hd.dx)) * 180 / Math.PI : 0;
-          turnTo = Math.abs(turnTo) < 4 ? 0 : Math.round(turnTo / 5) * 5;
-          c.save(); c.translate(x, y); if ((sprite.faces === 'right') !== right) c.scale(-1, 1);
-          if (turnTo) c.rotate((sprite.faces === 'right' ? turnTo : -turnTo) * Math.PI / 180);
-          c.drawImage(planes.img, box.x, box.y, box.w, box.h, -(w >> 1), -(h >> 1), w, h);
-          c.restore();
-        } else {
-          // the speck, a little bigger for a plane close in, never a bar: the flat bar that
-          // stood in for the photos read as a white rectangle on a full-size screen (the user,
-          // 2026-10-22); the photographed planes take over when assets/planes.png exists
-          const w = Math.min(sp + 2, Math.max(sp, Math.round(px / 4)));
-          c.fillStyle = tone;
-          c.fillRect(x - (w >> 1), y, w, Math.max(1, Math.round(w * 0.6)));
-        }
+        const w = Math.min(sp + 2, Math.max(sp, Math.round(px / 4)));
+        c.fillStyle = rgb(lerpRGB(sky, lit, k));
+        c.fillRect(x - (w >> 1), y, w, Math.max(1, Math.round(w * 0.6)));
       }
+      // the lights sit on the airframe when there is one: the landing light at the nose, the
+      // beacon under the belly, the strobes on the tail and the near wingtip
+      const at = (lx, ly) => (on ? on(lx, ly) : { x, y });
       // the landing light: a plane low and heading our way carries a steady white light
       // pointed at the bench, growing as it comes, by day a glint, by night the brightest
       // thing in the sky, with a dim ring of glow round it
       if (toward > 0.88 && f.look.km < 25 && f.pos.altFt * 0.3048 - ELEV < 3500) {
         const k = vis * (0.3 + 0.7 * nightK);
         const r = Math.max(1, Math.round(SCALE * (0.35 + 1.5 / Math.max(1, f.look.km)) * (0.6 + 0.4 * nightK)));
-        if (nightK > 0.3) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], 0.3 * k)); fillCircle(c, x, y, r + 1); }
-        c.fillStyle = rgb(lerpRGB(sky, [255, 252, 240], k)); fillCircle(c, x, y, r);
+        const p = at(0.85, 0.15);
+        if (nightK > 0.3) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], 0.3 * k)); fillCircle(c, p.x, p.y, r + 1); }
+        c.fillStyle = rgb(lerpRGB(sky, [255, 252, 240], k)); fillCircle(c, p.x, p.y, r);
       }
       if (nightK > 0) {
         const ph = (t + f.clock * 7) % 1;                // the strobe's second, on this aircraft's clock
@@ -348,11 +363,14 @@ export class Flights {
         const ls = dist > 0.6 ? sp : Math.max(1, sp - 1);
         // a faint steady pixel so the eye can follow it between flashes
         c.fillStyle = rgb(lerpRGB(sky, [200, 204, 214], 0.45 * k));
-        c.fillRect(x, y, 1, 1);
+        const mid = at(0, 0); c.fillRect(mid.x, mid.y, 1, 1);
         // the red anti-collision beacon, a slow blink
-        if (bph < 0.28) { c.fillStyle = rgb(lerpRGB(sky, [255, 48, 40], k)); c.fillRect(x - (ls >> 2), y, Math.max(1, ls >> 1), Math.max(1, ls >> 1)); }
+        if (bph < 0.28) { const p = at(0, 0.7); c.fillStyle = rgb(lerpRGB(sky, [255, 48, 40], k)); c.fillRect(p.x - (ls >> 2), p.y, Math.max(1, ls >> 1), Math.max(1, ls >> 1)); }
         // the white strobe: a double flash about once a second
-        if (ph < 0.06 || (ph > 0.13 && ph < 0.19)) { c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], k)); c.fillRect(x - (ls >> 1), y - (ls >> 2), ls, Math.max(1, ls - 1)); }
+        if (ph < 0.06 || (ph > 0.13 && ph < 0.19)) {
+          c.fillStyle = rgb(lerpRGB(sky, [255, 255, 255], k));
+          for (const p of on ? [at(-0.9, -0.55), at(0.1, -0.75)] : [{ x, y }]) c.fillRect(p.x - (ls >> 1), p.y - (ls >> 2), ls, Math.max(1, ls - 1));
+        }
       }
     }
   }
@@ -362,6 +380,36 @@ export class Flights {
     for (const s of flightSpots) if (Math.abs(p.x - s.x) < r && Math.abs(p.y - s.y) < r) { this.label = s.label; return true; }
     return false;
   }
+}
+
+// A frame of the sheet at its drawn size, darkened toward a flat `shape` tone by `k` (0 the
+// photo, 1 the shape, the photo's shading kept faintly in it) and then melted toward the sky's
+// tone by `melt` (a far plane at night). Recolored pixel by pixel and kept, since blending with
+// an alpha would soften its edge; the key rounds the tones, so a plane crossing the sky reuses
+// a handful of copies.
+const tints = new Map();
+function tinted(box, w, h, shape, sky, k, melt) {
+  const q = (v) => (v[0] >> 3) + ',' + (v[1] >> 3) + ',' + (v[2] >> 3);
+  const key = `${box.x},${box.y},${w},${h},${q(shape)},${q(sky)},${Math.round(k * 10)},${Math.round(melt * 10)}`;
+  let cv = tints.get(key);
+  if (cv) return cv;
+  if (tints.size > 400) tints.clear();
+  cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d', { willReadFrequently: true }); g.imageSmoothingEnabled = false;
+  g.drawImage(planes.img, box.x, box.y, box.w, box.h, 0, 0, w, h);
+  const im = g.getImageData(0, 0, w, h), d = im.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 128) { d[i + 3] = 0; continue; }
+    const l = 0.8 + 0.5 * (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;   // the photo's light and shade, faintly
+    for (let ch = 0; ch < 3; ch++) {
+      const v = d[i + ch] + (Math.min(255, shape[ch] * l) - d[i + ch]) * k;
+      d[i + ch] = v + (sky[ch] - v) * melt;
+    }
+    d[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  tints.set(key, cv);
+  return cv;
 }
 
 // The photographed plane for an aircraft. First its airframe, kept for its whole pass (`f.model`):
