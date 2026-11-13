@@ -36,8 +36,8 @@ const clean = (s) => {
   let out = '', letters = 0, run = 0, all = 0;
   for (const ch of t) {
     if (MARK.test(ch)) { if (out && run < MARKS_EACH && all < MARKS_ALL) { out += ch; run++; all++; } continue; }
-    if (letters + ch.length > MAX_LEN) break;
-    out += ch; letters += ch.length; run = 0;
+    if (letters + 1 > MAX_LEN) break;   // by the character, so the alphabets beyond the first plane get their eighty
+    out += ch; letters++; run = 0;
   }
   return out.trim();
 };

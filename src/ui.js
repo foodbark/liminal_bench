@@ -297,6 +297,7 @@ export function setupUI(state, canvas) {
   // Pinning a note: a scrap of paper, a pencil, one line. Enter or "put it up" hands it to the
   // pointer to place (`draft` brings the words and the picture back from a placing that was
   // called off, with any error to show).
+  let lastHand = Math.floor(Math.random() * HAND_LIST.length);   // the hand the form last showed
   function compose(draft = null) {
     const { text, acts } = open();
     if (boardFull()) {   // the board is full: not a pin left, no bare cork; something has to come down first
@@ -312,18 +313,24 @@ export function setupUI(state, canvas) {
     const preview = el('canvas', 'thumb'), sizes = el('div', 'row sizes'), info = el('span', 'dim');
     pic.append(preview, info); text.appendChild(pic);
     const fields = el('div', 'row'); say.appendChild(fields);   // the whole width, under the words and the buttons
-    const input = el('input'); input.type = 'text'; input.id = 'note-text'; input.maxLength = NOTE_MAX + MARKS_ALL; input.placeholder = 'write something on a blank scrap'; input.autocomplete = 'off'; input.spellcheck = false;
+    const input = el('input'); input.type = 'text'; input.id = 'note-text'; input.maxLength = NOTE_MAX * 2 + MARKS_ALL; input.placeholder = 'write something on a blank scrap'; input.autocomplete = 'off'; input.spellcheck = false;
     if (draft && draft.text) input.value = draft.text;
     // NOTE_MAX letters; stacking marks ride free on them, so the field's own limit is looser
     input.addEventListener('input', () => { const f = fitNote(input.value); if (f.length < input.value.length) input.value = f; });
-    // the hand it is written in: the words pick one unless the writer does (the user,
-    // 2026-11-12); one button that steps through the hands, named in each, the field following
-    let hand = draft && Number.isInteger(draft.hand) ? draft.hand : null;
+    // The hand it is written in (the user, 2026-11-12): its name sits inside the field, left of
+    // the words and a colon, in its own face, the field following; a click or a tap on it steps
+    // to the next hand. Each time the form opens it starts on another hand, so the board keeps
+    // its mix and the label shows itself to be a choice.
+    let hand = draft && Number.isInteger(draft.hand) ? draft.hand : (lastHand = (lastHand + 1 + Math.floor(Math.random() * (HAND_LIST.length - 1))) % HAND_LIST.length);
     const handLabel = () => {
-      const h = hand == null ? null : HAND_LIST[hand], face = h ? `"${h.face}", ${h.mono ? 'monospace' : 'cursive'}` : '';
-      handButton.textContent = h ? h.name : 'any hand'; handButton.style.fontFamily = face; input.style.fontFamily = face;
+      const h = HAND_LIST[hand], face = `"${h.face}", ${h.mono ? 'monospace' : 'cursive'}`;
+      handButton.textContent = h.name + ':'; handButton.style.fontFamily = face; input.style.fontFamily = face;
     };
-    sizes.hidden = true; fields.append(input, sizes);   // the sizes beside the field once a picture is in
+    const handButton = el('button', 'hand'); handButton.type = 'button'; handButton.title = 'the hand it is written in: click for the next';
+    handButton.addEventListener('pointerdown', (e) => e.preventDefault());   // the field keeps the focus, and a phone its keyboard
+    handButton.addEventListener('click', () => { hand = lastHand = (hand + 1) % HAND_LIST.length; handLabel(); input.focus(); });
+    const box = el('div', 'field'); box.append(handButton, input); fields.prepend(box); handLabel();
+    sizes.hidden = true; fields.append(sizes);   // the sizes beside the field once a picture is in
     const err = errLine(text, draft && draft.error);
     const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.id = 'poster-file'; file.hidden = true; text.appendChild(file);
     let sizeK = draft && draft.poster ? draft.poster.k : pickPosterSize();
@@ -363,8 +370,6 @@ export function setupUI(state, canvas) {
       else tell(err, 'nothing to pin');
     };
     button(acts, 'put it up', submit);
-    const handButton = button(acts, 'any hand', () => { hand = hand == null ? 0 : hand + 1 < HAND_LIST.length ? hand + 1 : null; handLabel(); input.focus(); });
-    handButton.title = 'the hand it is written in'; handLabel();
     button(acts, 'pin a picture', () => file.click());
     // with the board's close-up the form simply goes away and the cork is there to read
     button(acts, 'never mind', () => twoStep('board') ? shut() : showPanel('board'));

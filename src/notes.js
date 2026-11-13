@@ -92,8 +92,8 @@ export function fitNote(s) {
   let out = '', letters = 0, run = 0, all = 0;
   for (const ch of String(s ?? '')) {
     if (isMark(ch)) { if (out && run < MARKS_EACH && all < MARKS_ALL) { out += ch; run++; all++; } continue; }
-    if (letters + ch.length > NOTE_MAX) break;
-    out += ch; letters += ch.length; run = 0;
+    if (letters + 1 > NOTE_MAX) break;   // by the character, not the code unit: the fancy alphabets and emoji are two units each and got forty
+    out += ch; letters++; run = 0;
   }
   return out;
 }

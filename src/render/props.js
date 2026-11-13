@@ -174,10 +174,10 @@ function wrapLines(text, w, measure) {
     if (fits(line ? line + ' ' + word : word)) { line = line ? line + ' ' + word : word; continue; }
     if (line) lines.push(line);
     line = word;
-    while (!fits(line) && line.length > 1) {
-      let k = line.length - 1;
-      while (k > 1 && !fits(line.slice(0, k))) k--;
-      lines.push(line.slice(0, k)); line = line.slice(k);
+    for (let cps = Array.from(line); !fits(line) && cps.length > 1; cps = Array.from(line)) {   // by the character: a break inside a pair left two boxes
+      let k = cps.length - 1;
+      while (k > 1 && !fits(cps.slice(0, k).join(''))) k--;
+      lines.push(cps.slice(0, k).join('')); line = cps.slice(k).join('');
     }
   }
   if (line) lines.push(line);
@@ -192,8 +192,11 @@ export function scrapFor(text, chosen = null) {
   const full = String(text || ''), hand = handFor(full, chosen), hh = wordsHash(full);
   const t = splitMarks(full).bare;   // the paper is for the letters; stacking marks take none
   const j = (k) => ((hh >>> (k * 5)) & 31) / 31;
-  const est = (s, fs) => { let x = 0; for (const ch of s) x += (ch >= 'A' && ch <= 'Z' ? hand.cwU : hand.cw) * fs; return x; };
-  let w = Math.round(clamp(30 + Math.sqrt(t.length) * 5.4 + (j(1) - 0.5) * 16, SCRAP_MIN, SCRAP_MAX));
+  // what no hand has (the full-width scripts, emoji, the fancy alphabets people paste in) is set
+  // by the system and is wider than a letter of the hand
+  const wide = (cp) => (cp >= 0x1100 && cp <= 0x115f) || (cp >= 0x2e80 && cp <= 0xa4cf) || (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xff60) || (cp >= 0x1f000 && cp <= 0x1faff) || (cp >= 0x20000 && cp <= 0x3ffff);
+  const est = (s, fs) => { let x = 0; for (const ch of s) { const cp = ch.codePointAt(0); x += (wide(cp) ? 1.05 : cp > 0x24f ? Math.max(hand.cwU, 0.6) : ch >= 'A' && ch <= 'Z' ? hand.cwU : hand.cw) * fs; } return x; };
+  let w = Math.round(clamp(30 + Math.sqrt(Array.from(t).reduce((n, ch) => n + (wide(ch.codePointAt(0)) ? 2 : 1), 0)) * 5.4 + (j(1) - 0.5) * 16, SCRAP_MIN, SCRAP_MAX));
   let fs = fontSize(w, 1, hand, false), inner = w - 2 * MARGIN;
   for (let k = 0; k < 4; k++) {   // widen for a word wider than the paper, if there is room
     const longest = Math.max(0, ...t.split(' ').map((s) => est(s, fs)));
