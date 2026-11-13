@@ -29,7 +29,7 @@ const API = 'api/notes';   // relative: the site may live at a path prefix
 // A note is up to NOTE_MAX characters on up to NOTE_LINES lines (the user, 2026-11-13: poems with
 // line breaks, and longer notes): what the largest sheet holds at the smallest writing in the
 // widest hand. It was one line of 80.
-export const NOTE_MAX = 1500, NOTE_LINES = 40;   // 400 on 16 at first, then 800 on 24; the user's own poem is 977 characters on 31 lines (the same day)
+export const NOTE_MAX = 3500, NOTE_LINES = 54;   // a typed letter page at 12 point (the user, 2026-11-13: fill whole sheets); 400 on 16 at first, then 800 on 24, then 1500 on 40 for the user's own poem of 977 characters on 31 lines
 // The board holds FULL pieces of paper, notes and posters together: past the slots they pile up,
 // newest on top, the oldest buried, and at FULL there is not a pin left and no bare cork, so a
 // pin is refused until someone pulls something down (the user, 2026-10-27: a limit, but part of

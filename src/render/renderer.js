@@ -228,7 +228,7 @@ export class Renderer {
     // the ridge line, since under it the terrain hides it, and thirty of them a day would
     // otherwise keep a clear still scene redrawing; a close one wherever it is in the frame
     const fb = this.fx.flights.bands(), flights = fb.any;
-    const posterKey = state.poster ? `${state.poster.poster.id}|${state.notesVersion}|${state.bandH | 0}` : '';
+    const posterKey = state.poster ? `${state.poster.poster ? state.poster.poster.id : 'n' + state.poster.id + handsKey()}|${state.notesVersion}|${state.bandH | 0}` : '';
     if (posterKey !== this.posterKey) { this.posterKey = posterKey; this.dirty = true; }
     // the paper in the hand follows the pointer and breathes: a frame whenever it moves, and
     // a few a second for the breath (a 1.4 s cycle in eight steps; 2.4 was too slow to catch on a phone, the user, 2026-10-30)
@@ -324,6 +324,6 @@ export class Renderer {
     this.fx.drawPrecip(c, env); lap('precip');
     c.setTransform(1, 0, 0, 1, 0, 0);
     // a poster held up to look at, over everything, the scene dimmed behind it
-    if (state.poster && state.poster.poster) { drawPosterView(c, state.poster, state.bandH || 0); lap('poster'); }
+    if (state.poster) { drawPosterView(c, state.poster, state.bandH || 0); lap('poster'); }
   }
 }

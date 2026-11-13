@@ -103,9 +103,29 @@ function drawPosterNote(ctx, n, u = 1, legible = false) {
 // One poster held up to look at: the frame dimmed by a dither, the picture centered at a
 // whole-number scale that fills most of the height, its thin border and its pin.
 // `below` is the band's height in canvas pixels: the picture is centered in the room above it.
+// A note is held up the same way (the user, 2026-11-13: the notes smaller on the board, and we
+// pick them up to look at them): the same sheet with the same lines, set bigger, as tall as the
+// room allows and no more than HELD_UP times its size on the cork (a two-word scrap does not
+// fill the frame). It is set once and kept, since setting a page of text takes a while and
+// the frame redraws under it.
+const HELD_UP = 2.5;
+let heldNote = { key: '', c: null };
 export function drawPosterView(ctx, n, below = 0) {
   ctx.fillStyle = ditherPattern(ctx, '#000', 8);
   ctx.fillRect(0, 0, W, H);
+  if (!n.poster) {
+    const cu = CLOSEUPS.board ? Math.min(CLOSEUPS.board.cork.w / CORK.w, CLOSEUPS.board.cork.h / CORK.h) : 1;
+    const room = H - below, u = Math.min(room * 0.94 / n.h, W * 0.94 / n.w, cu * HELD_UP);
+    const w = Math.round(n.w * u), h = Math.round(n.h * u), m = 4 * Math.ceil(u);
+    const key = `${n.id}|${n.text}|${n.hand}|${w}|${h}|${Math.round(clamp(n.age, 0, 1) * 40)}|${handsKey()}`;
+    if (heldNote.key !== key) {
+      const [c, g] = makeCanvas(w + 2 * m, h + 2 * m);
+      drawNote(g, { ...n, x: m, y: m, w, h, ghost: false }, u, true);
+      heldNote = { key, c };
+    }
+    ctx.drawImage(heldNote.c, ((W - w) >> 1) - m, ((room - h) >> 1) - m);
+    return;
+  }
   const im = posterImage(n.poster);
   const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
   const room = H - below;
@@ -196,13 +216,14 @@ function wrapLines(text, w, measure, keep = false) {
 // the height is what the words wrap to in the note's hand, estimated from the face's measured
 // glyph widths so it is known before the face has loaded, the same everywhere and forever.
 const SCRAP_MIN = 34, SCRAP_MAX = 88, MARGIN = 4;
-// the largest sheet a long note or a poem grows to: a letter page, 8.5 by 11, nearly the cork's
-// whole height (the user, 2026-11-13: whole sheets that look like 8.5x11; at two thirds of the
-// height a poem of thirty lines was too small to read on a phone), and the smallest the
-// estimate writes. The half-size build's scraps are the same pixels on half the cork, so there
-// the sheet is held to half the cork across, or one long note covered the phone's whole board.
+// the largest sheet a long note or a poem grows to: a letter page, 8.5 by 11 (the user,
+// 2026-11-13: whole sheets that look like 8.5x11), two thirds of the cork's height, since a
+// sheet is held up to be read (drawPosterView) and need not be read where it hangs; and the
+// smallest the estimate writes. The half-size build's scraps are the same pixels on half the
+// cork, so there the sheet takes nearly the cork's whole height (two thirds would be smaller
+// than a scrap) and is held to half the cork across.
 const LETTER = 11 / 8.5;
-const SHEET_H = CORK.h - 8, SHEET_W = Math.min(Math.round(SHEET_H / LETTER), Math.round(CORK.w / 2)), SMALLEST = 0.15;
+const SHEET_H = Math.min(CORK.h - 8, 150), SHEET_W = Math.min(Math.round(SHEET_H / LETTER), Math.round(CORK.w / 2)), SMALLEST = 0.15;
 export function scrapFor(text, chosen = null) {
   const full = String(text || ''), hand = handFor(full, chosen), hh = wordsHash(full);
   const t = splitMarks(full).bare;   // the paper is for the letters; stacking marks take none
@@ -230,7 +251,7 @@ export function scrapFor(text, chosen = null) {
   if (t.includes('\n') || Array.from(t).length > 80) {
     const page = (pw, k) => {   // the height the words take on a page `pw` wide, the writing at `k` of its size
       const f = fontSize(pw, 1, hand, false) * k, n = wrapLines(t, pw - 2 * MARGIN, (s) => est(s, f), true).length;
-      return Math.round(2 * MARGIN + f * hand.asc + (n - 1) * Math.round(f * hand.line) + f * hand.desc + 2 + j(2) * 6);
+      return Math.round(2 * MARGIN + f * hand.asc + (n - 1) * f * hand.line + f * hand.desc + 2 + j(2) * 6);   // the line height unrounded: at a page's small writing a whole pixel is a third of a line
     };
     const longestRow = (pw) => Math.max(0, ...t.split('\n').filter((s) => Array.from(s).length <= KEEP).map((s) => est(s, fontSize(pw, 1, hand, false))));
     let pw = w, ph = page(pw, 1);
@@ -238,8 +259,9 @@ export function scrapFor(text, chosen = null) {
     // a poem's line that is too long for the widest sheet is written smaller, never broken
     let k = t.includes('\n') ? clamp((pw - 2 * MARGIN) / (longestRow(pw) + 1), SMALLEST, 1) : 1;
     if (k < 1) ph = page(pw, k);
-    while (ph > SHEET_H && k > SMALLEST) { k = Math.max(SMALLEST, k - 0.05); ph = page(pw, k); }
-    return { w: pw, h: clamp(ph, 20, SHEET_H), paper: (hh >>> 8) % 6 };
+    const full = ph > SHEET_H;   // more than the largest sheet holds: a whole page, written smaller
+    while (ph > SHEET_H && k > SMALLEST) { k = Math.max(SMALLEST, k - 0.01); ph = page(pw, k); }
+    return { w: pw, h: full ? SHEET_H : clamp(ph, 20, SHEET_H), paper: (hh >>> 8) % 6 };
   }
   return { w, h: clamp(h, 20, CORK.h - 4), paper: (hh >>> 8) % 6 };
 }
@@ -296,7 +318,7 @@ function drawNoteText(ctx, text, x, y, w, h, color, u, hand = HANDS[0], tiny = f
     if (over && size <= 4) lines = wrapLines(bare, w, wide);   // at the smallest there is, it breaks after all
     const m = g.measureText('Hbdfghjklpqy'), asc = Math.ceil(m.actualBoundingBoxAscent), desc = Math.ceil(m.actualBoundingBoxDescent);
     const lineH = Math.round(size * hand.line), max = Math.max(1, 1 + Math.floor((h - asc - desc) / lineH));
-    if ((lines.length > max || over) && k < 40 && size > 4) { size = Math.max(4, Math.min(size - 1, Math.round(size * 0.92))); continue; }   // as small as it must, a pixel at least each step (rounded, 6 px times 0.92 was 6 again and a long poem lost its last lines on a phone)
+    if ((lines.length > max || over) && k < 80 && size > 4) { size = Math.max(4, Math.min(size - 1, Math.round(size * 0.92))); continue; }   // as small as it must, a pixel at least each step (rounded, 6 px times 0.92 was 6 again and a long poem lost its last lines on a phone)
     if (hand.bold && !tiny) g.lineWidth = size * hand.bold;
     lines.slice(0, max).forEach((t, i) => { g.fillText(t, pad, pad + asc + i * lineH); if (hand.bold && !tiny) g.strokeText(t, pad, pad + asc + i * lineH); });
     set = lines.map((t, i) => [t, pad + asc + i * lineH, i < max]);

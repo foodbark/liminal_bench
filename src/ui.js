@@ -183,7 +183,7 @@ export function setupUI(state, canvas) {
     if (state.placing) { placeAt(carriedTo(e)); return; }  // carrying the paper: this is where it goes
     const n = state.view === 'board' ? noteAt(e) : null;   // a note on the cork: offer to tear it down; a poster: hold it up
     if (bandOpen) { shut(); if (!n) return; }              // a click off the form puts it away
-    if (settled) n ? (n.poster ? holdUp(n) : tearPanel(n)) : (state.view === 'board' ? compose : showPanel)(state.view);
+    if (settled) n ? holdUp(n) : (state.view === 'board' ? compose : showPanel)(state.view);
   });
   window.addEventListener('keydown', (e) => {
     // typing into the board's note field must not drive the scene
@@ -223,7 +223,7 @@ export function setupUI(state, canvas) {
     if (!draft) return;
     if (draft.moving) {   // a piece picked up goes back where it was; a refused move says why
       dropPaper(); refresh();
-      if (err) draft.moving.poster ? holdUp(draft.moving, err) : tearPanel(draft.moving, err);
+      if (err) holdUp(draft.moving, err);
       return;
     }
     compose({ ...draft, error: err });
@@ -271,12 +271,14 @@ export function setupUI(state, canvas) {
     state.hover = null; canvas.classList.remove('hot');   // the caption drops what was pointed at
     return { text, acts };
   }
-  // A poster held up: the second zoom, the picture large over the dimmed board. The band offers
-  // to tear it down; a click anywhere, or Escape, puts it back.
+  // A poster or a note held up: the second zoom, the paper large over the dimmed board (a note
+  // too since 2026-11-13, the user: we pick them up to look at them; a click on a note used to
+  // go straight to the tear question). The band offers to tear it down; a click anywhere, or
+  // Escape, puts it back.
   function holdUp(n, error = '') {
     state.poster = n; state.hover = null; canvas.classList.remove('hot');
     const { text, acts } = open();
-    line(text, 'Someone pinned this up.' + (n.mine && notesMode() !== 'api' ? ' It is yours.' : ''), 'line dim');
+    line(text, 'Someone pinned this up.' + (n.mine && notesMode() !== 'api' ? ' It is yours.' : '') + (n.poster ? '' : ' The pin is loose. Nobody would stop you.'), 'line dim');
     const err = errLine(text, error);
     const tear = button(acts, 'tear it down', async () => {
       if (tear.disabled) return;
@@ -406,20 +408,6 @@ export function setupUI(state, canvas) {
 
   // Tearing a note down: anyone can, the way a real board works. A posted note is gone for good;
   // one of the painting's own comes back after a note's life, as if someone put up a fresh one.
-  function tearPanel(n, error = '') {
-    const { text, acts } = open();
-    const l = line(text, '');
-    l.append(el('span', 'quote', `“${oneLine(n.text)}”` + (n.mine ? ' (yours)' : '')), '  ', el('span', 'dim', 'The pin is loose. Nobody would stop you.'));
-    const err = errLine(text, error);
-    const tear = button(acts, 'tear it down', async () => {
-      if (tear.disabled) return;
-      tear.disabled = true; tell(err, '');
-      try { await tearDown(n); refresh(); shut(); }
-      catch (e) { tell(err, e.message || 'it will not come off'); tear.disabled = false; }
-    });
-    button(acts, 'leave it', shut);
-  }
-
   // The pay phone's panel: the handset display, the keypad, the phone book, the transcript of
   // what the line says, and the message form when a machine beeps. The keypad is HTML for now;
   // it moves onto the phone's close-up painting when that art arrives.
@@ -531,7 +519,7 @@ export function setupUI(state, canvas) {
 
       const viewLabel = HOTSPOTS.find((h) => h.id === state.view)?.label ?? '';
       const hint = twoStep(state.view) && settled && !bandOpen ? (COMPACT.matches ? ' · tap to pin a note' : ' · click to pin a note') : '';
-      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? 'a poster · click to put it back' : state.placing ? (state.placing.held ? 'let go to pin it there' : COMPACT.matches ? 'drag it where you like, or tap the cork' : 'click where it goes · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
+      const line = state.view === 'scene' ? (state.hover ? state.hoverLabel : '') : state.poster ? (state.poster.poster ? 'a poster' : 'a note') + ' · click to put it back' : state.placing ? (state.placing.held ? 'let go to pin it there' : COMPACT.matches ? 'drag it where you like, or tap the cork' : 'click where it goes · esc to go back') : viewLabel + (state.hover === 'note' ? ' · ' + state.hoverLabel : hint);
       if (state.view === 'scene' && state.hover === 'flight' && line.includes(' · ')) {
         // a flight's callsign in capitals, the rest of its line in the caption's lowercase (the user, 2026-10-22)
         const cut = line.indexOf(' · ');
