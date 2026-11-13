@@ -23,7 +23,7 @@
 // piece only goes on top of the pile the way a re-pinned sheet does, and digging takes many.
 import { board, json, wantsV2, whoHash, paperCount, placeOf, FULL, NO_PIN, LIFE_DAYS, DAY, HOUR } from './_board.js';
 import { forgetPicture } from './_alert.js';
-const MAX_LEN = 800, MAX_LINES = 24;   // as NOTE_MAX and NOTE_LINES in src/notes.js (2026-11-13: poems and longer notes)
+const MAX_LEN = 1500, MAX_LINES = 40;   // as NOTE_MAX and NOTE_LINES in src/notes.js (2026-11-13: poems and longer notes)
 const PER_ADDRESS_HOUR = 3, ALL_HOUR = 30;
 const TEAR_HOUR = 6, ALL_TEAR_HOUR = 60;
 

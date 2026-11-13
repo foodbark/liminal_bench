@@ -190,11 +190,12 @@ function wrapLines(text, w, measure) {
 // the height is what the words wrap to in the note's hand, estimated from the face's measured
 // glyph widths so it is known before the face has loaded, the same everywhere and forever.
 const SCRAP_MIN = 34, SCRAP_MAX = 88, MARGIN = 4;
-// the largest sheet a long note or a poem grows to, a third of the cork across and two thirds
-// down, and the smallest it is written. The half-size build's scraps are the same pixels on
-// half the cork, so there it is half the cork across (a third would be narrower than a scrap)
-// and the same two thirds down, or one long note covered the phone's whole board.
-const SHEET_W = Math.min(120, Math.round(CORK.w / 2)), SHEET_H = Math.min(150, Math.round(CORK.h * 2 / 3)), SMALLEST = 0.5;
+// the largest sheet a long note or a poem grows to, a third of the cork across and nearly its
+// whole height (at two thirds a poem of thirty lines was too small to read on a phone), and
+// the smallest it is written. The half-size build's scraps are the same pixels on half the
+// cork, so there it is half the cork across (a third would be narrower than a scrap), or one
+// long note covered the phone's whole board.
+const SHEET_W = Math.min(120, Math.round(CORK.w / 2)), SHEET_H = CORK.h - 8, SMALLEST = 0.5;
 export function scrapFor(text, chosen = null) {
   const full = String(text || ''), hand = handFor(full, chosen), hh = wordsHash(full);
   const t = splitMarks(full).bare;   // the paper is for the letters; stacking marks take none
@@ -284,7 +285,7 @@ function drawNoteText(ctx, text, x, y, w, h, color, u, hand = HANDS[0], tiny = f
     const lines = wrapLines(bare, w, (t) => g.measureText(t).width);
     const m = g.measureText('Hbdfghjklpqy'), asc = Math.ceil(m.actualBoundingBoxAscent), desc = Math.ceil(m.actualBoundingBoxDescent);
     const lineH = Math.round(size * hand.line), max = Math.max(1, 1 + Math.floor((h - asc - desc) / lineH));
-    if (lines.length > max && k < 16 && size > 4) { size = Math.max(4, Math.round(size * 0.92)); continue; }   // to a quarter of its size if it must: a long note is written small
+    if (lines.length > max && k < 40 && size > 4) { size = Math.max(4, Math.min(size - 1, Math.round(size * 0.92))); continue; }   // as small as it must, a pixel at least each step (rounded, 6 px times 0.92 was 6 again and a long poem lost its last lines on a phone)
     if (hand.bold && !tiny) g.lineWidth = size * hand.bold;
     lines.slice(0, max).forEach((t, i) => { g.fillText(t, pad, pad + asc + i * lineH); if (hand.bold && !tiny) g.strokeText(t, pad, pad + asc + i * lineH); });
     set = lines.map((t, i) => [t, pad + asc + i * lineH, i < max]);
