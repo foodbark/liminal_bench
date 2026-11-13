@@ -8,13 +8,16 @@ CREATE TABLE IF NOT EXISTS notes (
   who  TEXT    NOT NULL,      -- salted daily hash of the poster's address, for the rate limit only
   x    REAL,                  -- where it was placed by hand (2026-10-27): the paper's center as
   y    REAL,                  -- fractions of the cork; null takes a slot
-  moved INTEGER               -- ms, when it was last picked up and pinned elsewhere (2026-10-29); null never
+  moved INTEGER,              -- ms, when it was last picked up and pinned elsewhere (2026-10-29); null never
+  hand INTEGER                -- the hand its writer chose (2026-11-12), the face's place in HANDS (props.js); null lets the words pick
 );
 -- tables from before the placing (2026-10-27) take the columns once, by hand:
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN x REAL; ALTER TABLE notes ADD COLUMN y REAL; ALTER TABLE posters ADD COLUMN x REAL; ALTER TABLE posters ADD COLUMN y REAL"
 -- and from before moving (2026-10-29), one statement per command (the remote API refused two in one):
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN moved INTEGER"
 --   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE posters ADD COLUMN moved INTEGER"
+-- and from before the chosen hand (2026-11-12), before the function that reads it is deployed:
+--   npx wrangler d1 execute liminal-bench --remote --command "ALTER TABLE notes ADD COLUMN hand INTEGER"
 CREATE INDEX IF NOT EXISTS notes_at ON notes (at);
 CREATE INDEX IF NOT EXISTS notes_who_at ON notes (who, at);
 

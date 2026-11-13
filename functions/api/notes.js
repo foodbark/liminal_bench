@@ -27,10 +27,22 @@ const MAX_LEN = 80;
 const PER_ADDRESS_HOUR = 3, ALL_HOUR = 30;
 const TEAR_HOUR = 6, ALL_TEAR_HOUR = 60;
 
-// as `cleanText` in src/notes.js: the stacking marks that do not compose into a letter are dropped
-// before the length is counted, so the limit is on what can be read
-const STACKED = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g;
-const clean = (s) => String(s ?? '').normalize('NFC').replace(STACKED, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_LEN);
+// as `cleanText` in src/notes.js: MAX_LEN counts the letters, and the stacking marks ("Zalgo"
+// text) ride on them, up to MARKS_EACH on a letter and MARKS_ALL on a note
+const MARK = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/;
+const MARKS_EACH = 16, MARKS_ALL = 240, HANDS = 8;
+const clean = (s) => {
+  const t = String(s ?? '').normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  let out = '', letters = 0, run = 0, all = 0;
+  for (const ch of t) {
+    if (MARK.test(ch)) { if (out && run < MARKS_EACH && all < MARKS_ALL) { out += ch; run++; all++; } continue; }
+    if (letters + ch.length > MAX_LEN) break;
+    out += ch; letters += ch.length; run = 0;
+  }
+  return out.trim();
+};
+// the hand the writer chose on the pin form (the face's place in HANDS, src/render/props.js), or none
+const handOf = (body) => (Number.isInteger(body.hand) && body.hand >= 0 && body.hand < HANDS ? body.hand : null);
 
 export async function onRequestGet({ request, env }) {
   return json(await board(env.DB, wantsV2(request)));
@@ -51,7 +63,7 @@ export async function onRequestPost({ request, env }) {
   if (all >= ALL_HOUR) return json({ error: 'the board is full for now. come back later.' }, 429, { 'retry-after': '3600' });
   // a note is never swept: it stays until it is torn down or buried (2026-10-27)
   const [x, y] = placeOf(body);
-  await env.DB.prepare('INSERT INTO notes (text, at, who, x, y) VALUES (?1, ?2, ?3, ?4, ?5)').bind(text, now, who, x, y).run();
+  await env.DB.prepare('INSERT INTO notes (text, at, who, x, y, hand) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(text, now, who, x, y, handOf(body)).run();
   return json(await board(env.DB, wantsV2(request)), 201);
 }
 

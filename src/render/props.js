@@ -26,7 +26,7 @@ export function drawProps(ctx, state, sunSide, snow) {
 
 const PAPER = ['#e8dcc0', '#f2d27a', '#cfd6df', '#f0c9c9', '#c8d8b0', '#f4f1ea'];
 export function makeNote(text, opts = {}) {
-  return { text, x: opts.x ?? CORK.x + 8, y: opts.y ?? CORK.y + 8, w: opts.w ?? 30, h: opts.h ?? 38, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b' };
+  return { text, x: opts.x ?? CORK.x + 8, y: opts.y ?? CORK.y + 8, w: opts.w ?? 30, h: opts.h ?? 38, paper: opts.paper ?? 0, age: opts.age ?? 0, pin: opts.pin ?? '#c0392b', hand: opts.hand ?? null };
 }
 // A note is a scrap of paper at unit `u` (1 on the scene; the close-up's scale, where the text is
 // set for real). Aging yellows and curls it, over a year, and the ink stays readable at the end.
@@ -34,7 +34,7 @@ function drawNote(ctx, n, u = 1, legible = false) {
   if (n.poster) return drawPosterNote(ctx, n, u, legible);
   const fade = clamp(n.age, 0, 1);
   const paper = lerpRGB(hex(PAPER[n.paper % PAPER.length]), [180, 138, 94], fade * 0.75);
-  const hand = handFor(n.text), ink = lerpRGB(hand.ink, [128, 106, 82], fade);
+  const hand = handFor(n.text, n.hand), ink = lerpRGB(hand.ink, [128, 106, 82], fade);
   const x = n.x, y = n.y, w = n.w, h = n.h, s = Math.max(1, Math.round(u));
   const edge = rgb(lerpRGB(paper, [0, 0, 0], 0.18));
   const lift = n.ghost ? 3 * s : s;                  // a piece in the hand stands off the cork
@@ -128,18 +128,40 @@ const BLUE = [38, 52, 128], BLACK = [40, 40, 46], PENCIL = [92, 92, 100], TYPED 
 // words before the face has loaded. `bold` strokes a thin face a little heavier before the
 // threshold, `cut` is its own threshold.
 const HANDS = [
-  { face: 'VT323', ink: TYPED, size: 1, line: 0.92, cw: 0.4, cwU: 0.4, asc: 0.56, desc: 0.16, mono: true },
-  { face: 'Patrick Hand', ink: BLUE, size: 1.05, line: 1, cw: 0.353, cwU: 0.447, asc: 0.72, desc: 0.31 },
-  { face: 'Kalam', ink: BLACK, size: 1, line: 1.05, cw: 0.422, cwU: 0.571, asc: 0.8, desc: 0.25 },
-  { face: 'Caveat', ink: BLUE, size: 1.2, line: 0.95, cw: 0.329, cwU: 0.474, asc: 0.71, desc: 0.25 },
-  { face: 'Shadows Into Light', ink: PENCIL, size: 1.1, line: 1.2, cw: 0.374, cwU: 0.502, asc: 0.9, desc: 0.44 },
-  { face: 'Homemade Apple', ink: BLUE, size: 0.9, line: 1.4, cw: 0.544, cwU: 0.702, asc: 0.99, desc: 0.85, bold: 0.05, cut: 80 },
-  { face: 'Permanent Marker', ink: BLACK, size: 0.95, line: 1, cw: 0.5, cwU: 0.627, asc: 0.75, desc: 0.06 },
-  { face: 'Rock Salt', ink: BLACK, size: 0.72, line: 1.35, cw: 0.62, cwU: 0.84, asc: 1.04, desc: 0.3 },
+  { face: 'VT323', name: 'typed', ink: TYPED, size: 1, line: 0.92, cw: 0.4, cwU: 0.4, asc: 0.56, desc: 0.16, mono: true },
+  { face: 'Patrick Hand', name: 'print', ink: BLUE, size: 1.05, line: 1, cw: 0.353, cwU: 0.447, asc: 0.72, desc: 0.31 },
+  { face: 'Kalam', name: 'felt-tip', ink: BLACK, size: 1, line: 1.05, cw: 0.422, cwU: 0.571, asc: 0.8, desc: 0.25 },
+  { face: 'Caveat', name: 'ballpoint', ink: BLUE, size: 1.2, line: 0.95, cw: 0.329, cwU: 0.474, asc: 0.71, desc: 0.25 },
+  { face: 'Shadows Into Light', name: 'pencil', ink: PENCIL, size: 1.1, line: 1.2, cw: 0.374, cwU: 0.502, asc: 0.9, desc: 0.44 },
+  { face: 'Homemade Apple', name: 'cursive', ink: BLUE, size: 0.9, line: 1.4, cw: 0.544, cwU: 0.702, asc: 0.99, desc: 0.85, bold: 0.05, cut: 80 },
+  { face: 'Permanent Marker', name: 'marker', ink: BLACK, size: 0.95, line: 1, cw: 0.5, cwU: 0.627, asc: 0.75, desc: 0.06 },
+  { face: 'Rock Salt', name: 'scrawl', ink: BLACK, size: 0.72, line: 1.35, cw: 0.62, cwU: 0.84, asc: 1.04, desc: 0.3 },
 ];
 const HAND_PICK = [0, 1, 2, 3, 4, 5, 6, 7, 0, 1];   // VT323 twice in ten
 const wordsHash = (t) => { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) >>> 0; return h; };
-export function handFor(text) { return HANDS[HAND_PICK[(wordsHash(String(text || '')) >>> 16) % HAND_PICK.length]]; }
+// A note can also be written in a hand its writer chose on the pin form (the user, 2026-11-12:
+// people want to choose their font): `hand`, the face's place in HANDS, stored with the note,
+// so the order of HANDS is kept and new faces go on the end. Without one the words pick.
+export function handFor(text, hand = null) {
+  if (Number.isInteger(hand) && HANDS[hand]) return HANDS[hand];
+  return HANDS[HAND_PICK[(wordsHash(String(text || '')) >>> 16) % HAND_PICK.length]];
+}
+export const HAND_LIST = HANDS.map((h, i) => ({ i, face: h.face, name: h.name, mono: !!h.mono }));
+// Stacking marks ("Zalgo" text): the combining diacritics that do not compose into a letter.
+// They are kept (they were dropped for a day, 2026-11-11, and people wanted them back), but the
+// paper is sized and the words wrapped by the letters alone, and the marks are drawn over them
+// afterwards, spilling a little past the paper's edge.
+const MARK = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/;
+export const isMark = (ch) => MARK.test(ch);
+// the letters, and the marks standing on each (by the place of the letter's last code unit)
+export function splitMarks(text) {
+  let bare = ''; const marks = new Map();
+  for (const ch of String(text || '')) {
+    if (!MARK.test(ch)) bare += ch;
+    else if (bare) marks.set(bare.length - 1, (marks.get(bare.length - 1) || '') + ch);
+  }
+  return { bare, marks };
+}
 
 // The font size for a scrap `w` wide at unit `u`; tiny is the scene's unreadable setting.
 const fontSize = (w, u, hand, tiny) => (tiny ? clamp(w / 8, 5, 9) : clamp(w / 6.5, 6 * u, 14 * u)) * hand.size;
@@ -166,8 +188,9 @@ function wrapLines(text, w, measure) {
 // the height is what the words wrap to in the note's hand, estimated from the face's measured
 // glyph widths so it is known before the face has loaded, the same everywhere and forever.
 const SCRAP_MIN = 34, SCRAP_MAX = 88, MARGIN = 4;
-export function scrapFor(text) {
-  const t = String(text || ''), hand = handFor(t), hh = wordsHash(t);
+export function scrapFor(text, chosen = null) {
+  const full = String(text || ''), hand = handFor(full, chosen), hh = wordsHash(full);
+  const t = splitMarks(full).bare;   // the paper is for the letters; stacking marks take none
   const j = (k) => ((hh >>> (k * 5)) & 31) / 31;
   const est = (s, fs) => { let x = 0; for (const ch of s) x += (ch >= 'A' && ch <= 'Z' ? hand.cwU : hand.cw) * fs; return x; };
   let w = Math.round(clamp(30 + Math.sqrt(t.length) * 5.4 + (j(1) - 0.5) * 16, SCRAP_MIN, SCRAP_MAX));
@@ -200,28 +223,72 @@ export function handsKey() {
   return handsKeyStr;
 }
 export function noteFontReady() { return handsKey().includes('VT323'); }
+// The marks of a stack that this device can draw. A mark the system has no glyph for comes out
+// as a box, and a box has a width where a real mark has none, which is how it is told.
+const markOk = new Map();
+function drawable(g, mk) {
+  if (!mk) return '';
+  let out = '';
+  for (const m of mk) {
+    if (!markOk.has(m)) markOk.set(m, g.measureText('o' + m).width - g.measureText('o').width < 0.5);
+    if (markOk.get(m)) out += m;
+  }
+  return out;
+}
 // The words set on the paper: wrapped in the hand, the first baseline set down by the face's
 // real ascent (set at the top, a tall hand's ascenders were cut off by the paper's edge), and
 // the size stepped down until the lines fit, since the scrap was sized by an estimate.
 function drawNoteText(ctx, text, x, y, w, h, color, u, hand = HANDS[0], tiny = false) {
   let size = Math.round(fontSize(w, u, hand, tiny));
   if (size < 4 || w < 8 || h < 4) return;
-  const [c, g] = makeCanvas(w, h);
+  // The letters are set in the hand; stacking marks, which no hand has, go over them after
+  // (set with their letters in one string, the browser dropped the whole cluster to a system
+  // face and the letters left their hand). `pad` is how far the marks may spill past the text.
+  const { bare, marks } = splitMarks(text);
+  const pad = marks.size ? Math.round(size * 1.6) : 0, cw = w + 2 * pad, ch = h + 2 * pad;
+  const [c, g] = makeCanvas(cw, ch);
   g.textBaseline = 'alphabetic'; g.fillStyle = color; g.strokeStyle = color; g.lineJoin = 'round';
+  let set = [];   // the lines as set: [words, baseline]
   for (let k = 0; ; k++) {
     g.font = `${size}px "${hand.face}", ${hand.mono ? '"Courier New", monospace' : 'cursive'}`;
-    const lines = wrapLines(text, w, (t) => g.measureText(t).width);
+    const lines = wrapLines(bare, w, (t) => g.measureText(t).width);
     const m = g.measureText('Hbdfghjklpqy'), asc = Math.ceil(m.actualBoundingBoxAscent), desc = Math.ceil(m.actualBoundingBoxDescent);
     const lineH = Math.round(size * hand.line), max = Math.max(1, 1 + Math.floor((h - asc - desc) / lineH));
     if (lines.length > max && k < 4 && size > 4) { size = Math.max(4, Math.round(size * 0.88)); continue; }
     if (hand.bold && !tiny) g.lineWidth = size * hand.bold;
-    lines.slice(0, max).forEach((t, i) => { g.fillText(t, 0, asc + i * lineH); if (hand.bold && !tiny) g.strokeText(t, 0, asc + i * lineH); });
+    lines.slice(0, max).forEach((t, i) => { g.fillText(t, pad, pad + asc + i * lineH); if (hand.bold && !tiny) g.strokeText(t, pad, pad + asc + i * lineH); });
+    set = lines.map((t, i) => [t, pad + asc + i * lineH, i < max]);
     break;
   }
-  const img = g.getImageData(0, 0, w, h), d = img.data, cut = tiny ? 70 : (hand.cut ?? 110);   // a thin stroke at 6 px keeps its pixels
+  const img = g.getImageData(0, 0, cw, ch), d = img.data, cut = tiny ? 70 : (hand.cut ?? 110);   // a thin stroke at 6 px keeps its pixels
   for (let i = 3; i < d.length; i += 4) d[i] = d[i] > cut ? 255 : 0;
   g.putImageData(img, 0, 0);
-  ctx.drawImage(c, x, y);
+  if (marks.size) {
+    // each marked letter is set twice in a system face on its place in the hand's line, once
+    // with its marks and once without, and what the first has over the second is the marks
+    const [ca, a] = makeCanvas(cw, ch), [, b] = makeCanvas(cw, ch);
+    for (const k of [a, b]) { k.font = `${size}px sans-serif`; k.textBaseline = 'alphabetic'; k.textAlign = 'center'; k.fillStyle = color; }
+    let pos = 0;
+    for (const [line, base, shown] of set) {
+      const at = bare.indexOf(line, pos); if (at < 0) continue;
+      pos = at + line.length;
+      if (!shown) continue;
+      let j = 0;
+      for (const letter of line) {
+        const mk = drawable(a, marks.get(at + j + letter.length - 1));
+        if (mk) {
+          const cx = Math.round(pad + g.measureText(line.slice(0, j)).width + g.measureText(letter).width / 2);
+          a.fillText(letter + mk, cx, base); b.fillText(letter, cx, base);
+        }
+        j += letter.length;
+      }
+    }
+    const ia = a.getImageData(0, 0, cw, ch), da = ia.data, db = b.getImageData(0, 0, cw, ch).data;
+    for (let i = 3; i < da.length; i += 4) da[i] = da[i] - db[i] > cut ? 255 : 0;
+    a.putImageData(ia, 0, 0);
+    g.drawImage(ca, 0, 0);
+  }
+  ctx.drawImage(c, x - pad, y - pad);
 }
 
 // The notes on a close-up's cork: the scene's slots stretched onto the bigger cork, the paper

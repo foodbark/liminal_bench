@@ -1,7 +1,7 @@
 import { W, H, SCALE, META, formatTime } from './state.js';
-import { HOTSPOTS, CLOSEUPS, CORK, closeupNotes } from './render/props.js';
+import { HOTSPOTS, CLOSEUPS, CORK, closeupNotes, HAND_LIST } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper, firstSpot } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, MARKS_ALL, fitNote, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper, firstSpot } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -238,7 +238,7 @@ export function setupUI(state, canvas) {
       const place = { x: p.fx, y: p.fy };
       if (draft.moving) { await movePaper(draft.moving, place); dropPaper(); }
       else if (draft.poster) await postPoster(draft.poster.png, draft.poster.w, draft.poster.h, draft.poster.k, place);
-      else await postNote(draft.text, place);
+      else await postNote(draft.text, place, draft.hand);
       refresh();
     } catch (err) { state.placing = draft; backToForm(err.message || 'the pin would not go in'); }
   }
@@ -312,8 +312,17 @@ export function setupUI(state, canvas) {
     const preview = el('canvas', 'thumb'), sizes = el('div', 'row sizes'), info = el('span', 'dim');
     pic.append(preview, info); text.appendChild(pic);
     const fields = el('div', 'row'); say.appendChild(fields);   // the whole width, under the words and the buttons
-    const input = el('input'); input.type = 'text'; input.id = 'note-text'; input.maxLength = NOTE_MAX; input.placeholder = 'write something on a blank scrap'; input.autocomplete = 'off'; input.spellcheck = false;
+    const input = el('input'); input.type = 'text'; input.id = 'note-text'; input.maxLength = NOTE_MAX + MARKS_ALL; input.placeholder = 'write something on a blank scrap'; input.autocomplete = 'off'; input.spellcheck = false;
     if (draft && draft.text) input.value = draft.text;
+    // NOTE_MAX letters; stacking marks ride free on them, so the field's own limit is looser
+    input.addEventListener('input', () => { const f = fitNote(input.value); if (f.length < input.value.length) input.value = f; });
+    // the hand it is written in: the words pick one unless the writer does (the user,
+    // 2026-11-12); one button that steps through the hands, named in each, the field following
+    let hand = draft && Number.isInteger(draft.hand) ? draft.hand : null;
+    const handLabel = () => {
+      const h = hand == null ? null : HAND_LIST[hand], face = h ? `"${h.face}", ${h.mono ? 'monospace' : 'cursive'}` : '';
+      handButton.textContent = h ? h.name : 'any hand'; handButton.style.fontFamily = face; input.style.fontFamily = face;
+    };
     sizes.hidden = true; fields.append(input, sizes);   // the sizes beside the field once a picture is in
     const err = errLine(text, draft && draft.error);
     const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.id = 'poster-file'; file.hidden = true; text.appendChild(file);
@@ -350,10 +359,12 @@ export function setupUI(state, canvas) {
     const submit = () => {
       const text = input.value.trim();
       if (poster && !text) startPlacing({ text: '', poster: { ...poster, k: sizeK } });
-      else if (text) startPlacing({ text, poster: null });
+      else if (text) startPlacing({ text, poster: null, hand });
       else tell(err, 'nothing to pin');
     };
     button(acts, 'put it up', submit);
+    const handButton = button(acts, 'any hand', () => { hand = hand == null ? 0 : hand + 1 < HAND_LIST.length ? hand + 1 : null; handLabel(); input.focus(); });
+    handButton.title = 'the hand it is written in'; handLabel();
     button(acts, 'pin a picture', () => file.click());
     // with the board's close-up the form simply goes away and the cork is there to read
     button(acts, 'never mind', () => twoStep('board') ? shut() : showPanel('board'));

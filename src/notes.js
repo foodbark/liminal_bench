@@ -1,5 +1,5 @@
 import { META, SMALL } from './state.js';
-import { makeNote, scrapFor, CORK, CLOSEUPS } from './render/props.js';
+import { makeNote, scrapFor, isMark, HAND_LIST, CORK, CLOSEUPS } from './render/props.js';
 import { clamp } from './util/pixel.js';
 import { hash2 } from './util/noise.js';
 
@@ -48,8 +48,8 @@ export function pickPosterSize(r = Math.random()) {
 }
 // A posted note's scrap: its size and paper from a hash of its words, since both are needed
 // before the server has given it a time or an id, and the same everywhere it is seen.
-export function noteBox(text, cx, cy) {
-  const { w, h, paper } = scrapFor(text);   // sized to its words, in its hand
+export function noteBox(text, cx, cy, hand = null) {
+  const { w, h, paper } = scrapFor(text, hand);   // sized to its words, in its hand
   const x = clamp(Math.round(cx - w / 2), CORK.x + 2, CORK.x + CORK.w - w - 2), y = clamp(Math.round(cy - h / 2), CORK.y + 2, CORK.y + CORK.h - h - 2);
   return { x, y, w, h, paper };
 }
@@ -81,14 +81,25 @@ export const whenPosterLoads = (fn) => { onPosterLoad = fn; };
 export const notesMode = () => mode;
 export const noteAge = (at, now = Date.now()) => clamp((now - at) / (FADE_DAYS * DAY), 0, 1);
 const stillDown = (t, now) => now - t.at < TORN_DAYS * DAY;
-// A note's words as they are counted, stored and drawn. Accents that make a letter stay (they
-// compose into it); the stacking marks left over go: a note of five letters under seventy-five
-// of them ("Zalgo" text, pinned 2026-11-04) counted as eighty characters, so it took a full
-// sheet over its neighbours, and the hands have no glyphs for the marks, which drew as boxes
-// where a system font did not step in. Only the combining-diacritic blocks, so the scripts
-// whose marks are their vowels are left alone. The server's `clean` is the same.
-const STACKED = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g;
-export const cleanText = (s) => String(s ?? '').normalize('NFC').replace(STACKED, '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NOTE_MAX);
+// A note's words as they are counted, stored and drawn. NOTE_MAX counts the letters. Stacking
+// marks ("Zalgo" text) ride free on them, up to MARKS_EACH on a letter and MARKS_ALL on a note:
+// counted as characters, five letters under seventy-five marks took a full sheet over its
+// neighbours (pinned 2026-11-04), so for a day they were dropped (2026-11-11), and the people
+// who had written them were not pleased (the user, 2026-11-12). Now the paper is sized by the
+// letters and the marks drawn over them (props.js). The server's `clean` is the same.
+export const MARKS_EACH = 16, MARKS_ALL = 240;
+export function fitNote(s) {
+  let out = '', letters = 0, run = 0, all = 0;
+  for (const ch of String(s ?? '')) {
+    if (isMark(ch)) { if (out && run < MARKS_EACH && all < MARKS_ALL) { out += ch; run++; all++; } continue; }
+    if (letters + ch.length > NOTE_MAX) break;
+    out += ch; letters += ch.length; run = 0;
+  }
+  return out;
+}
+export const cleanText = (s) => fitNote(String(s ?? '').normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim()).trim();
+// the hand a note was written in, when its writer chose one (the face's place in HANDS)
+export const cleanHand = (h) => (Number.isInteger(h) && h >= 0 && h < HAND_LIST.length ? h : null);
 // what is already on the board is read the same way (the stored words are left as they are)
 const plain = (list) => list.map((n) => (n && typeof n.text === 'string' ? { ...n, text: cleanText(n.text) } : n));
 
@@ -175,22 +186,23 @@ export function posterImage(p) {
   return im.ready ? im : null;
 }
 
-export async function postNote(text, place = null) {
+export async function postNote(text, place = null, hand = null) {
   text = cleanText(text);
+  const by = cleanHand(hand) == null ? {} : { hand: cleanHand(hand) };
   if (!text) throw new Error('nothing to pin');
   if (boardFull()) throw new Error(NO_PIN);
   const at = place && hasPlace(place) ? { x: place.x, y: place.y } : {};
   if (await ensureApi()) {
     let r;
-    try { r = await fetch(API_V2, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, ...at }) }); }
+    try { r = await fetch(API_V2, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, ...at, ...by }) }); }
     catch (e) { throw new Error(OUT_OF_REACH); }
     const body = await r.json().catch(() => null);
     if (!r.ok) throw new Error((body && body.error) || 'the pin would not go in');
-    if (!takeBoard(body)) posted = sortByAt([...posted, { id: Date.now(), text, at: Date.now(), ...at }]);
+    if (!takeBoard(body)) posted = sortByAt([...posted, { id: Date.now(), text, at: Date.now(), ...at, ...by }]);
     return posted;
   }
   const now = Date.now();
-  posted = [...posted, { id: now, text, at: now, ...at }];
+  posted = [...posted, { id: now, text, at: now, ...at, ...by }];
   writeLocal(posted);
   return posted;
 }
@@ -254,10 +266,10 @@ export async function movePaper(note, place) {
 function placedItem(n, now, s, dx = 0, dy = 0, cx = null, cy = null) {
   const atPoint = cx != null;
   const box = n.poster ? posterBox(n.poster, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy)
-    : noteBox(n.text, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy);   // a note in a slot is sized to its words too, on the slot's center
+    : noteBox(n.text, atPoint ? cx : s.x + s.w / 2 + dx, atPoint ? cy : s.y + s.h / 2 + dy, n.hand);   // a note in a slot is sized to its words too, on the slot's center
   // a posted note's paper is its words' (scrapFor), in a slot or placed, so a move never recolors it
   const paper = n.poster ? 0 : box.paper;
-  return { ...(s || {}), ...box, text: n.poster ? '' : n.text, age: noteAge(n.at, now), paper, mine: true, at: n.at, rank: rankOf(n), id: n.poster ? null : n.id, seed: null, poster: n.poster || null, placed: atPoint };
+  return { ...(s || {}), ...box, text: n.poster ? '' : n.text, hand: n.poster ? null : cleanHand(n.hand), age: noteAge(n.at, now), paper, mine: true, at: n.at, rank: rankOf(n), id: n.poster ? null : n.id, seed: null, poster: n.poster || null, placed: atPoint };
 }
 export function ghostNote(draft, fx, fy, now = Date.now()) {
   const { cx, cy } = corkPoint(fx, fy);
@@ -267,13 +279,13 @@ export function ghostNote(draft, fx, fy, now = Date.now()) {
       const s = { ...m, ...noteBox(m.text, cx, cy), paper: m.paper, age: m.age };
       return Object.assign(makeNote(s.text, s), { mine: false, at: m.at, id: null, seed: m.seed, poster: null, placed: true, ghost: true });
     }
-    const n = m.poster ? { id: m.poster.id, at: m.at, poster: m.poster } : { id: m.id, at: m.at, text: m.text };
+    const n = m.poster ? { id: m.poster.id, at: m.at, poster: m.poster } : { id: m.id, at: m.at, text: m.text, hand: m.hand };
     const s = placedItem(n, now, null, 0, 0, cx, cy);
     return Object.assign(makeNote(s.text, s), { mine: true, at: s.at, id: s.id, seed: null, poster: s.poster, placed: true, k: s.k, ghost: true });
   }
   // the draft's picture is cached by id like any poster's, so each draft carries its own
   const gid = draft.ghostId ?? -1;
-  const n = draft.poster ? { id: gid, at: now, poster: { id: gid, w: draft.poster.w, h: draft.poster.h, k: draft.poster.k, src: draft.poster.png } } : { id: gid, at: now, text: cleanText(draft.text) };
+  const n = draft.poster ? { id: gid, at: now, poster: { id: gid, w: draft.poster.w, h: draft.poster.h, k: draft.poster.k, src: draft.poster.png } } : { id: gid, at: now, text: cleanText(draft.text), hand: draft.hand };
   const s = placedItem(n, now, null, 0, 0, cx, cy);
   return Object.assign(makeNote(s.text, s), { mine: true, at: s.at, id: null, seed: null, poster: s.poster, placed: true, k: s.k, ghost: true });
 }

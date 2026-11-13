@@ -35,7 +35,7 @@ export const wantsV2 = (request) => new URL(request.url).searchParams.get('v') =
 // posting and the move, so a moved piece lands on top, while the fade runs from the posting.
 export async function board(db, v2) {
   const now = Date.now(), since = now - LIFE_DAYS * DAY;
-  const { results } = await db.prepare('SELECT id, text, at, x, y, moved FROM notes ORDER BY at DESC LIMIT ?1').bind(FULL).all();
+  const { results } = await db.prepare('SELECT id, text, at, x, y, moved, hand FROM notes ORDER BY at DESC LIMIT ?1').bind(FULL).all();
   const notes = results.reverse();
   if (!v2) return notes;
   const [t, p, pl] = await db.batch([
