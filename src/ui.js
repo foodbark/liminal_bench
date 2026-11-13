@@ -328,7 +328,14 @@ export function setupUI(state, canvas) {
     };
     const handButton = el('button', 'hand'); handButton.type = 'button'; handButton.title = 'the hand it is written in: click for the next';
     handButton.addEventListener('pointerdown', (e) => e.preventDefault());   // the field keeps the focus, and a phone its keyboard
-    handButton.addEventListener('click', () => { hand = lastHand = (hand + 1) % HAND_LIST.length; handLabel(); input.focus(); });
+    const stepHand = (d) => { hand = lastHand = (hand + d + HAND_LIST.length) % HAND_LIST.length; handLabel(); };
+    handButton.addEventListener('click', () => { stepHand(1); input.focus(); });
+    // The keys step it too (the user, 2026-11-12): the up and down arrows from the field, and
+    // with the label itself in focus (Shift+Tab from the field) w and s and vim's k and j as
+    // well; in the field those four are letters of the note.
+    const HAND_KEYS = { ArrowDown: 1, ArrowUp: -1, s: 1, w: -1, j: 1, k: -1 };
+    input.addEventListener('keydown', (e) => { if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.isComposing) { e.preventDefault(); stepHand(HAND_KEYS[e.key]); } });
+    handButton.addEventListener('keydown', (e) => { const d = !e.ctrlKey && !e.metaKey && !e.altKey && HAND_KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (d) { e.preventDefault(); e.stopPropagation(); stepHand(d); } });
     const box = el('div', 'field'); box.append(handButton, input); fields.prepend(box); handLabel();
     sizes.hidden = true; fields.append(sizes);   // the sizes beside the field once a picture is in
     const err = errLine(text, draft && draft.error);
