@@ -325,6 +325,7 @@ export function setupUI(state, canvas) {
     const handLabel = () => {
       const h = HAND_LIST[hand], face = `"${h.face}", ${h.mono ? 'monospace' : 'cursive'}`;
       handButton.textContent = h.name + ':'; handButton.style.fontFamily = face; input.style.fontFamily = face;
+      handButton.style.fontSize = input.style.fontSize = h.size + 'em';   // the hand's own size, as on the paper, inside a box that stays one size (style.css)
     };
     const handButton = el('button', 'hand'); handButton.type = 'button'; handButton.title = 'the hand it is written in: click for the next';
     handButton.addEventListener('pointerdown', (e) => e.preventDefault());   // the field keeps the focus, and a phone its keyboard

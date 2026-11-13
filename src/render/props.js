@@ -146,7 +146,7 @@ export function handFor(text, hand = null) {
   if (Number.isInteger(hand) && HANDS[hand]) return HANDS[hand];
   return HANDS[HAND_PICK[(wordsHash(String(text || '')) >>> 16) % HAND_PICK.length]];
 }
-export const HAND_LIST = HANDS.map((h, i) => ({ i, face: h.face, name: h.name, mono: !!h.mono }));
+export const HAND_LIST = HANDS.map((h, i) => ({ i, face: h.face, name: h.name, mono: !!h.mono, size: h.size }));
 // Stacking marks ("Zalgo" text): the combining diacritics that do not compose into a letter.
 // They are kept (they were dropped for a day, 2026-11-11, and people wanted them back), but the
 // paper is sized and the words wrapped by the letters alone, and the marks are drawn over them
