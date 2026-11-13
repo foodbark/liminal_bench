@@ -1,7 +1,7 @@
 import { W, H, SCALE, META, formatTime } from './state.js';
 import { HOTSPOTS, CLOSEUPS, CORK, closeupNotes, HAND_LIST } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
-import { postNote, buildNotes, notesMode, NOTE_MAX, MARKS_ALL, fitNote, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper, firstSpot } from './notes.js';
+import { postNote, buildNotes, notesMode, NOTE_MAX, MARKS_ALL, fitNote, oneLine, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper, firstSpot } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
 import { gliderChance } from './render/gliders.js';
 import { planetSpots, starSpots } from './render/sky.js';
@@ -109,7 +109,7 @@ export function setupUI(state, canvas) {
     if (state.placing) { if (!state.placing.held && !COMPACT.matches) carry(e); return; }   // a held piece follows the pointer events; on a touch screen the paper sits until dragged
     if (state.view !== 'scene') {
       const n = state.view === 'board' && !bandOpen && !state.poster ? noteAt(e) : null;
-      state.hover = n ? 'note' : null; state.hoverLabel = n ? (n.poster ? 'a poster' : `a note: “${n.text}”`) + ' · hold to pick it up' : '';
+      state.hover = n ? 'note' : null; state.hoverLabel = n ? (n.poster ? 'a poster' : `a note: “${oneLine(n.text, 60)}”`) + ' · hold to pick it up' : '';
       canvas.classList.toggle('hot', !!n);
       return;
     }
@@ -313,10 +313,19 @@ export function setupUI(state, canvas) {
     const preview = el('canvas', 'thumb'), sizes = el('div', 'row sizes'), info = el('span', 'dim');
     pic.append(preview, info); text.appendChild(pic);
     const fields = el('div', 'row'); say.appendChild(fields);   // the whole width, under the words and the buttons
-    const input = el('input'); input.type = 'text'; input.id = 'note-text'; input.maxLength = NOTE_MAX * 2 + MARKS_ALL; input.placeholder = 'write something on a blank scrap'; input.autocomplete = 'off'; input.spellcheck = false;
+    const input = el('textarea'); input.rows = 1; input.id = 'note-text';   // a poem's lines: Enter is a new line input.maxLength = NOTE_MAX * 2 + MARKS_ALL; input.placeholder = 'write something on a blank scrap'; input.autocomplete = 'off'; input.spellcheck = false;
     if (draft && draft.text) input.value = draft.text;
     // NOTE_MAX letters; stacking marks ride free on them, so the field's own limit is looser
-    input.addEventListener('input', () => { const f = fitNote(input.value); if (f.length < input.value.length) input.value = f; });
+    // The box is one line tall until there is a second, then grows a line at a time to ROWS
+    // and scrolls past that, the same for every hand: each row is ROW of the band's em.
+    const ROW = 1.8, ROWS = 6;
+    const fitBox = () => {
+      const row = parseFloat(getComputedStyle(box).fontSize) * ROW;
+      box.style.height = ''; input.style.height = '0px';
+      const rows = clamp(Math.round(input.scrollHeight / row), 1, ROWS);
+      input.style.height = ''; box.style.height = `calc(${rows * ROW}em + ${box.offsetHeight - box.clientHeight}px)`;
+    };
+    input.addEventListener('input', () => { const f = fitNote(input.value.replace(/\r\n?/g, '\n')); if (f !== input.value) input.value = f; fitBox(); });   // past the last line an Enter is a space
     // The hand it is written in (the user, 2026-11-12): its name sits inside the field, left of
     // the words and a colon, in its own face, the field following; a click or a tap on it steps
     // to the next hand. Each time the form opens it starts on another hand, so the board keeps
@@ -325,7 +334,9 @@ export function setupUI(state, canvas) {
     const handLabel = () => {
       const h = HAND_LIST[hand], face = `"${h.face}", ${h.mono ? 'monospace' : 'cursive'}`;
       handButton.textContent = h.name + ':'; handButton.style.fontFamily = face; input.style.fontFamily = face;
-      handButton.style.fontSize = input.style.fontSize = h.size + 'em';   // the hand's own size, as on the paper, inside a box that stays one size (style.css)
+      handButton.style.fontSize = input.style.fontSize = h.size + 'em';   // the hand's own size, as on the paper, on rows that stay one height (style.css)
+      handButton.style.height = input.style.lineHeight = ROW / h.size + 'em';
+      if (box.isConnected) fitBox();
     };
     const handButton = el('button', 'hand'); handButton.type = 'button'; handButton.title = 'the hand it is written in: click for the next';
     handButton.addEventListener('pointerdown', (e) => e.preventDefault());   // the field keeps the focus, and a phone its keyboard
@@ -335,9 +346,15 @@ export function setupUI(state, canvas) {
     // with the label itself in focus (Shift+Tab from the field) w and s and vim's k and j as
     // well; in the field those four are letters of the note.
     const HAND_KEYS = { ArrowDown: 1, ArrowUp: -1, s: 1, w: -1, j: 1, k: -1 };
-    input.addEventListener('keydown', (e) => { if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.isComposing) { e.preventDefault(); stepHand(HAND_KEYS[e.key]); } });
+    // (an arrow steps it only where it has no line to move to: up on the first line, down on the last)
+    input.addEventListener('keydown', (e) => {
+      if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.isComposing || e.shiftKey) return;
+      const v = input.value, up = e.key === 'ArrowUp';
+      if (up ? v.lastIndexOf('\n', input.selectionStart - 1) >= 0 : v.indexOf('\n', input.selectionEnd) >= 0) return;
+      e.preventDefault(); stepHand(HAND_KEYS[e.key]);
+    });
     handButton.addEventListener('keydown', (e) => { const d = !e.ctrlKey && !e.metaKey && !e.altKey && HAND_KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (d) { e.preventDefault(); e.stopPropagation(); stepHand(d); } });
-    const box = el('div', 'field'); box.append(handButton, input); fields.prepend(box); handLabel();
+    const box = el('div', 'field'); box.append(handButton, input); fields.prepend(box); handLabel(); fitBox();
     sizes.hidden = true; fields.append(sizes);   // the sizes beside the field once a picture is in
     const err = errLine(text, draft && draft.error);
     const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.id = 'poster-file'; file.hidden = true; text.appendChild(file);
@@ -382,7 +399,8 @@ export function setupUI(state, canvas) {
     // with the board's close-up the form simply goes away and the cork is there to read
     button(acts, 'never mind', () => twoStep('board') ? shut() : showPanel('board'));
     if (twoStep('board')) button(acts, 'step back', leave);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    // Enter is a new line now (a phone's keyboard has nothing else); Ctrl or Cmd with it puts the note up
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } });
     setTimeout(() => input.focus(), 0);
   }
 
@@ -391,7 +409,7 @@ export function setupUI(state, canvas) {
   function tearPanel(n, error = '') {
     const { text, acts } = open();
     const l = line(text, '');
-    l.append(el('span', 'quote', `“${n.text}”` + (n.mine ? ' (yours)' : '')), '  ', el('span', 'dim', 'The pin is loose. Nobody would stop you.'));
+    l.append(el('span', 'quote', `“${oneLine(n.text)}”` + (n.mine ? ' (yours)' : '')), '  ', el('span', 'dim', 'The pin is loose. Nobody would stop you.'));
     const err = errLine(text, error);
     const tear = button(acts, 'tear it down', async () => {
       if (tear.disabled) return;
@@ -549,7 +567,7 @@ const PANELS = {
     lines: [
       ['Paper, pins, sun-bleached corners. Some of these have been here a long time.', 'line'],
       // with a close-up painting the notes are readable on the cork itself; otherwise list them
-      ...(CLOSEUPS.board ? [] : state.notes.map((n) => [`“${n.text}” · ${n.mine ? 'yours · ' : ''}${ageLabel(n.age)}`, 'line quote'])),
+      ...(CLOSEUPS.board ? [] : state.notes.map((n) => [`“${oneLine(n.text)}” · ${n.mine ? 'yours · ' : ''}${ageLabel(n.age)}`, 'line quote'])),
       [notesMode() === 'api' ? 'Anyone who stops here can read these.' : 'Whatever you pin stays in this browser.', 'line dim'],
     ],
     actions: [['pin a note', 'compose'], ['step back', 'leave']],

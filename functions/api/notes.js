@@ -23,7 +23,7 @@
 // piece only goes on top of the pile the way a re-pinned sheet does, and digging takes many.
 import { board, json, wantsV2, whoHash, paperCount, placeOf, FULL, NO_PIN, LIFE_DAYS, DAY, HOUR } from './_board.js';
 import { forgetPicture } from './_alert.js';
-const MAX_LEN = 80;
+const MAX_LEN = 400, MAX_LINES = 16;   // as NOTE_MAX and NOTE_LINES in src/notes.js (2026-11-13: poems and longer notes)
 const PER_ADDRESS_HOUR = 3, ALL_HOUR = 30;
 const TEAR_HOUR = 6, ALL_TEAR_HOUR = 60;
 
@@ -32,14 +32,16 @@ const TEAR_HOUR = 6, ALL_TEAR_HOUR = 60;
 const MARK = /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/;
 const MARKS_EACH = 16, MARKS_ALL = 240, HANDS = 8;
 const clean = (s) => {
-  const t = String(s ?? '').normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
-  let out = '', letters = 0, run = 0, all = 0;
-  for (const ch of t) {
+  const t = String(s ?? '').normalize('NFC').replace(/\r\n?|[\u2028\u2029]/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ')
+    .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+  let out = '', letters = 0, run = 0, all = 0, lines = 1;
+  for (let ch of t) {
     if (MARK.test(ch)) { if (out && run < MARKS_EACH && all < MARKS_ALL) { out += ch; run++; all++; } continue; }
-    if (letters + 1 > MAX_LEN) break;   // by the character, so the alphabets beyond the first plane get their eighty
+    if (letters + 1 > MAX_LEN) break;   // by the character, so the alphabets beyond the first plane get their share
+    if (ch === '\n') { if (lines < MAX_LINES) lines++; else ch = ' '; }
     out += ch; letters++; run = 0;
   }
-  return out.trim();
+  return out.replace(/[ \n]+$/, '');
 };
 // the hand the writer chose on the pin form (the face's place in HANDS, src/render/props.js), or none
 const handOf = (body) => (Number.isInteger(body.hand) && body.hand >= 0 && body.hand < HANDS ? body.hand : null);

@@ -59,12 +59,17 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 /* the note field: the hand's name inside the box, left of the words; a click on it steps the hand */
 #say .field {
   flex: 1 1 calc(220px * var(--u)); max-width: calc(640px * var(--u) * var(--cap)); min-width: 0; box-sizing: border-box;
-  display: flex; align-items: stretch; background: #1a1e28; border: calc(2px * var(--u)) solid #3a3f4c;
-  height: 1.8em; overflow: hidden;   /* one size whatever the hand (the user, 2026-11-13): the tall faces grew the box and the band with it */
+  display: flex; align-items: flex-start; background: #1a1e28; border: calc(2px * var(--u)) solid #3a3f4c;
+  height: 1.8em; overflow: hidden;   /* one row whatever the hand (the user, 2026-11-13); ui.js grows it a row at a time for a poem's lines */
 }
 #say .field:focus-within { border-color: #7d8595; }
-#say .field input[type=text] { flex: 1 1 0; max-width: none; border: 0; background: none; padding: 0 calc(8px * var(--u)) 0 calc(2px * var(--u)); height: 100%; }
-#say .field button.hand { flex: none; border: 0; background: none; color: #9aa2b4; padding: 0 calc(4px * var(--u)) 0 calc(10px * var(--u)); white-space: nowrap; line-height: 1; }
+#say .field textarea {
+  flex: 1 1 0; min-width: 0; height: 100%; box-sizing: border-box; resize: none; overflow-y: auto; margin: 0;
+  font-family: var(--font); font-size: inherit; letter-spacing: inherit; color: #f0e6c8; background: none; border: 0; outline: none;
+  padding: 0 calc(8px * var(--u)) 0 calc(2px * var(--u)); line-height: 1.8em; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+#say .field textarea::placeholder { color: #7d8595; }
+#say .field button.hand { flex: none; border: 0; background: none; color: #9aa2b4; padding: 0 calc(4px * var(--u)) 0 calc(10px * var(--u)); white-space: nowrap; line-height: 1; height: 1.8em; }
 #say .field button.hand:hover { color: #f0e6c8; background: #2a3040; }
 #say button, #panel-actions button {
   font-family: var(--font); font-size: inherit; text-transform: lowercase;

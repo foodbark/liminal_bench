@@ -3,7 +3,7 @@
 --   npx wrangler d1 execute liminal-bench --remote --file=db/schema.sql   (production)
 CREATE TABLE IF NOT EXISTS notes (
   id   INTEGER PRIMARY KEY AUTOINCREMENT,
-  text TEXT    NOT NULL,      -- one line, 80 characters at most, stacking marks not counted
+  text TEXT    NOT NULL,      -- 400 characters on 16 lines at most (2026-11-13), stacking marks not counted
   at   INTEGER NOT NULL,      -- ms since the epoch, when it was pinned
   who  TEXT    NOT NULL,      -- salted daily hash of the poster's address, for the rate limit only
   x    REAL,                  -- where it was placed by hand (2026-10-27): the paper's center as

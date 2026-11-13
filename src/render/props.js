@@ -168,8 +168,9 @@ const fontSize = (w, u, hand, tiny) => (tiny ? clamp(w / 8, 5, 9) : clamp(w / 6.
 // Words wrapped to a width by a measure; a word wider than the paper breaks where it must.
 function wrapLines(text, w, measure) {
   const fits = (t) => measure(t) <= w, lines = [];
+  for (const row of String(text).split('\n')) {   // the writer's own line breaks, then the wrap inside each
   let line = '';
-  for (const word of String(text).split(' ')) {
+  for (const word of row.split(' ')) {
     if (!word) continue;
     if (fits(line ? line + ' ' + word : word)) { line = line ? line + ' ' + word : word; continue; }
     if (line) lines.push(line);
@@ -180,7 +181,8 @@ function wrapLines(text, w, measure) {
       lines.push(cps.slice(0, k).join('')); line = cps.slice(k).join('');
     }
   }
-  if (line) lines.push(line);
+  if (line || !row) lines.push(line);   // a blank line between stanzas stays
+  }
   return lines;
 }
 // A scrap sized to its words (the user, 2026-10-28: short notes on less paper, and not all the
@@ -188,6 +190,11 @@ function wrapLines(text, w, measure) {
 // the height is what the words wrap to in the note's hand, estimated from the face's measured
 // glyph widths so it is known before the face has loaded, the same everywhere and forever.
 const SCRAP_MIN = 34, SCRAP_MAX = 88, MARGIN = 4;
+// the largest sheet a long note or a poem grows to, a third of the cork across and two thirds
+// down, and the smallest it is written. The half-size build's scraps are the same pixels on
+// half the cork, so there it is half the cork across (a third would be narrower than a scrap)
+// and the same two thirds down, or one long note covered the phone's whole board.
+const SHEET_W = Math.min(120, Math.round(CORK.w / 2)), SHEET_H = Math.min(150, Math.round(CORK.h * 2 / 3)), SMALLEST = 0.5;
 export function scrapFor(text, chosen = null) {
   const full = String(text || ''), hand = handFor(full, chosen), hh = wordsHash(full);
   const t = splitMarks(full).bare;   // the paper is for the letters; stacking marks take none
@@ -199,12 +206,32 @@ export function scrapFor(text, chosen = null) {
   let w = Math.round(clamp(30 + Math.sqrt(Array.from(t).reduce((n, ch) => n + (wide(ch.codePointAt(0)) ? 2 : 1), 0)) * 5.4 + (j(1) - 0.5) * 16, SCRAP_MIN, SCRAP_MAX));
   let fs = fontSize(w, 1, hand, false), inner = w - 2 * MARGIN;
   for (let k = 0; k < 4; k++) {   // widen for a word wider than the paper, if there is room
-    const longest = Math.max(0, ...t.split(' ').map((s) => est(s, fs)));
+    const longest = Math.max(0, ...t.split(/[ \n]/).map((s) => est(s, fs)));
     if (longest <= inner || w >= SCRAP_MAX) break;
     w = Math.min(SCRAP_MAX, Math.ceil(longest + 2 * MARGIN + 2)); fs = fontSize(w, 1, hand, false); inner = w - 2 * MARGIN;
   }
   const lines = wrapLines(t, inner, (s) => est(s, fs)).length, lineH = Math.round(fs * hand.line);
   const h = Math.round(2 * MARGIN + fs * hand.asc + (lines - 1) * lineH + fs * hand.desc + 2 + j(2) * 6);
+  // A longer note or a poem (the user, 2026-11-13): the page grows first, the writing shrinks
+  // after. The sheet widens until the poem's own lines fit unbroken, or until the words stand on
+  // a page no taller than about one and a third of its width, up to SHEET_W; past that it grows
+  // down to SHEET_H; and what still does not fit is written smaller, to SMALLEST of the hand's
+  // size, which the drawing does by itself (drawNoteText steps the size down until the lines
+  // fit). A note of one line and 80 characters is sized exactly as it always was.
+  if (t.includes('\n') || Array.from(t).length > 80) {
+    const page = (pw, k) => {   // the height the words take on a page `pw` wide, the writing at `k` of its size
+      const f = fontSize(pw, 1, hand, false) * k, n = wrapLines(t, pw - 2 * MARGIN, (s) => est(s, f)).length;
+      return Math.round(2 * MARGIN + f * hand.asc + (n - 1) * Math.round(f * hand.line) + f * hand.desc + 2 + j(2) * 6);
+    };
+    const longestRow = (pw) => Math.max(0, ...t.split('\n').map((s) => est(s, fontSize(pw, 1, hand, false))));
+    let pw = w, ph = page(pw, 1);
+    while (pw < SHEET_W && (ph > pw * 1.35 || (t.includes('\n') && longestRow(pw) > pw - 2 * MARGIN))) { pw = Math.min(SHEET_W, pw + 4); ph = page(pw, 1); }
+    // a poem's line that is too long for the widest sheet is written smaller before it is broken
+    let k = t.includes('\n') ? clamp((pw - 2 * MARGIN) / (longestRow(pw) + 1), SMALLEST, 1) : 1;
+    if (k < 1) ph = page(pw, k);
+    while (ph > SHEET_H && k > SMALLEST) { k = Math.max(SMALLEST, k - 0.05); ph = page(pw, k); }
+    return { w: pw, h: clamp(ph, 20, SHEET_H), paper: (hh >>> 8) % 6 };
+  }
   return { w, h: clamp(h, 20, CORK.h - 4), paper: (hh >>> 8) % 6 };
 }
 
@@ -257,7 +284,7 @@ function drawNoteText(ctx, text, x, y, w, h, color, u, hand = HANDS[0], tiny = f
     const lines = wrapLines(bare, w, (t) => g.measureText(t).width);
     const m = g.measureText('Hbdfghjklpqy'), asc = Math.ceil(m.actualBoundingBoxAscent), desc = Math.ceil(m.actualBoundingBoxDescent);
     const lineH = Math.round(size * hand.line), max = Math.max(1, 1 + Math.floor((h - asc - desc) / lineH));
-    if (lines.length > max && k < 4 && size > 4) { size = Math.max(4, Math.round(size * 0.88)); continue; }
+    if (lines.length > max && k < 16 && size > 4) { size = Math.max(4, Math.round(size * 0.92)); continue; }   // to a quarter of its size if it must: a long note is written small
     if (hand.bold && !tiny) g.lineWidth = size * hand.bold;
     lines.slice(0, max).forEach((t, i) => { g.fillText(t, pad, pad + asc + i * lineH); if (hand.bold && !tiny) g.strokeText(t, pad, pad + asc + i * lineH); });
     set = lines.map((t, i) => [t, pad + asc + i * lineH, i < max]);

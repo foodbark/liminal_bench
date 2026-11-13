@@ -26,7 +26,10 @@ import { hash2 } from './util/noise.js';
 // note keeps its place (`placedSeeds`) until it is torn down, when it comes back at its slot.
 const KEY = 'liminal.notes', TORN_KEY = 'liminal.torn', POSTER_KEY = 'liminal.posters', PLACED_KEY = 'liminal.placed';
 const API = 'api/notes';   // relative: the site may live at a path prefix
-export const NOTE_MAX = 80;
+// A note is up to NOTE_MAX characters on up to NOTE_LINES lines (the user, 2026-11-13: poems with
+// line breaks, and longer notes): what the largest sheet holds at the smallest writing in the
+// widest hand. It was one line of 80.
+export const NOTE_MAX = 400, NOTE_LINES = 16;
 // The board holds FULL pieces of paper, notes and posters together: past the slots they pile up,
 // newest on top, the oldest buried, and at FULL there is not a pin left and no bare cork, so a
 // pin is refused until someone pulls something down (the user, 2026-10-27: a limit, but part of
@@ -89,15 +92,22 @@ const stillDown = (t, now) => now - t.at < TORN_DAYS * DAY;
 // letters and the marks drawn over them (props.js). The server's `clean` is the same.
 export const MARKS_EACH = 16, MARKS_ALL = 240;
 export function fitNote(s) {
-  let out = '', letters = 0, run = 0, all = 0;
-  for (const ch of String(s ?? '')) {
+  let out = '', letters = 0, run = 0, all = 0, lines = 1;
+  for (let ch of String(s ?? '')) {
     if (isMark(ch)) { if (out && run < MARKS_EACH && all < MARKS_ALL) { out += ch; run++; all++; } continue; }
     if (letters + 1 > NOTE_MAX) break;   // by the character, not the code unit: the fancy alphabets and emoji are two units each and got forty
+    if (ch === '\n') { if (lines < NOTE_LINES) lines++; else ch = ' '; }   // past the last line the rest runs on
     out += ch; letters++; run = 0;
   }
   return out;
 }
-export const cleanText = (s) => fitNote(String(s ?? '').normalize('NFC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim()).trim();
+// Line breaks are kept; inside a line the spaces close up, and a run of blank lines is one
+// (a stanza break), so nobody pins a sheet of mostly empty paper.
+export const tidyText = (s) => String(s ?? '').normalize('NFC').replace(/\r\n?|[\u2028\u2029]/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ')
+  .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+export const cleanText = (s) => fitNote(tidyText(s)).replace(/[ \n]+$/, '');
+// a note's words on one line, for the band and the captions: breaks as slashes, a long one cut
+export const oneLine = (t, max = 90) => { const a = Array.from(String(t || '').replace(/\n+/g, ' / ')); return a.length > max ? a.slice(0, max).join('') + '…' : a.join(''); };
 // the hand a note was written in, when its writer chose one (the face's place in HANDS)
 export const cleanHand = (h) => (Number.isInteger(h) && h >= 0 && h < HAND_LIST.length ? h : null);
 // what is already on the board is read the same way (the stored words are left as they are)
