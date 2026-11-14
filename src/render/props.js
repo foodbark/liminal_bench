@@ -216,13 +216,14 @@ function wrapLines(text, w, measure, keep = false) {
 // glyph widths so it is known before the face has loaded, the same everywhere and forever.
 const SCRAP_MIN = 34, SCRAP_MAX = 88, MARGIN = 4;
 // the largest sheet a long note or a poem grows to: a letter page, 8.5 by 11 (the user,
-// 2026-11-13: whole sheets that look like 8.5x11), two thirds of the cork's height, since a
-// sheet is held up to be read (drawPosterView) and need not be read where it hangs; and the
-// smallest the estimate writes. The half-size build's scraps are the same pixels on half the
-// cork, so there the sheet takes nearly the cork's whole height (two thirds would be smaller
-// than a scrap) and is held to half the cork across.
+// 2026-11-13: whole sheets that look like 8.5x11), under half the cork's height and no bigger
+// than the largest scrap is wide, since a sheet is held up to be read (drawHeldPaper) and need
+// not be read where it hangs (the user, the same day: now that we can zoom in on notes, the
+// 8.5x11s smaller on the board; it was two thirds of the height); and the smallest the estimate
+// writes. The half-size build's scraps are the same pixels on half the cork, so there the sheet
+// is three quarters of the cork's height.
 const LETTER = 11 / 8.5;
-const SHEET_H = Math.min(CORK.h - 8, 150), SHEET_W = Math.min(Math.round(SHEET_H / LETTER), Math.round(CORK.w / 2)), SMALLEST = 0.15;
+const SHEET_H = Math.min(104, Math.round(CORK.h * 0.74)), SHEET_W = Math.min(Math.round(SHEET_H / LETTER), Math.round(CORK.w / 2)), SMALLEST = 0.15;
 export function scrapFor(text, chosen = null) {
   const full = String(text || ''), hand = handFor(full, chosen), hh = wordsHash(full);
   const t = splitMarks(full).bare;   // the paper is for the letters; stacking marks take none
