@@ -197,7 +197,7 @@ export function setupUI(state, canvas) {
   function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
   function leave() {
     if (state.placing && state.placing.moving) { dropPaper(); refresh(); }   // a piece being carried goes back where it was
-    state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); shut(); panel.hidden = true; canvas.classList.remove('board', 'grab');
+    state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); shut(); panel.hidden = true; canvas.classList.remove('board', 'grab', 'held');
   }
   // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
   // paper to the pointer, the form goes away, the paper rides over the cork as a ghost drawn by
@@ -276,7 +276,7 @@ export function setupUI(state, canvas) {
   // go straight to the tear question). The band offers to tear it down; a click anywhere, or
   // Escape, puts it back.
   function holdUp(n, error = '') {
-    state.poster = n; state.hover = null; canvas.classList.remove('hot');
+    state.poster = n; state.hover = null; canvas.classList.remove('hot'); canvas.classList.add('held');
     const { text, acts } = open();
     line(text, 'Someone pinned this up.' + (n.mine && notesMode() !== 'api' ? ' It is yours.' : '') + (n.poster ? '' : ' The pin is loose. Nobody would stop you.'), 'line dim');
     const err = errLine(text, error);
@@ -288,7 +288,7 @@ export function setupUI(state, canvas) {
     });
     button(acts, 'put it back', putBack);
   }
-  function putBack() { state.poster = null; shut(); }
+  function putBack() { state.poster = null; canvas.classList.remove('held'); shut(); }
   function showPanel(view) {
     if (view === 'phone') return phonePanel();
     const { text, acts } = open();

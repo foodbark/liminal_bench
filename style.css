@@ -15,7 +15,8 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 }
 #scene.hot { cursor: pointer; }
 #scene.grab { cursor: grabbing; }   /* a piece of paper picked up off the board */
-#scene.board { touch-action: none; }   /* on the board's close-up a finger drags paper, not the page */
+#scene.board { touch-action: pinch-zoom; }   /* on the board's close-up one finger drags paper, not the page; two still zoom, to read small writing (the user on a phone, 2026-11-13) */
+#scene.board.held { touch-action: manipulation; }   /* a paper held up to read: nothing to drag, so a finger pans the zoomed page */
 #ui { position: absolute; inset: 0; pointer-events: none; }
 /* The band: the Sierra line under the picture. The status and the caption sit on its bottom row,
    and when the scene has something to say or ask (the board's questions, the note form, the
