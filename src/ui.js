@@ -246,12 +246,28 @@ export function setupUI(state, canvas) {
   const refresh = () => { state.notes = buildNotes(); state.notesVersion++; };
   function enter(view) {
     const h = HOTSPOTS.find((q) => q.id === view); if (h) lookX = h.x + h.w / 2;
-    state.view = view; look(); state.hover = null; settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
+    state.view = view; look(); state.hover = null;
+    if (!inHistory) { try { history.pushState({ liminal: view }, ''); inHistory = true; } catch (e) { /* no history: the buttons still step back */ } } settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
   function leave() {
     if (state.placing && state.placing.moving) { dropPaper(); refresh(); }   // a piece being carried goes back where it was
     state.view = 'scene'; state.closeup = null; letGo(); state.placing = null; phone.hangUp(); shut(); panel.hidden = true; canvas.classList.remove('board', 'grab', 'held');
     look();
+    if (inHistory) { inHistory = false; ownBack++; history.back(); }   // stepping back by a button takes our entry off the history too
   }
+  // The browser's back button steps back from the board, the bench or the phone, and does not
+  // leave the site (the user on a phone, 2026-11-13): walking up to something puts one entry on
+  // the history, and going back does what Escape does, one layer at a time: a held-up paper goes
+  // back on the cork, a paper in the hand back to the form, the form shuts, then the step back.
+  let inHistory = false, ownBack = 0;
+  window.addEventListener('popstate', () => {
+    if (ownBack) { ownBack--; return; }
+    if (!inHistory) return;
+    const again = () => { try { history.pushState({ liminal: state.view }, ''); } catch (e) { inHistory = false; } };
+    if (state.poster) { putBack(); again(); return; }
+    if (state.placing) { if (state.placing.held) canvas.classList.remove('grab'); backToForm(); again(); return; }
+    if (bandOpen && twoStep(state.view)) { shut(); again(); return; }
+    inHistory = false; leave();
+  });
   // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
   // paper to the pointer, the form goes away, the paper rides over the cork as a ghost drawn by
   // the renderer, and a click pins it there, over whatever is there. A click off the cork, or
