@@ -246,27 +246,42 @@ export function setupUI(state, canvas) {
   const refresh = () => { state.notes = buildNotes(); state.notesVersion++; };
   function enter(view) {
     const h = HOTSPOTS.find((q) => q.id === view); if (h) lookX = h.x + h.w / 2;
-    state.view = view; look(); state.hover = null;
-    if (!inHistory) { try { history.pushState({ liminal: view }, ''); inHistory = true; } catch (e) { /* no history: the buttons still step back */ } } settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
+    state.view = view; look(); state.hover = null; settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
   function leave() {
     if (state.placing && state.placing.moving) { dropPaper(); refresh(); }   // a piece being carried goes back where it was
     state.view = 'scene'; state.closeup = null; letGo(); state.placing = null; phone.hangUp(); shut(); panel.hidden = true; canvas.classList.remove('board', 'grab', 'held');
     look();
-    if (inHistory) { inHistory = false; ownBack++; history.back(); }   // stepping back by a button takes our entry off the history too
   }
   // The browser's back button steps back from the board, the bench or the phone, and does not
-  // leave the site (the user on a phone, 2026-11-13): walking up to something puts one entry on
-  // the history, and going back does what Escape does, one layer at a time: a held-up paper goes
-  // back on the cork, a paper in the hand back to the form, the form shuts, then the step back.
-  let inHistory = false, ownBack = 0;
-  window.addEventListener('popstate', () => {
+  // leave the site (the user on a phone, 2026-11-13), one layer at a time like Escape: a held-up
+  // paper goes back on the cork, a paper in the hand back to the form, the form shuts, then the
+  // step back. Each layer is an entry on the history, put there by `syncHistory` a frame after
+  // the tap that opened it and taken off again when a button closes it. Nothing is ever pushed
+  // in answer to the back button itself: Chrome on a phone skips, on the next back, an entry
+  // whose page pushed another with no touch since arriving on it, and a first version that
+  // re-pushed its entry after closing a layer went straight out of the site on the second back
+  // (the user, the same day).
+  let depth = 0, ownBack = 0, touched = false;
+  for (const ev of ['pointerup', 'keydown', 'click']) window.addEventListener(ev, () => { touched = true; }, true);
+  const layers = () => (state.view === 'scene' ? 0 : 1 + (state.poster ? 1 : state.placing && !state.placing.moving ? 2 : bandOpen && twoStep(state.view) ? 1 : 0));
+  function closeLayer() {
+    if (state.poster) putBack();
+    else if (state.placing) { if (state.placing.held) canvas.classList.remove('grab'); backToForm(); }
+    else if (bandOpen && twoStep(state.view)) shut();
+    else leave();
+  }
+  function syncHistory() {
+    if (ownBack) return;   // our own step back is still on its way
+    const want = layers();
+    try {
+      if (want > depth && touched) while (depth < want) history.pushState({ liminal: ++depth }, '');
+      else if (want < depth) { ownBack++; history.go(want - depth); depth = want; }
+    } catch (e) { depth = want; }   // no history: the buttons still step back
+  }
+  window.addEventListener('popstate', (e) => {
     if (ownBack) { ownBack--; return; }
-    if (!inHistory) return;
-    const again = () => { try { history.pushState({ liminal: state.view }, ''); } catch (e) { inHistory = false; } };
-    if (state.poster) { putBack(); again(); return; }
-    if (state.placing) { if (state.placing.held) canvas.classList.remove('grab'); backToForm(); again(); return; }
-    if (bandOpen && twoStep(state.view)) { shut(); again(); return; }
-    inHistory = false; leave();
+    depth = (e.state && e.state.liminal) || 0; touched = false;
+    for (let k = 0; k < 4 && layers() > depth; k++) closeLayer();
   });
   // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
   // paper to the pointer, the form goes away, the paper rides over the cork as a ghost drawn by
@@ -596,6 +611,7 @@ export function setupUI(state, canvas) {
     update(dt, tNow) {
       if (state.poster) paintHeld();
       edgeScroll();
+      syncHistory();
       const target = VIEWS[state.view];
       const cam = state.camera, k = 1 - Math.exp(-dt * 6);
       cam.cx = lerp(cam.cx, target.cx, k); cam.cy = lerp(cam.cy, target.cy, k); cam.s = lerp(cam.s, target.s, k);
