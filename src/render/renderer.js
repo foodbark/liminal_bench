@@ -323,7 +323,7 @@ export class Renderer {
     }
     this.fx.drawPrecip(c, env); lap('precip');
     c.setTransform(1, 0, 0, 1, 0, 0);
-    // a poster held up to look at, over everything, the scene dimmed behind it
-    if (state.poster) { drawPosterView(c, state.poster, state.bandH || 0); lap('poster'); }
+    // a poster or a note held up to look at: the scene dimmed behind it (the paper is on its own layer, ui.js)
+    if (state.poster) { drawPosterView(c); lap('poster'); }
   }
 }

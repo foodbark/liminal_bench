@@ -18,6 +18,17 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 #scene.board { touch-action: pinch-zoom; }   /* on the board's close-up one finger drags paper, not the page; two still zoom, to read small writing (the user on a phone, 2026-11-13) */
 #scene.board.held { touch-action: manipulation; }   /* a paper held up to read: nothing to drag, so a finger pans the zoomed page */
 #ui { position: absolute; inset: 0; pointer-events: none; }
+/* A paper held up to read: its own layer over the whole window above the band, drawn at the
+   screen's real pixels (the scene's canvas is half size on a phone and shown smaller still).
+   On an upright phone the page takes the whole screen and the band sits at its foot (the user,
+   2026-11-13: hard to read on a phone; a letter page is the shape of an upright one). */
+#held { position: fixed; left: 0; top: 0; pointer-events: auto; touch-action: manipulation; cursor: pointer; }
+#held[hidden] { display: none; }
+@media (orientation: portrait) {
+  .holding #held { background: #07080c; }
+  .holding #band { position: fixed; padding-bottom: env(safe-area-inset-bottom); }
+  .holding #rotate { display: none !important; }
+}
 /* The band: the Sierra line under the picture. The status and the caption sit on its bottom row,
    and when the scene has something to say or ask (the board's questions, the note form, the
    bench's words) the row above unfolds with the words, the fields and the buttons in it. Nothing

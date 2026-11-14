@@ -1,5 +1,5 @@
 import { W, H, SCALE, META, formatTime } from './state.js';
-import { HOTSPOTS, CLOSEUPS, CORK, closeupNotes, HAND_LIST } from './render/props.js';
+import { HOTSPOTS, CLOSEUPS, CORK, closeupNotes, HAND_LIST, drawHeldPaper, handsKey } from './render/props.js';
 import { lerp, clamp } from './util/pixel.js';
 import { postNote, buildNotes, notesMode, NOTE_MAX, MARKS_ALL, fitNote, oneLine, tearDown, postPoster, POSTER_SIZES_NAMED, pickPosterSize, boardFull, ghostNote, movePaper, liftPaper, dropPaper, firstSpot } from './notes.js';
 import { peakSnowLatched, peakSnowSince, peakSnowBareSince, peakSnowMelt } from './season.js';
@@ -197,7 +197,7 @@ export function setupUI(state, canvas) {
   function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
   function leave() {
     if (state.placing && state.placing.moving) { dropPaper(); refresh(); }   // a piece being carried goes back where it was
-    state.view = 'scene'; state.closeup = null; state.poster = null; state.placing = null; phone.hangUp(); shut(); panel.hidden = true; canvas.classList.remove('board', 'grab', 'held');
+    state.view = 'scene'; state.closeup = null; letGo(); state.placing = null; phone.hangUp(); shut(); panel.hidden = true; canvas.classList.remove('board', 'grab', 'held');
   }
   // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
   // paper to the pointer, the form goes away, the paper rides over the cork as a ghost drawn by
@@ -277,6 +277,7 @@ export function setupUI(state, canvas) {
   // Escape, puts it back.
   function holdUp(n, error = '') {
     state.poster = n; state.hover = null; canvas.classList.remove('hot'); canvas.classList.add('held');
+    heldKey = ''; held.hidden = false; document.documentElement.classList.add('holding'); paintHeld();
     const { text, acts } = open();
     line(text, 'Someone pinned this up.' + (n.mine && notesMode() !== 'api' ? ' It is yours.' : '') + (n.poster ? '' : ' The pin is loose. Nobody would stop you.'), 'line dim');
     const err = errLine(text, error);
@@ -288,7 +289,23 @@ export function setupUI(state, canvas) {
     });
     button(acts, 'put it back', putBack);
   }
-  function putBack() { state.poster = null; canvas.classList.remove('held'); shut(); }
+  function letGo() { state.poster = null; canvas.classList.remove('held'); held.hidden = true; document.documentElement.classList.remove('holding'); }
+  function putBack() { letGo(); shut(); }
+  // The held paper's own layer (`#held`): the window above the band, at the screen's pixels,
+  // painted again when the window turns or resizes, a hand's face arrives or the picture lands.
+  const held = $('held');
+  let heldKey = '';
+  held.addEventListener('click', () => { if (state.poster) putBack(); });
+  function paintHeld() {
+    const n = state.poster; if (!n) return;
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const cssW = window.innerWidth, cssH = Math.max(60, Math.round(band.getBoundingClientRect().top));
+    const cw = Math.round(cssW * dpr), ch = Math.round(cssH * dpr);
+    const key = [n.poster ? 'p' + n.poster.id : n.id + ' ' + n.text, cw, ch, handsKey(), state.notesVersion].join('|');
+    if (key === heldKey) return;
+    held.width = cw; held.height = ch; held.style.width = cssW + 'px'; held.style.height = cssH + 'px';
+    heldKey = drawHeldPaper(held.getContext('2d'), n, cw, ch, dpr * Math.max(window.innerWidth, window.innerHeight) / W, dpr) ? key : '';
+  }
   function showPanel(view) {
     if (view === 'phone') return phonePanel();
     const { text, acts } = open();
@@ -507,6 +524,7 @@ export function setupUI(state, canvas) {
   let lastStatus = 0;
   return {
     update(dt, tNow) {
+      if (state.poster) paintHeld();
       const target = VIEWS[state.view];
       const cam = state.camera, k = 1 - Math.exp(-dt * 6);
       cam.cx = lerp(cam.cx, target.cx, k); cam.cy = lerp(cam.cy, target.cy, k); cam.s = lerp(cam.s, target.s, k);

@@ -100,38 +100,37 @@ function drawPosterNote(ctx, n, u = 1, legible = false) {
   if (!n.ghost) { px(ctx, n.pin, x + (w >> 1) - s, y + s, 3 * s, 3 * s); px(ctx, '#ffd0c0', x + (w >> 1) - s, y + s, s, s); }
 }
 
-// One poster held up to look at: the frame dimmed by a dither, the picture centered at a
-// whole-number scale that fills most of the height, its thin border and its pin.
-// `below` is the band's height in canvas pixels: the picture is centered in the room above it.
-// A note is held up the same way (the user, 2026-11-13: the notes smaller on the board, and we
-// pick them up to look at them): the same sheet with the same lines, set bigger, as tall as the
-// room allows and no more than HELD_UP times its size on the cork (a two-word scrap does not
-// fill the frame). It is set once and kept, since setting a page of text takes a while and
-// the frame redraws under it.
-const HELD_UP = 2.5;
-let heldNote = { key: '', c: null };
-export function drawPosterView(ctx, n, below = 0) {
+// A poster or a note held up to look at (a note too since 2026-11-13, the user: the notes
+// smaller on the board, and we pick them up to look at them). The frame is dimmed by a dither
+// here; the paper itself is drawn by `drawHeldPaper` on a layer of its own at the screen's
+// real pixels (ui.js, the `#held` canvas), since inside the scene's canvas a phone's half-size
+// picture was the ceiling on how sharp a page of small writing could be, and so that an
+// upright phone can give the page its whole screen (the user, the same day).
+export function drawPosterView(ctx) {
   ctx.fillStyle = ditherPattern(ctx, '#000', 8);
   ctx.fillRect(0, 0, W, H);
-  if (!n.poster) {
-    const cu = CLOSEUPS.board ? Math.min(CLOSEUPS.board.cork.w / CORK.w, CLOSEUPS.board.cork.h / CORK.h) : 1;
-    const room = H - below, u = Math.min(room * 0.94 / n.h, W * 0.94 / n.w, cu * HELD_UP);
-    const w = Math.round(n.w * u), h = Math.round(n.h * u), m = 4 * Math.ceil(u);
-    const key = `${n.id}|${n.text}|${n.hand}|${w}|${h}|${Math.round(clamp(n.age, 0, 1) * 40)}|${handsKey()}`;
-    if (heldNote.key !== key) {
-      const [c, g] = makeCanvas(w + 2 * m, h + 2 * m);
-      drawNote(g, { ...n, x: m, y: m, w, h, ghost: false }, u, true);
-      heldNote = { key, c };
-    }
-    ctx.drawImage(heldNote.c, ((W - w) >> 1) - m, ((room - h) >> 1) - m);
-    return;
+}
+// The held paper centered on a canvas `cw` by `ch`. A poster's picture is laid at the largest
+// whole-number scale that fits; a note is the same sheet with the same lines, set as big as
+// the room allows and no more than HELD_UP times its size on the cork (a two-word scrap does
+// not fill the screen), `px` being this canvas's pixels per pixel of the scene's canvas when
+// the scene is shown across the screen's long side. False while a poster's picture is not in.
+const HELD_UP = 2.5;
+export function drawHeldPaper(ctx, n, cw, ch, px = 1, dpr = 1) {
+  ctx.clearRect(0, 0, cw, ch); ctx.imageSmoothingEnabled = false;
+  if (n.poster) {
+    const im = posterImage(n.poster);
+    const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
+    const b = Math.max(2, Math.round(3 * dpr)), k = Math.max(1, Math.floor(Math.min((ch * 0.92 - 2 * b) / ph, (cw * 0.94 - 2 * b) / pw)));
+    const w = pw * k + 2 * b, h = ph * k + 2 * b;
+    drawPosterNote(ctx, { ...n, x: (cw - w) >> 1, y: (ch - h) >> 1, w, h, border: b, k, ghost: false }, Math.max(1, Math.round(dpr * 2)), true);
+    return !!im;
   }
-  const im = posterImage(n.poster);
-  const pw = n.poster.w || (im && im.width) || 160, ph = n.poster.h || (im && im.height) || 212;
-  const room = H - below;
-  const s = Math.max(1, Math.round(SCALE)), b = screenPx(3), k = Math.max(1, Math.floor((room * 0.8 - 2 * b) / ph));
-  const w = pw * k + 2 * b, h = ph * k + 2 * b;
-  drawPosterNote(ctx, { ...n, x: (W - w) >> 1, y: (room - h) >> 1, w, h, border: b, k }, s, true);
+  const cu = CLOSEUPS.board ? Math.min(CLOSEUPS.board.cork.w / CORK.w, CLOSEUPS.board.cork.h / CORK.h) : 1;
+  const u = Math.min(ch * 0.95 / n.h, cw * 0.95 / n.w, cu * HELD_UP * px);
+  const w = Math.round(n.w * u), h = Math.round(n.h * u);
+  drawNote(ctx, { ...n, x: (cw - w) >> 1, y: (ch - h) >> 1, w, h, ghost: false }, u, true);
+  return true;
 }
 
 // Text wrapped to the paper and snapped to hard pixels: the glyphs are set on a scratch canvas
@@ -254,7 +253,7 @@ export function scrapFor(text, chosen = null) {
       return Math.round(2 * MARGIN + f * hand.asc + (n - 1) * f * hand.line + f * hand.desc + 2 + j(2) * 6);   // the line height unrounded: at a page's small writing a whole pixel is a third of a line
     };
     const longestRow = (pw) => Math.max(0, ...t.split('\n').filter((s) => Array.from(s).length <= KEEP).map((s) => est(s, fontSize(pw, 1, hand, false))));
-    let pw = w, ph = page(pw, 1);
+    let pw = Math.min(w, SHEET_W), ph = page(pw, 1);   // on the half-size build a scrap may be wider than the sheet
     while (pw < SHEET_W && (ph > pw * LETTER || (t.includes('\n') && longestRow(pw) > pw - 2 * MARGIN))) { pw = Math.min(SHEET_W, pw + 4); ph = page(pw, 1); }
     // a poem's line that is too long for the widest sheet is written smaller, never broken
     let k = t.includes('\n') ? clamp((pw - 2 * MARGIN) / (longestRow(pw) + 1), SMALLEST, 1) : 1;
