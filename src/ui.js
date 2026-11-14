@@ -26,8 +26,34 @@ export function setupUI(state, canvas) {
   // second click: the board zooms in on the first, and the next click opens the note form.
   const twoStep = (view) => !!CLOSEUPS[view];
 
+  // Upright (the user, 2026-11-13: make the mobile site work in portrait; layout A of the two
+  // mock-ups): on a phone held upright the scene fills the screen's height and is some three and
+  // a half screens wide, the page's body scrolls sideways under the finger to look around, and
+  // the band is fixed at the foot of the screen. Walking up to something scrolls it to the
+  // middle; stepping back leaves you looking at it. `?upright` forces it on a desktop.
+  const FORCE_UPRIGHT = /[?&]upright\b/.test(location.search), COARSE = typeof matchMedia === 'function' ? matchMedia('(pointer: coarse)') : { matches: false };
+  const uprightNow = () => FORCE_UPRIGHT || (COARSE.matches && window.innerHeight > window.innerWidth && window.innerWidth <= 700);
+  const scroller = document.body;
+  let upright = false, lookX = W / 2;   // where in the scene we are looking, straight ahead to start
+  function focusX() {   // the canvas x to put in the middle of the screen: the thing walked up to, or where we last looked
+    if (state.view === 'scene') return lookX;
+    const cu = CLOSEUPS[state.view]; if (cu && cu.cork) return cu.cork.x + cu.cork.w / 2;   // a close-up painting stands on its own place in the frame
+    const t = VIEWS[state.view], h = HOTSPOTS.find((q) => q.id === state.view);
+    return W / 2 + ((h ? h.x + h.w / 2 : t.cx) - t.cx) * t.s;
+  }
+  function look(smooth = true, x = focusX()) {
+    if (!upright) return;
+    const k = window.innerHeight / H, max = Math.max(0, W * k - window.innerWidth);
+    scroller.scrollTo({ left: Math.min(max, Math.max(0, x * k - window.innerWidth / 2)), behavior: smooth ? 'smooth' : 'auto' });
+  }
   function fitStage() {
-    const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+    const up = uprightNow();
+    const s = up ? window.innerHeight / H : Math.min(window.innerWidth / W, window.innerHeight / H);
+    if (up !== upright) {
+      upright = up; document.documentElement.classList.toggle('upright', up);
+      if (up) requestAnimationFrame(() => look(false)); else scroller.scrollLeft = 0;
+      requestAnimationFrame(() => measure());
+    }
     document.documentElement.style.setProperty('--s', s);
     // shown smaller than its pixels, the scene is scaled smoothly so the dither averages into
     // the soft tones it was drawn for (nearest-neighbor drops rows of the 4x4 pattern and turns
@@ -38,7 +64,15 @@ export function setupUI(state, canvas) {
   }
   fitStage(); window.addEventListener('resize', fitStage);
   // the band's height in canvas pixels, so the renderer keeps a held-up poster clear of it
-  const measure = () => { const r = canvas.getBoundingClientRect(); state.bandH = r.height ? band.offsetHeight / r.height * H : 0; };
+  // (upright the band is a bigger share of the screen, so while it has something to say the
+  // picture rides up by the height of what it says, or the bench sat hidden behind its own words;
+  // the canvas alone moves, since a transform on the stage would unfix the band)
+  const measure = () => {
+    const r = canvas.getBoundingClientRect(); state.bandH = r.height ? band.offsetHeight / r.height * H : 0;
+    document.documentElement.style.setProperty('--bandh', band.offsetHeight + 'px');
+    const lift = upright ? Math.round(Math.min(window.innerHeight * 0.35, Math.max(0, band.offsetHeight - $('caption').offsetHeight))) : 0;
+    canvas.style.transform = lift ? `translateY(-${lift}px)` : '';
+  };
   if (typeof ResizeObserver === 'function') new ResizeObserver(measure).observe(band); else window.addEventListener('resize', measure);
   // on a phone the keyboard covers the bottom of the window and the band rides up over it
   const vv = window.visualViewport;
@@ -163,8 +197,14 @@ export function setupUI(state, canvas) {
     press = { note: n, id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(() => lift(e), HOLD_MS) };
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (pressed(e)) { if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_PX) lift(e); return; }
-    if (state.placing && state.placing.held && e.pointerId === state.placing.held.id) carry(e);
+    if (pressed(e)) {
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_PX) {
+        if (upright && e.pointerType === 'touch') { clearTimeout(press.timer); press = null; }   // upright a drag looks along the board; only holding still picks a piece up
+        else lift(e);
+      }
+      return;
+    }
+    if (state.placing && state.placing.held && e.pointerId === state.placing.held.id) { carry(e); lastCarry = { clientX: e.clientX, clientY: e.clientY }; }
   });
   canvas.addEventListener('pointerup', (e) => {
     if (pressed(e)) { clearTimeout(press.timer); press = null; return; }   // a click: the click event follows
@@ -174,6 +214,16 @@ export function setupUI(state, canvas) {
     if (pressed(e)) { clearTimeout(press.timer); press = null; }
     if (state.placing && state.placing.held) { canvas.classList.remove('grab'); if (state.placing.moving) backToForm(); else state.placing.held = null; }
   });
+  // a piece in the hand moves with the finger, and the board must not scroll under it
+  canvas.addEventListener('touchmove', (e) => { if (state.placing && state.placing.held && e.cancelable) e.preventDefault(); }, { passive: false });
+  // carried to the edge of an upright screen, the board scrolls on under the paper
+  let lastCarry = null;
+  function edgeScroll() {
+    const pl = state.placing;
+    if (!upright || !pl || !pl.held || !lastCarry) { if (!pl || !pl.held) lastCarry = null; return; }
+    const m = 44, x = lastCarry.clientX, d = x < m ? -1 : x > window.innerWidth - m ? 1 : 0;
+    if (d) { scroller.scrollLeft += d * 7; carry(lastCarry); }
+  }
   canvas.addEventListener('contextmenu', (e) => { if (press || state.placing) e.preventDefault(); });   // a long press on a touch screen
   canvas.addEventListener('click', (e) => {
     if (swallowClick && Date.now() - swallowClick < 500) { swallowClick = 0; return; }
@@ -194,10 +244,13 @@ export function setupUI(state, canvas) {
   if (/[?&]debug\b/.test(location.search)) $('debug').hidden = false;   // phones have no D key
 
   const refresh = () => { state.notes = buildNotes(); state.notesVersion++; };
-  function enter(view) { state.view = view; state.hover = null; settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
+  function enter(view) {
+    const h = HOTSPOTS.find((q) => q.id === view); if (h) lookX = h.x + h.w / 2;
+    state.view = view; look(); state.hover = null; settled = false; canvas.classList.remove('hot'); canvas.classList.toggle('board', view === 'board'); }
   function leave() {
     if (state.placing && state.placing.moving) { dropPaper(); refresh(); }   // a piece being carried goes back where it was
     state.view = 'scene'; state.closeup = null; letGo(); state.placing = null; phone.hangUp(); shut(); panel.hidden = true; canvas.classList.remove('board', 'grab', 'held');
+    look();
   }
   // Placing (the user, 2026-10-27: write first, then place): the form's "put it up" hands the
   // paper to the pointer, the form goes away, the paper rides over the cork as a ghost drawn by
@@ -208,6 +261,7 @@ export function setupUI(state, canvas) {
     const { fx, fy } = firstSpot();   // it lands at once where the board would have put it, there to see and to drag
     state.placing.fx = fx; state.placing.fy = fy; state.placing.note = ghostNote(state.placing, fx, fy);
     inHand(); state.hover = null;
+    if (upright && CLOSEUPS.board) { const [g] = closeupNotes({ notes: [state.placing.note] }, CLOSEUPS.board); look(true, g.x + g.w / 2); }   // upright the paper may have landed off the screen
   }
   // The band while the paper is in the hand: a fresh pin, or a piece picked up to move. "pin it
   // here" pins it where it sits, so nobody has to aim; the other button is the way back.
@@ -525,6 +579,7 @@ export function setupUI(state, canvas) {
   return {
     update(dt, tNow) {
       if (state.poster) paintHeld();
+      edgeScroll();
       const target = VIEWS[state.view];
       const cam = state.camera, k = 1 - Math.exp(-dt * 6);
       cam.cx = lerp(cam.cx, target.cx, k); cam.cy = lerp(cam.cy, target.cy, k); cam.s = lerp(cam.s, target.s, k);

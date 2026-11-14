@@ -27,7 +27,6 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 @media (orientation: portrait) {
   .holding #held { background: #07080c; }
   .holding #band { position: fixed; padding-bottom: env(safe-area-inset-bottom); }
-  .holding #rotate { display: none !important; }
 }
 /* The band: the Sierra line under the picture. The status and the caption sit on its bottom row,
    and when the scene has something to say or ask (the board's questions, the note form, the
@@ -162,8 +161,20 @@ body { display: flex; align-items: center; justify-content: center; font-family:
 #loading-title { font-size: clamp(28px, 3.2vw, 44px); letter-spacing: 0.03em; }
 #loading-status { color: #7d8595; font-size: clamp(18px, 1.9vw, 26px); white-space: pre; }
 #loading-dots { display: inline-block; width: 3ch; text-align: left; }
-#rotate { display: none; position: fixed; left: 0; right: 0; bottom: 12px; text-align: center; color: #7d8595; font-size: 18px; pointer-events: none; }
-@media (pointer: coarse) and (orientation: portrait) and (max-width: 700px) { #rotate { display: block; } }
+/* Upright (ui.js sets .upright on the root): the stage is the screen's height and wider than
+   it, the body scrolls sideways under the finger, and the band and the panel hold to the screen. */
+html.upright body { display: block; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior: none; }
+html.upright body::-webkit-scrollbar { display: none; }
+html.upright #band { position: fixed; padding-bottom: env(safe-area-inset-bottom); }
+html.upright #caption { height: auto; flex-direction: column-reverse; align-items: flex-start; gap: 0; padding-top: calc(3px * var(--u)); padding-bottom: calc(3px * var(--u)); }   /* the caption over the status, each on its own line */
+html.upright #status { white-space: pre-wrap; }
+html.upright #caption-text { white-space: normal; }
+html.upright #scene { transition: transform 0.25s; }
+html.upright #scene.board { touch-action: pan-x pinch-zoom; }   /* a finger looks along the board; holding still on a paper picks it up */
+html.upright #panel, html.upright #panel.phone {
+  position: fixed; left: 8px; right: 8px; top: auto; bottom: calc(var(--bandh, 40px) + 6px); transform: none;
+  width: auto; max-width: none; max-height: 62%; overflow: auto;
+}
 #debug {
   position: fixed; top: 10px; left: 10px; background: rgba(8,10,14,0.92); border: 1px solid #3a3f4c;
   padding: 8px 10px; font-size: 16px; color: #cfcab8; min-width: 220px; z-index: 10;
